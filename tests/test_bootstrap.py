@@ -16,7 +16,13 @@ def test_cli_help():
 
 @pytest.mark.manual
 def test_e2e_sample_project(tmp_path):
-    project_root = Path("samples/python_project").resolve()
+    import shutil
+
+    # Copy sample project to tmp_path to avoid modifying the original source tree
+    original_project_root = Path("samples/python_project").resolve()
+    project_root = tmp_path / "project"
+    shutil.copytree(original_project_root, project_root)
+
     scratch_dir = tmp_path / "scratch"
 
     # This will actually run the agent. It's expensive and slow.

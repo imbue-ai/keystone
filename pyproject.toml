@@ -8,3 +8,8 @@ dependencies = [
     "pytest>=9.0.2",
     "typer>=0.21.1",
 ]
+
+[tool.pytest.ini_options]
+markers = [
+    "manual: marks tests as manual (select with '-m manual')",
+]

@@ -61,36 +61,61 @@ def main(
     token_spending = {"input": 0, "cached": 0, "output": 0}
 
     try:
-        # We use -p for non-interactive and --output-format json for token tracking
+        # We use stream-json and verbose for progressive output and token tracking
         full_cmd = [
             agent_cmd,
             "--dangerously-skip-permissions",
             "-p",
             prompt,
             "--output-format",
-            "json",
+            "stream-json",
+            "--verbose",
         ]
 
-        process = subprocess.run(
-            full_cmd, capture_output=True, text=True, cwd=project_root
+        process = subprocess.Popen(
+            full_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            cwd=project_root,
+            bufsize=1,
         )
 
-        agent_stdout = process.stdout
-        agent_stderr = process.stderr
+        agent_stdout = ""
 
-        # Log stderr to our stderr
-        print(agent_stderr, file=sys.stderr)
-
-        if process.returncode == 0:
+        # Stream stdout line by line
+        for line in process.stdout:
+            agent_stdout += line
             try:
-                agent_json = json.loads(agent_stdout)
-                usage = agent_json.get("usage", {})
-                token_spending["input"] = usage.get("input_tokens", 0)
-                token_spending["cached"] = usage.get("cache_read_input_tokens", 0)
-                token_spending["output"] = usage.get("output_tokens", 0)
+                data = json.loads(line)
+                msg_type = data.get("type")
+
+                if msg_type == "assistant":
+                    content = data.get("message", {}).get("content", [])
+                    for item in content:
+                        if item.get("type") == "text":
+                            txt = item.get("text", "").strip()
+                            if txt:
+                                print(f"Assistant: {txt}", file=sys.stderr)
+                        elif item.get("type") == "tool_use":
+                            name = item.get("name")
+                            input_data = item.get("input", {})
+                            print(f"Tool Call: {name}({input_data})", file=sys.stderr)
+
+                elif msg_type == "result":
+                    usage = data.get("usage", {})
+                    token_spending["input"] = usage.get("input_tokens", 0)
+                    token_spending["cached"] = usage.get("cache_read_input_tokens", 0)
+                    token_spending["output"] = usage.get("output_tokens", 0)
+
             except json.JSONDecodeError:
-                print("Failed to parse agent JSON output", file=sys.stderr)
-                print(agent_stdout, file=sys.stderr)
+                # Not JSON or partial JSON, just ignore or log if verbose
+                pass
+
+        # Capture any remaining stderr
+        _, agent_stderr = process.communicate()
+        if agent_stderr:
+            print(agent_stderr, file=sys.stderr)
 
         exit_code = process.returncode
     except Exception as e:

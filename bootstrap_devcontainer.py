@@ -1,6 +1,7 @@
 import typer
 import subprocess
 import json
+import shlex
 import time
 import sys
 from pathlib import Path
@@ -62,8 +63,7 @@ def main(
 
     try:
         # We use stream-json and verbose for progressive output and token tracking
-        full_cmd = [
-            agent_cmd,
+        full_cmd = shlex.split(agent_cmd) + [
             "--dangerously-skip-permissions",
             "-p",
             prompt,

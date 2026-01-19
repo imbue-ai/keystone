@@ -1,10 +1,13 @@
-import typer
-import subprocess
 import json
 import shlex
-import time
+import subprocess
 import sys
+import time
 from pathlib import Path
+
+import typer
+
+from process_runner import run_process
 
 app = typer.Typer()
 
@@ -61,6 +64,38 @@ def main(
 
     token_spending = {"input": 0, "cached": 0, "output": 0}
 
+    def process_agent_stdout(line: str) -> None:
+        """Process a line of agent stdout, extracting messages and token usage."""
+        try:
+            data = json.loads(line)
+            msg_type = data.get("type")
+
+            if msg_type == "assistant":
+                content = data.get("message", {}).get("content", [])
+                for item in content:
+                    if item.get("type") == "text":
+                        txt = item.get("text", "").strip()
+                        if txt:
+                            print(f"Assistant: {txt}", file=sys.stderr)
+                    elif item.get("type") == "tool_use":
+                        name = item.get("name")
+                        input_data = item.get("input", {})
+                        print(f"Tool Call: {name}({input_data})", file=sys.stderr)
+
+            elif msg_type == "result":
+                usage = data.get("usage", {})
+                token_spending["input"] = usage.get("input_tokens", 0)
+                token_spending["cached"] = usage.get("cache_read_input_tokens", 0)
+                token_spending["output"] = usage.get("output_tokens", 0)
+
+        except json.JSONDecodeError:
+            # Not JSON or partial JSON, just ignore
+            pass
+
+    def process_agent_stderr(line: str) -> None:
+        """Forward agent stderr to our stderr."""
+        print(line, file=sys.stderr)
+
     try:
         # We use stream-json and verbose for progressive output and token tracking
         full_cmd = shlex.split(agent_cmd) + [
@@ -72,52 +107,14 @@ def main(
             "--verbose",
         ]
 
-        process = subprocess.Popen(
+        result = run_process(
             full_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            cwd=project_root,
-            bufsize=1,
+            cwd=str(project_root),
+            stdout_callback=process_agent_stdout,
+            stderr_callback=process_agent_stderr,
         )
 
-        agent_stdout = ""
-
-        # Stream stdout line by line
-        for line in process.stdout:
-            agent_stdout += line
-            try:
-                data = json.loads(line)
-                msg_type = data.get("type")
-
-                if msg_type == "assistant":
-                    content = data.get("message", {}).get("content", [])
-                    for item in content:
-                        if item.get("type") == "text":
-                            txt = item.get("text", "").strip()
-                            if txt:
-                                print(f"Assistant: {txt}", file=sys.stderr)
-                        elif item.get("type") == "tool_use":
-                            name = item.get("name")
-                            input_data = item.get("input", {})
-                            print(f"Tool Call: {name}({input_data})", file=sys.stderr)
-
-                elif msg_type == "result":
-                    usage = data.get("usage", {})
-                    token_spending["input"] = usage.get("input_tokens", 0)
-                    token_spending["cached"] = usage.get("cache_read_input_tokens", 0)
-                    token_spending["output"] = usage.get("output_tokens", 0)
-
-            except json.JSONDecodeError:
-                # Not JSON or partial JSON, just ignore or log if verbose
-                pass
-
-        # Capture any remaining stderr
-        _, agent_stderr = process.communicate()
-        if agent_stderr:
-            print(agent_stderr, file=sys.stderr)
-
-        exit_code = process.returncode
+        exit_code = result.returncode
     except Exception as e:
         print(f"Error running agent: {e}", file=sys.stderr)
         exit_code = 1

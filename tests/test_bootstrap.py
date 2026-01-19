@@ -1,12 +1,13 @@
-import subprocess
 import json
 import logging
-import os
 import shlex
 import shutil
-import threading
+import subprocess
+
 import pytest
 from pathlib import Path
+
+from process_runner import run_process
 
 logger = logging.getLogger(__name__)
 
@@ -19,14 +20,6 @@ def test_cli_help() -> None:
     )
     assert result.returncode == 0
     assert "bootstrap_devcontainer.py [OPTIONS] PROJECT_ROOT" in result.stdout
-
-
-def _stream_reader(stream: object, lines_list: list[str], log_prefix: str) -> None:
-    """Read lines from stream and log them in real-time."""
-    for line in stream:
-        line = line.rstrip('\n')
-        logger.info("%s: %s", log_prefix, line)
-        lines_list.append(line)
 
 
 def test_e2e_with_fake_agent(tmp_path: Path) -> None:
@@ -59,45 +52,12 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
 
     logger.info("Running: %s", ' '.join(cmd))
 
-    env = os.environ.copy()
-    env["PYTHONUNBUFFERED"] = "1"
+    result = run_process(cmd, log_prefix="[fake-agent]")
 
-    process = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        bufsize=1,
-        env=env,
-    )
+    logger.info("Return code: %s", result.returncode)
 
-    stdout_lines = []
-    stderr_lines = []
-
-    stdout_thread = threading.Thread(
-        target=_stream_reader,
-        args=(process.stdout, stdout_lines, "STDOUT"),
-    )
-    stderr_thread = threading.Thread(
-        target=_stream_reader,
-        args=(process.stderr, stderr_lines, "STDERR"),
-    )
-
-    stdout_thread.start()
-    stderr_thread.start()
-    stdout_thread.join()
-    stderr_thread.join()
-    process.wait()
-
-    result_stdout = '\n'.join(stdout_lines)
-    result_stderr = '\n'.join(stderr_lines)
-
-    logger.info("Return code: %s", process.returncode)
-    logger.info("STDOUT: %s", result_stdout)
-    logger.info("STDERR: %s", result_stderr)
-
-    assert process.returncode == 0, f"Process failed: {result_stderr}"
-    output = json.loads(result_stdout)
+    assert result.returncode == 0, f"Process failed: {result.stderr}"
+    output = json.loads(result.stdout)
     assert output["success"], f"Test failed: {output}"
 
     # Check artifacts
@@ -134,50 +94,7 @@ def test_e2e_sample_project(tmp_path: Path) -> None:
 
     logger.info("Running: %s", ' '.join(cmd))
 
-    env = os.environ.copy()
-    env["PYTHONUNBUFFERED"] = "1"
-
-    process = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        bufsize=1,
-        env=env,
-    )
-
-    stdout_lines = []
-    stderr_lines = []
-
-    # Spin up threads to read both streams concurrently
-    stdout_thread = threading.Thread(
-        target=_stream_reader,
-        args=(process.stdout, stdout_lines, "STDOUT"),
-    )
-    stderr_thread = threading.Thread(
-        target=_stream_reader,
-        args=(process.stderr, stderr_lines, "STDERR"),
-    )
-
-    stdout_thread.start()
-    stderr_thread.start()
-
-    stdout_thread.join()
-    stderr_thread.join()
-    process.wait()
-
-    # Create a result-like object for compatibility
-    class Result:
-        def __init__(self, returncode, stdout, stderr):
-            self.returncode = returncode
-            self.stdout = stdout
-            self.stderr = stderr
-
-    result = Result(
-        process.returncode,
-        '\n'.join(stdout_lines),
-        '\n'.join(stderr_lines),
-    )
+    result = run_process(cmd, log_prefix="[e2e]")
 
     assert result.returncode == 0
     output = json.loads(result.stdout)

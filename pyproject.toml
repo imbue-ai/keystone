@@ -14,5 +14,6 @@ markers = [
     "manual: marks tests as manual (select with '-m manual')",
 ]
 testpaths = ["tests"]
+pythonpath = ["."]
 log_cli = true
 log_cli_level = "INFO"

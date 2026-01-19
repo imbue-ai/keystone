@@ -38,6 +38,7 @@ bd sync               # Sync with git
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
 - **Always use merge, never rebase** - Preserve commit history with merge commits
+- **Never amend or force-push commits already pushed** - Add new fix commits instead
 
 ## Code Style
 

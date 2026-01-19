@@ -28,16 +28,6 @@ def _stream_reader(stream, lines_list, log_prefix):
         lines_list.append(line)
 
 
-def docker_available():
-    """Check if Docker is available and running."""
-    try:
-        result = subprocess.run(["docker", "ps"], capture_output=True, timeout=5)
-        return result.returncode == 0
-    except Exception:
-        return False
-
-
-@pytest.mark.skipif(not docker_available(), reason="Docker not available")
 def test_e2e_with_fake_agent(tmp_path):
     """
     Test the full Docker mechanics using a deterministic fake agent.

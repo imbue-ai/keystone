@@ -165,38 +165,32 @@ def main(
         image_name = f"bootstrap-test-{project_root.name.lower()}"
 
         # 1. Build the image
-        print(f"Building image {image_name}...", file=sys.stderr)
-        build_proc = subprocess.run(
-            [
-                "devcontainer",
-                "build",
-                "--workspace-folder",
-                str(project_root),
-                "--image-name",
-                image_name,
-            ],
-            capture_output=True,
-            text=True,
-        )
+        build_cmd = [
+            "devcontainer",
+            "build",
+            "--workspace-folder",
+            str(project_root),
+            "--image-name",
+            image_name,
+        ]
+        print(f"Building image: {shlex.join(build_cmd)}", file=sys.stderr)
+        build_proc = subprocess.run(build_cmd, capture_output=True, text=True)
 
         if build_proc.returncode == 0:
             # 2. Run tests
-            print("Running tests in container...", file=sys.stderr)
-            test_run = subprocess.run(
-                [
-                    "docker",
-                    "run",
-                    "--rm",
-                    "-v",
-                    f"{scratch_dir}:/test_artifacts",
-                    image_name,
-                    "./.devcontainer/run_all_tests.sh",
-                    "--test_artifact_dir",
-                    "/test_artifacts",
-                ],
-                capture_output=True,
-                text=True,
-            )
+            test_cmd = [
+                "docker",
+                "run",
+                "--rm",
+                "-v",
+                f"{scratch_dir}:/test_artifacts",
+                image_name,
+                "./.devcontainer/run_all_tests.sh",
+                "--test_artifact_dir",
+                "/test_artifacts",
+            ]
+            print(f"Running tests: {shlex.join(test_cmd)}", file=sys.stderr)
+            test_run = subprocess.run(test_cmd, capture_output=True, text=True)
             if test_run.returncode == 0:
                 print("Verification successful!", file=sys.stderr)
                 verification_success = True

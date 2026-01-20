@@ -52,16 +52,18 @@ Notes:
   - BOOTSTRAP_DEVCONTAINER_STATUS: Creating initial Dockerfile based on detected Python 3.11 project.
   - BOOTSTRAP_DEVCONTAINER_STATUS: Build failed due to missing dependency; adding libpq-dev to Dockerfile.
 
-To verify:
-1. Build with `devcontainer build --workspace-folder .`
-2. Run `docker run -v /tmp/scratch:/test_artifacts IMAGE ./.devcontainer/run_all_tests.sh --test_artifact_dir /test_artifacts` and check return code.
-3. Examine /tmp/scratch content.
-
 When finished, emit a final summary as plain text (not via tool calls):
 BOOTSTRAP_DEVCONTAINER_SUMMARY: <One-line summary of what worked, what didn't, and any tips for future runs.>
 Include anything you wish you had been told at the start. Examples:
 - BOOTSTRAP_DEVCONTAINER_SUMMARY: Everything worked. Tip: this project needed uv installed in the container.
 - BOOTSTRAP_DEVCONTAINER_SUMMARY: Tests pass. I wish I'd known earlier that exposing the docker socket to the devcontainer would allow running nested docker commands.
+
+Please don't forget to emit the summary at the end.
+
+To verify:
+1. Build with `devcontainer build --workspace-folder .`
+2. Run `docker run -v /tmp/scratch:/test_artifacts IMAGE ./.devcontainer/run_all_tests.sh --test_artifact_dir /test_artifacts` and check return code.
+3. Examine /tmp/scratch content.
 """
 
 

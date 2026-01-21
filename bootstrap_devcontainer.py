@@ -13,6 +13,23 @@ from process_runner import run_process
 app = typer.Typer()
 console = Console()
 
+
+def check_docker_available() -> bool:
+    """Check if Docker CLI is installed and daemon is running."""
+    try:
+        result = subprocess.run(
+            ["docker", "ps"],
+            capture_output=True,
+            timeout=10,
+        )
+        return result.returncode == 0
+    except FileNotFoundError:
+        console.print("[red]Error: Docker CLI is not installed or not in PATH.[/red]")
+        return False
+    except subprocess.TimeoutExpired:
+        console.print("[red]Error: Docker command timed out.[/red]")
+        return False
+
 STATUS_MARKER = "BOOTSTRAP_DEVCONTAINER_STATUS:"
 SUMMARY_MARKER = "BOOTSTRAP_DEVCONTAINER_SUMMARY:"
 
@@ -84,6 +101,14 @@ def main(
     ),
     agent_cmd: str = typer.Option("claude", help="Agent command to run"),
 ):
+    # Check Docker is available before proceeding
+    if not check_docker_available():
+        console.print(
+            "[red]Docker is required but not available. "
+            "Please ensure Docker is installed and the daemon is running.[/red]"
+        )
+        raise typer.Exit(code=1)
+
     project_root = project_root.resolve()
     scratch_dir = scratch_dir.resolve()
     scratch_dir.mkdir(parents=True, exist_ok=True)

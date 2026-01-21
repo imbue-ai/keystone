@@ -14,6 +14,7 @@ app = typer.Typer()
 console = Console()
 
 STATUS_MARKER = "BOOTSTRAP_DEVCONTAINER_STATUS:"
+SUMMARY_MARKER = "BOOTSTRAP_DEVCONTAINER_SUMMARY:"
 
 AGENT_PROMPT_TEMPLATE = """
 We need to build an appropriate dev container and Dockerfile in which this project's test suite runs successfully. You are currently at the project root.
@@ -43,6 +44,13 @@ Notes:
 * Run parts of test suites in parallel if feasible.
 * Prefix commands with `time` to see how long they take, and `timeout` to set deadlines.
   Example: `time timeout 300 pytest tests/` to run tests with a 5-minute limit.
+* If the project does docker operations (e.g., runs containers as part of tests), ensure the docker CLI
+  is installed in the image and run the container with the docker socket exposed. Example:
+  ```
+  docker run --rm -it \\
+    -v /var/run/docker.sock:/var/run/docker.sock \\
+    docker:cli ps
+  ```
 * If tests cannot be fixed by environment changes, disable them via command line args.
 * Emit status updates before and after each major action as plain text output (not via tool calls).
   Simply include the status line in your assistant message text, like:
@@ -89,9 +97,9 @@ def main(
     token_spending = {"input": 0, "cached": 0, "output": 0}
 
     def check_and_print_status(text: str) -> bool:
-        """Check for status marker in text and print in blue if found.
+        """Check for status/summary markers in text and print in blue if found.
 
-        Returns True if a status marker was found.
+        Returns True if a marker was found.
         """
         found = False
         for line in text.split("\n"):
@@ -100,6 +108,12 @@ def main(
                 idx = line.find(STATUS_MARKER)
                 status_msg = line[idx:].strip()
                 console.print(status_msg, style="blue")
+                found = True
+            elif SUMMARY_MARKER in line:
+                # Extract the summary message after the marker
+                idx = line.find(SUMMARY_MARKER)
+                summary_msg = line[idx:].strip()
+                console.print(summary_msg, style="blue")
                 found = True
         return found
 

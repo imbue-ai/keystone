@@ -4,17 +4,18 @@ version = "0.1.0"
 description = "Eval harness for bootstrap_devcontainer"
 requires-python = ">=3.12"
 dependencies = [
+    "bootstrap-devcontainer",
     "pydantic>=2.0",
     "prefect>=3.0",
     "typer>=0.9",
     "rich>=13.0",
     "json5>=0.9",
     "boto3>=1.28",
+    "pytest>=8.0",
 ]
 
-# Note: bootstrap-devcontainer is expected to be installed separately
-# either from git: pip install 'git+https://github.com/imbue-ai/bootstrap_devcontainer@prod'
-# or locally: pip install -e ..  (when developing)
+[tool.uv.sources]
+bootstrap-devcontainer = { workspace = true }
 
 [project.optional-dependencies]
 dask = ["prefect-dask>=0.3"]
@@ -29,3 +30,6 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["."]
 sources = { "." = "" }
+
+[tool.pytest.ini_options]
+testpaths = ["."]

@@ -7,19 +7,19 @@ import subprocess
 import pytest
 from pathlib import Path
 
-from process_runner import run_process
+from bootstrap_devcontainer.process_runner import run_process
 
 logger = logging.getLogger(__name__)
 
 
 def test_cli_help() -> None:
     result = subprocess.run(
-        ["python3", "bootstrap_devcontainer.py", "--help"],
+        ["bootstrap-devcontainer", "--help"],
         capture_output=True,
         text=True,
     )
     assert result.returncode == 0
-    assert "bootstrap_devcontainer.py [OPTIONS] PROJECT_ROOT" in result.stdout
+    assert "[OPTIONS] PROJECT_ROOT" in result.stdout
 
 
 def test_e2e_with_fake_agent(tmp_path: Path) -> None:
@@ -29,7 +29,7 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
     """
 
     # Copy sample project to tmp_path
-    original_project_root = Path(__file__).parent.parent / "samples/python_project"
+    original_project_root = Path(__file__).parent.parent.parent / "samples/python_project"
     project_root = tmp_path / "project"
     shutil.copytree(original_project_root, project_root)
 
@@ -44,8 +44,7 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
     logger.info("=" * 60)
 
     cmd = [
-        "python3", "-u",
-        "bootstrap_devcontainer.py",
+        "bootstrap-devcontainer",
         str(project_root),
         "--test-artifacts-dir", str(test_artifacts_dir),
         "--agent-cmd", f"python3 {shlex.quote(str(fake_agent))}",
@@ -95,8 +94,7 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
     test_artifacts_dir2 = tmp_path / "test_artifacts2"
 
     cmd2 = [
-        "python3", "-u",
-        "bootstrap_devcontainer.py",
+        "bootstrap-devcontainer",
         str(project_root2),
         "--test-artifacts-dir", str(test_artifacts_dir2),
         "--agent-cmd", f"python3 {shlex.quote(str(fake_agent))}",
@@ -118,7 +116,7 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path) -> None:
     """
 
     # Copy Rust sample project to tmp_path
-    original_project_root = Path(__file__).parent.parent / "samples/rust_project"
+    original_project_root = Path(__file__).parent.parent.parent / "samples/rust_project"
     project_root = tmp_path / "project"
     shutil.copytree(original_project_root, project_root)
 
@@ -132,8 +130,7 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path) -> None:
     logger.info("=" * 60)
 
     cmd = [
-        "python3", "-u",
-        "bootstrap_devcontainer.py",
+        "bootstrap-devcontainer",
         str(project_root),
         "--test-artifacts-dir", str(test_artifacts_dir),
         "--agent-cmd", f"python3 {shlex.quote(str(fake_agent))}",
@@ -172,7 +169,7 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path) -> None:
 @pytest.mark.manual
 def test_e2e_sample_project(tmp_path: Path) -> None:
     # Copy sample project to tmp_path to avoid modifying the original source tree
-    original_project_root = Path(__file__).parent.parent / "samples/python_project"
+    original_project_root = Path(__file__).parent.parent.parent / "samples/python_project"
     project_root = tmp_path / "project"
     shutil.copytree(original_project_root, project_root)
 
@@ -187,8 +184,7 @@ def test_e2e_sample_project(tmp_path: Path) -> None:
 
     # Use -u for unbuffered Python output
     cmd = [
-        "python3", "-u",
-        "bootstrap_devcontainer.py",
+        "bootstrap-devcontainer",
         str(project_root),
         "--test-artifacts-dir",
         str(test_artifacts_dir),
@@ -231,7 +227,7 @@ def test_max_budget_zero_fails(tmp_path: Path) -> None:
     immediately since it cannot make any API calls.
     """
     # Copy sample project to tmp_path
-    original_project_root = Path(__file__).parent.parent / "samples/python_project"
+    original_project_root = Path(__file__).parent.parent.parent / "samples/python_project"
     project_root = tmp_path / "project"
     shutil.copytree(original_project_root, project_root)
 
@@ -243,8 +239,7 @@ def test_max_budget_zero_fails(tmp_path: Path) -> None:
     logger.info("=" * 60)
 
     cmd = [
-        "python3", "-u",
-        "bootstrap_devcontainer.py",
+        "bootstrap-devcontainer",
         str(project_root),
         "--test-artifacts-dir", str(test_artifacts_dir),
         "--max-budget-usd", "0",

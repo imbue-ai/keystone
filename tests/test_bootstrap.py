@@ -35,6 +35,7 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
 
     test_artifacts_dir = tmp_path / "test_artifacts"
     fake_agent = Path(__file__).parent / "fake_agent.py"
+    cache_file = tmp_path / "cache.sqlite"
 
     logger.info("=" * 60)
     logger.info("E2E Test with Fake Agent Starting")
@@ -48,6 +49,7 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
         str(project_root),
         "--test-artifacts-dir", str(test_artifacts_dir),
         "--agent-cmd", f"python3 {shlex.quote(str(fake_agent))}",
+        "--sqlite-cache-file", str(cache_file),
     ]
 
     logger.info("Running: %s", ' '.join(cmd))
@@ -57,6 +59,7 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
     logger.info("Return code: %s", result.returncode)
 
     assert result.returncode == 0, f"Process failed: {result.stderr}"
+    assert "CACHE MISS" in result.stderr, "Expected cache miss on first run"
 
     # Check that status lines were emitted to stdout (rich prints in blue)
     assert "BOOTSTRAP_DEVCONTAINER_STATUS:" in result.stdout, \
@@ -81,6 +84,31 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
     assert (project_root / ".devcontainer" / "run_all_tests.sh").exists()
     assert (test_artifacts_dir / "pytest-json-report.json").exists()
     assert (test_artifacts_dir / "final_result.json").exists()
+
+    # Test cache hit: copy fresh project, run again with same cache
+    logger.info("=" * 60)
+    logger.info("Testing cache hit")
+    logger.info("=" * 60)
+
+    project_root2 = tmp_path / "project2"
+    shutil.copytree(original_project_root, project_root2)
+    test_artifacts_dir2 = tmp_path / "test_artifacts2"
+
+    cmd2 = [
+        "python3", "-u",
+        "bootstrap_devcontainer.py",
+        str(project_root2),
+        "--test-artifacts-dir", str(test_artifacts_dir2),
+        "--agent-cmd", f"python3 {shlex.quote(str(fake_agent))}",
+        "--sqlite-cache-file", str(cache_file),
+    ]
+
+    result2 = run_process(cmd2, log_prefix="[fake-agent-cached]")
+
+    assert result2.returncode == 0, f"Cached run failed: {result2.stderr}"
+    assert "CACHE HIT" in result2.stderr, "Expected cache hit on second run"
+    # Verify devcontainer was restored from cache
+    assert (project_root2 / ".devcontainer" / "devcontainer.json").exists()
 
 
 def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path) -> None:

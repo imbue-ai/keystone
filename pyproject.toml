@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "diskcache>=5.6.3",
     "pydantic>=2.0.0",
     "pytest>=9.0.2",
     "rich>=14.0.0",

@@ -9,7 +9,7 @@ resolution-markers = [
 [manifest]
 members = [
     "bootstrap-devcontainer",
-    "eval",
+    "evals",
 ]
 
 [[package]]
@@ -513,9 +513,9 @@ wheels = [
 ]
 
 [[package]]
-name = "eval"
+name = "evals"
 version = "0.1.0"
-source = { editable = "eval" }
+source = { editable = "evals" }
 dependencies = [
     { name = "bootstrap-devcontainer" },
     { name = "boto3" },

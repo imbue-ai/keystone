@@ -1,2 +1,2 @@
 [tool.uv.workspace]
-members = ["bootstrap_devcontainer", "eval"]
+members = ["bootstrap_devcontainer", "evals"]

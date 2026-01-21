@@ -1,5 +1,5 @@
 [project]
-name = "eval"
+name = "evals"
 version = "0.1.0"
 description = "Eval harness for bootstrap_devcontainer"
 requires-python = ">=3.12"

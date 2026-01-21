@@ -30,7 +30,7 @@ Instructions:
       i. For each command run, create a subdirectory with a good “name”.
       ii. In that directory, put files called stdout.txt and stderr.txt, with timestamps.
       iii. Tee the outputs to stdout/stderr.
-      iv. For python code, create an aggregated JSON report in pytest-json-report format at test_artifact_dir/pytest-json-report.json
+      iv. For python code, create an aggregated JSON report in pytest-json-report format at test_artifact_dir/pytest-json-report.json (make sure to install the pytest-json-report plugin for Python)
       v. A file called final_result.json stating success/failure.
 4. In the Dockerfile, COPY the input source tree into the image to /project_src as a penultimate step. (no volume mounts)
 5. The Dockerfile should leave the CWD as /project_src.
@@ -69,7 +69,7 @@ Include anything you wish you had been told at the start. Examples:
 
 Please don't forget to emit the summary at the end.
 
-To verify:
+To verify, use something like this (adding arguments as appropriate for permissions, etc.)
 1. Build with `devcontainer build --workspace-folder .`
 2. Run `docker run -v /tmp/scratch:/test_artifacts IMAGE ./.devcontainer/run_all_tests.sh --test_artifact_dir /test_artifacts` and check return code.
 3. Examine /tmp/scratch content.

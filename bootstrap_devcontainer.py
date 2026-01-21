@@ -22,7 +22,10 @@ def check_docker_available() -> bool:
             capture_output=True,
             timeout=10,
         )
-        return result.returncode == 0
+        if result.returncode != 0:
+            console.print("[red]Error: Docker daemon is not running.[/red]")
+            return False
+        return True
     except FileNotFoundError:
         console.print("[red]Error: Docker CLI is not installed or not in PATH.[/red]")
         return False

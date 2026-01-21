@@ -342,5 +342,10 @@ def main(
     print(output.model_dump_json(indent=2))
 
 
-if __name__ == "__main__":
+def main():
+    """Entry point for the CLI."""
     app()
+
+
+if __name__ == "__main__":
+    main()

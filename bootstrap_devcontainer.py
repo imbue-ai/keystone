@@ -122,7 +122,7 @@ def main(
 
     print(f"Starting agent with command: {agent_cmd}", file=sys.stderr)
 
-    token_spending = {"input": 0, "cached": 0, "output": 0}
+    token_spending = {"input": 0, "cached": 0, "output": 0, "cache_creation": 0}
 
     def check_and_print_status(text: str) -> bool:
         """Check for status/summary markers in text and print in blue if found.
@@ -169,6 +169,7 @@ def main(
                 token_spending["input"] = usage.get("input_tokens", 0)
                 token_spending["cached"] = usage.get("cache_read_input_tokens", 0)
                 token_spending["output"] = usage.get("output_tokens", 0)
+                token_spending["cache_creation"] = usage.get("cache_creation_input_tokens", 0)
 
         except json.JSONDecodeError:
             # Not JSON or partial JSON, just ignore
@@ -254,10 +255,20 @@ def main(
     except Exception as e:
         print(f"Verification error: {e}", file=sys.stderr)
 
+    # Calculate cost based on Claude Sonnet 4 pricing (per million tokens)
+    # Input: $3/M, Output: $15/M, Cache read: $0.30/M, Cache write: $3.75/M
+    cost_usd = (
+        token_spending["input"] * 3.0 / 1_000_000
+        + token_spending["output"] * 15.0 / 1_000_000
+        + token_spending["cached"] * 0.30 / 1_000_000
+        + token_spending["cache_creation"] * 3.75 / 1_000_000
+    )
+
     output = {
         "success": verification_success and exit_code == 0,
         "total_time": total_time,
         "token_spending": token_spending,
+        "cost_usd": round(cost_usd, 4),
         "agent_exit_code": exit_code,
     }
 

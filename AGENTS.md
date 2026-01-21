@@ -25,9 +25,11 @@ bd sync               # Sync with git
    ```bash
    git pull --rebase
    bd sync
-   git push
+   git push origin HEAD:main  # Push current branch to origin/main
    git status  # MUST show "up to date with origin"
    ```
+   **Note:** You're typically on a worktree branch (e.g., `agent-foo-1234`) that tracks `origin/main`. 
+   Plain `git push` won't work. Use `git push origin HEAD:main` to push your branch to remote main.
 5. **Clean up** - Clear stashes, prune remote branches
 6. **Verify** - All changes committed AND pushed
 7. **Hand off** - Provide context for next session

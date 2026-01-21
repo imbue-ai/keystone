@@ -177,6 +177,7 @@ def test_e2e_sample_project(tmp_path: Path) -> None:
     shutil.copytree(original_project_root, project_root)
 
     test_artifacts_dir = tmp_path / "test_artifacts"
+    cache_file = Path.home() / ".cache" / "bootstrap_devcontainer.sqlite"
 
     logger.info("=" * 60)
     logger.info("E2E Test Starting")
@@ -191,6 +192,8 @@ def test_e2e_sample_project(tmp_path: Path) -> None:
         str(project_root),
         "--test-artifacts-dir",
         str(test_artifacts_dir),
+        "--sqlite-cache-file",
+        str(cache_file),
     ]
 
     logger.info("Running: %s", ' '.join(cmd))

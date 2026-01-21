@@ -184,11 +184,11 @@ def main(
                         txt = item.get("text", "").strip()
                         if txt:
                             if not check_and_print_status(txt):
-                                print(f"Assistant: {txt}", file=sys.stderr)
+                                print(f"Assistant: {txt}", file=sys.stderr, flush=True)
                     elif item.get("type") == "tool_use":
                         name = item.get("name")
                         input_data = item.get("input", {})
-                        print(f"Tool Call: {name}({input_data})", file=sys.stderr)
+                        print(f"Tool Call: {name}({input_data})", file=sys.stderr, flush=True)
 
             elif msg_type == "result":
                 total_cost_usd = data.get("total_cost_usd", 0.0)
@@ -205,7 +205,7 @@ def main(
 
     def process_stderr_line(line: str) -> None:
         """Forward agent stderr to our stderr."""
-        print(f"Agent stderr: {line}", file=sys.stderr)
+        print(f"Agent stderr: {line}", file=sys.stderr, flush=True)
 
     # Check cache first
     cached_value: Optional[CacheValue] = None

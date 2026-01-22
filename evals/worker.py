@@ -164,6 +164,9 @@ def process_repo(
             askpass_script.chmod(0o700)
             env["GIT_ASKPASS"] = str(askpass_script)
             env["GH_TOKEN"] = gh_token
+            # Prevent macOS keychain dialogs and other credential prompts
+            env["GIT_TERMINAL_PROMPT"] = "0"
+            env["GCM_INTERACTIVE"] = "never"
         
         # If API key provided, set up isolated fake home with Claude config
         # Otherwise, use real home so claude CLI uses its own auth

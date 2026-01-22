@@ -14,9 +14,12 @@ import json
 import logging
 import os
 import shutil
+import signal
+import sys
 import tarfile
 import tempfile
 from pathlib import Path
+from types import FrameType
 
 import boto3
 from config import AgentConfig, EvalConfig, RepoEntry, WorkerResult
@@ -24,6 +27,21 @@ from prefect import flow, get_run_logger, task
 from prefect.futures import wait
 from prefect.task_runners import ProcessPoolTaskRunner, ThreadPoolTaskRunner
 from worker import process_repo
+
+# Global flag for graceful shutdown
+_shutdown_requested = False
+
+
+def _handle_sigint(_signum: int, _frame: FrameType | None) -> None:
+    """Handle SIGINT (Ctrl+C) gracefully."""
+    global _shutdown_requested
+    if _shutdown_requested:
+        # Second Ctrl+C - force exit
+        print("\nForce exit requested. Terminating immediately.", file=sys.stderr)
+        sys.exit(130)
+    _shutdown_requested = True
+    print("\nShutdown requested. Waiting for current tasks to finish...", file=sys.stderr)
+    print("Press Ctrl+C again to force exit.", file=sys.stderr)
 
 
 class _PrefectLogHandler(logging.Handler):
@@ -168,36 +186,51 @@ def eval_flow(
     Returns:
         List of WorkerResult for each repo
     """
+    global _shutdown_requested
     logger = get_run_logger()
 
-    # Load repo list
-    repos: list[RepoEntry] = []
-    with Path(repo_list_path).open() as f:
-        for line in f:
-            line = line.strip()
-            if line:
-                repos.append(RepoEntry(**json.loads(line)))
+    # Install signal handler for graceful shutdown
+    original_sigint = signal.signal(signal.SIGINT, _handle_sigint)
 
-    logger.info(f"Loaded {len(repos)} repos from {repo_list_path}")
+    try:
+        # Load repo list
+        repos: list[RepoEntry] = []
+        with Path(repo_list_path).open() as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    repos.append(RepoEntry(**json.loads(line)))
 
-    # Submit all tasks
-    futures = []
-    for i, repo in enumerate(repos):
-        repo_output_dir = Path(output_dir) / f"repo_{i}"
-        repo_output_dir.mkdir(parents=True, exist_ok=True)
+        logger.info(f"Loaded {len(repos)} repos from {repo_list_path}")
 
-        future = process_repo_task.submit(
-            repo_source=repo.s3_repo_tarball,
-            agent_config=eval_config.agent_config,
-            output_dir=str(repo_output_dir),
-        )
-        futures.append(future)
-        logger.info(f"Submitted task {i + 1}/{len(repos)}: {repo.s3_repo_tarball}")
+        # Submit all tasks
+        futures = []
+        for i, repo in enumerate(repos):
+            if _shutdown_requested:
+                logger.warning("Shutdown requested - skipping remaining task submissions")
+                break
 
-    # Wait for all to complete
-    logger.info(f"Waiting for {len(futures)} tasks to complete...")
-    wait(futures)
-    results = [f.result() for f in futures]
+            repo_output_dir = Path(output_dir) / f"repo_{i}"
+            repo_output_dir.mkdir(parents=True, exist_ok=True)
+
+            future = process_repo_task.submit(
+                repo_source=repo.s3_repo_tarball,
+                agent_config=eval_config.agent_config,
+                output_dir=str(repo_output_dir),
+            )
+            futures.append(future)
+            logger.info(f"Submitted task {i + 1}/{len(repos)}: {repo.s3_repo_tarball}")
+
+        # Wait for submitted tasks to complete
+        if futures:
+            logger.info(f"Waiting for {len(futures)} tasks to complete...")
+            wait(futures)
+            results = [f.result() for f in futures]
+        else:
+            results = []
+    finally:
+        # Restore original signal handler
+        signal.signal(signal.SIGINT, original_sigint)
 
     success_count = sum(1 for r in results if r.success)
     logger.info(f"All tasks complete: {success_count}/{len(results)} succeeded")

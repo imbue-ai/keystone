@@ -11,6 +11,7 @@ import traceback
 from pathlib import Path
 
 from config import AgentConfig, WorkerResult
+from git_utils import resolve_git_ref
 
 from bootstrap_devcontainer.process_runner import run_process
 
@@ -145,6 +146,12 @@ def process_repo(
             except (subprocess.TimeoutExpired, FileNotFoundError):
                 pass  # gh CLI not available
 
+        # Resolve git ref (auto-detect from current repo if not specified)
+        git_ref = agent_config.bootstrap_git_ref
+        if git_ref is None:
+            git_ref = resolve_git_ref(require_pushed=True)
+            logger.info(f"Auto-resolved git ref: {git_ref}")
+
         # Build the command using uvx with git spec
         # Embed token in URL for private repo access
         git_url = agent_config.bootstrap_git_url
@@ -152,11 +159,9 @@ def process_repo(
             git_url = git_url.replace(
                 "https://github.com", f"https://x-access-token:{gh_token}@github.com"
             )
-        git_spec = (
-            f"git+{git_url}@{agent_config.bootstrap_git_ref}#subdirectory=bootstrap_devcontainer"
-        )
+        git_spec = f"git+{git_url}@{git_ref}#subdirectory=bootstrap_devcontainer"
         logger.info(
-            f"Using bootstrap_devcontainer from: {agent_config.bootstrap_git_url}@{agent_config.bootstrap_git_ref}"
+            f"Using bootstrap_devcontainer from: {agent_config.bootstrap_git_url}@{git_ref}"
         )
 
         result_file = work_dir / "bootstrap_result.json"

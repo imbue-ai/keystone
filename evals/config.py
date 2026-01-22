@@ -17,8 +17,11 @@ class AgentConfig(BaseModel):
         default="https://github.com/imbue-ai/bootstrap_devcontainer",
         description="Git URL for bootstrap_devcontainer",
     )
-    bootstrap_git_ref: str = Field(
-        default="prod", description="Git ref (branch, tag, or commit hash) to use"
+    bootstrap_git_ref: str | None = Field(
+        default=None,
+        description="Git ref (branch, tag, or commit hash) to use. "
+        "If None, auto-resolves: uses current commit hash when running from the "
+        "bootstrap_devcontainer repo (requires clean tree), otherwise 'prod'.",
     )
 
     # Execution settings

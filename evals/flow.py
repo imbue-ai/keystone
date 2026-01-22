@@ -11,6 +11,7 @@ where execution happens.
 """
 
 import json
+import logging
 import os
 import shutil
 import tarfile
@@ -23,6 +24,29 @@ from prefect import flow, get_run_logger, task
 from prefect.futures import wait
 from prefect.task_runners import ProcessPoolTaskRunner, ThreadPoolTaskRunner
 from worker import process_repo
+
+
+class _PrefectLogHandler(logging.Handler):
+    """Handler that forwards Python logging records to a Prefect logger."""
+
+    def __init__(self, prefect_logger: logging.Logger | logging.LoggerAdapter) -> None:  # type: ignore[type-arg]
+        super().__init__()
+        self._prefect_logger = prefect_logger
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            msg = self.format(record)
+            # Map log levels
+            if record.levelno >= logging.ERROR:
+                self._prefect_logger.error(msg)
+            elif record.levelno >= logging.WARNING:
+                self._prefect_logger.warning(msg)
+            elif record.levelno >= logging.INFO:
+                self._prefect_logger.info(msg)
+            else:
+                self._prefect_logger.debug(msg)
+        except Exception:
+            self.handleError(record)
 
 
 @task(
@@ -51,6 +75,15 @@ def process_repo_task(
     """
     logger = get_run_logger()
     logger.info(f"Starting process_repo_task for {repo_source}")
+
+    # Configure worker and process_runner loggers to forward to Prefect
+    # This ensures logs from worker.py and process_runner.py appear in Prefect UI
+    for module_name in ["worker", "bootstrap_devcontainer.process_runner"]:
+        module_logger = logging.getLogger(module_name)
+        module_logger.setLevel(logging.DEBUG)
+        # Add a handler that forwards to Prefect's logger
+        module_logger.handlers = []  # Clear existing handlers
+        module_logger.addHandler(_PrefectLogHandler(logger))
 
     # API key is optional - if not set, relies on claude CLI's own auth
     anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")

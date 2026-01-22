@@ -1,7 +1,6 @@
 """Worker logic for processing a single repo."""
 import json
 import os
-import re
 import shutil
 import subprocess
 import tarfile
@@ -129,6 +128,7 @@ def process_repo(
         
         # Build the command using uvx with git spec
         git_spec = f"git+{agent_config.bootstrap_git_url}@{agent_config.bootstrap_git_ref}#subdirectory=bootstrap_devcontainer"
+        result_file = work_dir / "bootstrap_result.json"
         cmd = [
             "uvx",
             "--from", git_spec,
@@ -136,6 +136,7 @@ def process_repo(
             str(actual_project_dir),
             "--test-artifacts-dir", str(test_artifacts_dir),
             "--max-budget-usd", str(agent_config.max_budget_usd),
+            "--output-file", str(result_file),
         ]
         
         # Set up environment

@@ -121,6 +121,9 @@ def main(
     sqlite_cache_file: Optional[Path] = typer.Option(
         None, "--sqlite-cache-file", help="SQLite cache file path (enables caching)"
     ),
+    output_file: Optional[Path] = typer.Option(
+        None, "--output-file", help="Path to write JSON result (defaults to stdout)"
+    ),
 ):
     # Check Docker is available before proceeding
     if not check_docker_available():
@@ -339,7 +342,12 @@ def main(
         agent_exit_code=exit_code,
     )
 
-    print(output.model_dump_json(indent=2))
+    if output_file:
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        output_file.write_text(output.model_dump_json(indent=2))
+        print(f"Result written to {output_file}", file=sys.stderr)
+    else:
+        print(output.model_dump_json(indent=2))
 
 
 def main():

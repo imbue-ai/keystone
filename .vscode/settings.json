@@ -1,7 +1,7 @@
 {
     "python.testing.pytestArgs": [
         "bootstrap_devcontainer",
-        "eval",
+        "evals",
         "-sv"
     ],
     "python.testing.unittestEnabled": false,

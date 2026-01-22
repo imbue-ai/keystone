@@ -131,33 +131,16 @@ def process_repo(
         fake_home.mkdir()
         setup_claude_config(anthropic_api_key, fake_home)
         
-        # Build the command
-        # For local execution, use uv run with the local bootstrap_devcontainer
-        # For remote/uvx execution, use git spec
-        
-        # Check if we're in the bootstrap_devcontainer repo (local development)
-        local_bootstrap = Path(__file__).parent.parent / "bootstrap_devcontainer.py"
-        
-        if local_bootstrap.exists():
-            # Local development - run directly
-            cmd = [
-                "uv", "run", "python",
-                str(local_bootstrap),
-                str(actual_project_dir),
-                "--test-artifacts-dir", str(test_artifacts_dir),
-                "--max-budget-usd", str(agent_config.max_budget_usd),
-            ]
-        else:
-            # Remote execution - use uvx with git spec
-            git_spec = f"git+{agent_config.bootstrap_git_url}@{agent_config.bootstrap_git_ref}"
-            cmd = [
-                "uvx",
-                "--from", git_spec,
-                "bootstrap-devcontainer",
-                str(actual_project_dir),
-                "--test-artifacts-dir", str(test_artifacts_dir),
-                "--max-budget-usd", str(agent_config.max_budget_usd),
-            ]
+        # Build the command using uvx with git spec
+        git_spec = f"git+{agent_config.bootstrap_git_url}@{agent_config.bootstrap_git_ref}#subdirectory=bootstrap_devcontainer"
+        cmd = [
+            "uvx",
+            "--from", git_spec,
+            "bootstrap-devcontainer",
+            str(actual_project_dir),
+            "--test-artifacts-dir", str(test_artifacts_dir),
+            "--max-budget-usd", str(agent_config.max_budget_usd),
+        ]
         
         if agent_config.use_cache:
             cache_file = fake_home / ".cache" / "bootstrap_devcontainer.sqlite"

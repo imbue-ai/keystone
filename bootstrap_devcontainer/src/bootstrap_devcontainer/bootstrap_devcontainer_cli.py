@@ -226,7 +226,7 @@ def bootstrap(
 
     if cached_value is not None:
         # Cache hit - replay events and restore .devcontainer
-        print("CACHE HIT: Replaying cached agent output", file=sys.stderr)
+        print(f"CACHE HIT: Replaying cached agent output from {sqlite_cache_dir}", file=sys.stderr)
         for event in cached_value.events:
             if event.stream == "stdout":
                 process_stdout_line(event.line)

@@ -368,7 +368,7 @@ def bootstrap(
         try:
             report_data = json.loads(pytest_report_path.read_text())
             tests = report_data.get("tests", [])
-            passed_tests = [t["nodeid"] for t in tests if t.get("outcome") == "passed"]
+            passed_tests = sorted([t["nodeid"] for t in tests if t.get("outcome") == "passed"])
             failed_count = sum(1 for t in tests if t.get("outcome") == "failed")
             skipped_count = sum(1 for t in tests if t.get("outcome") == "skipped")
             python_test_summary = PythonTestSummary(

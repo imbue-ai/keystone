@@ -185,9 +185,10 @@ def process_repo(
             timeout=timeout_secs,
         )
         
-        # Parse result from stdout (last line should be JSON)
+        # Parse result from stdout or stderr (last JSON object)
         bootstrap_result = None
-        for line in reversed(result.stdout.strip().split("\n")):
+        all_output = result.stdout + "\n" + result.stderr
+        for line in reversed(all_output.strip().split("\n")):
             try:
                 bootstrap_result = json.loads(line)
                 break

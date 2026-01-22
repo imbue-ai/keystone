@@ -12,5 +12,5 @@
     "timeout_minutes": 30,
     
     // Cache settings
-    "use_cache": true,
+    "sqlite_cache_dir": "~/.cache/bootstrap_devcontainer"
 }

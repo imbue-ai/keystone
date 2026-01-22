@@ -8,11 +8,11 @@ runs identically whether executing locally or distributed.
 ## Installation
 
 ```bash
-cd eval
-uv pip install -e .
+# From repo root - installs both bootstrap_devcontainer and evals
+uv sync
 
 # For distributed execution with Dask:
-uv pip install -e ".[dask]"
+uv sync --extra dask
 ```
 
 ## Usage

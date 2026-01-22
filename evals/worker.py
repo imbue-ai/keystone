@@ -2,13 +2,17 @@
 import json
 import os
 import shutil
+import logging
 import subprocess
 import tarfile
 import tempfile
 from pathlib import Path
 from typing import Optional
 
+from bootstrap_devcontainer.process_runner import run_process
 from config import AgentConfig, WorkerResult
+
+logger = logging.getLogger(__name__)
 
 
 def setup_claude_config(api_key: str, home_dir: Path) -> None:
@@ -188,13 +192,13 @@ def process_repo(
         
         timeout_secs = agent_config.timeout_minutes * 60
         
-        result = subprocess.run(
+        # Use streaming process runner to re-stream bootstrap_devcontainer logs
+        # TODO: Add timeout support via ["timeout", str(timeout_secs)] + cmd prefix if needed
+        result = run_process(
             cmd,
-            cwd=actual_project_dir,
+            log_prefix="bootstrap",
             env=env,
-            capture_output=True,
-            text=True,
-            timeout=timeout_secs,
+            cwd=str(actual_project_dir),
         )
         
         # Read result from output file

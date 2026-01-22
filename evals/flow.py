@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Optional
 
 import boto3
-from prefect import flow, task
+from prefect import flow, task, get_run_logger
 from prefect.futures import wait
 from prefect.task_runners import ProcessPoolTaskRunner
 from prefect.task_runners import ThreadPoolTaskRunner
@@ -51,6 +51,9 @@ def process_repo_task(
     Returns:
         WorkerResult with success/failure and artifact paths
     """
+    logger = get_run_logger()
+    logger.info(f"Starting process_repo_task for {repo_source}")
+    
     # API key is optional - if not set, relies on claude CLI's own auth
     anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     
@@ -68,6 +71,7 @@ def process_repo_task(
         s3.download_file(bucket, key, str(tarball_path))
     
     try:
+        logger.info(f"Calling process_repo with tarball={tarball_path}, output_dir={output_dir}")
         result = process_repo(
             tarball_path=tarball_path,
             agent_config=agent_config,
@@ -76,6 +80,7 @@ def process_repo_task(
         )
         # Preserve the original source URI
         result.s3_repo_tarball = repo_source
+        logger.info(f"Completed {repo_source}: success={result.success}")
         return result
     finally:
         # Clean up temp download
@@ -129,6 +134,8 @@ def eval_flow(
     Returns:
         List of WorkerResult for each repo
     """
+    logger = get_run_logger()
+    
     # Load repo list
     repos: list[RepoEntry] = []
     with open(repo_list_path) as f:
@@ -136,6 +143,8 @@ def eval_flow(
             line = line.strip()
             if line:
                 repos.append(RepoEntry(**json.loads(line)))
+    
+    logger.info(f"Loaded {len(repos)} repos from {repo_list_path}")
     
     # Submit all tasks
     futures = []
@@ -149,10 +158,15 @@ def eval_flow(
             output_dir=str(repo_output_dir),
         )
         futures.append(future)
+        logger.info(f"Submitted task {i+1}/{len(repos)}: {repo.s3_repo_tarball}")
     
     # Wait for all to complete
+    logger.info(f"Waiting for {len(futures)} tasks to complete...")
     wait(futures)
     results = [f.result() for f in futures]
+    
+    success_count = sum(1 for r in results if r.success)
+    logger.info(f"All tasks complete: {success_count}/{len(results)} succeeded")
     
     # Write summary
     summary_path = Path(output_dir) / "summary.json"

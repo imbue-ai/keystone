@@ -127,7 +127,11 @@ def process_repo(
         test_artifacts_dir.mkdir()
         
         # Build the command using uvx with git spec
-        git_spec = f"git+{agent_config.bootstrap_git_url}@{agent_config.bootstrap_git_ref}#subdirectory=bootstrap_devcontainer"
+        # Embed token in URL for private repo access
+        git_url = agent_config.bootstrap_git_url
+        if gh_token and "github.com" in git_url:
+            git_url = git_url.replace("https://github.com", f"https://x-access-token:{gh_token}@github.com")
+        git_spec = f"git+{git_url}@{agent_config.bootstrap_git_ref}#subdirectory=bootstrap_devcontainer"
         result_file = work_dir / "bootstrap_result.json"
         cmd = [
             "uvx",
@@ -142,7 +146,7 @@ def process_repo(
         # Set up environment
         env = os.environ.copy()
         
-        # Propagate GitHub auth for private repo access via GIT_ASKPASS
+        # Get GitHub token for private repo access
         gh_token = env.get("GH_TOKEN") or env.get("GITHUB_TOKEN")
         if not gh_token:
             try:
@@ -156,17 +160,6 @@ def process_repo(
                     gh_token = gh_result.stdout.strip()
             except (subprocess.TimeoutExpired, FileNotFoundError):
                 pass  # gh CLI not available
-        
-        if gh_token:
-            # Create a simple askpass script that returns the token
-            askpass_script = work_dir / "git-askpass.sh"
-            askpass_script.write_text(f"#!/bin/bash\necho '{gh_token}'\n")
-            askpass_script.chmod(0o700)
-            env["GIT_ASKPASS"] = str(askpass_script)
-            env["GH_TOKEN"] = gh_token
-            # Prevent macOS keychain dialogs and other credential prompts
-            env["GIT_TERMINAL_PROMPT"] = "0"
-            env["GCM_INTERACTIVE"] = "never"
         
         # If API key provided, set up isolated fake home with Claude config
         # Otherwise, use real home so claude CLI uses its own auth

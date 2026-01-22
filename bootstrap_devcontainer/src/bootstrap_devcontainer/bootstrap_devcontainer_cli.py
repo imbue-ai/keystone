@@ -92,6 +92,7 @@ Notes:
     docker:cli ps
   ```
 * If tests cannot be fixed by environment changes, disable them via command line args.
+* You can set file permissions directly in COPY commands: `COPY --chmod=0755 script.sh /usr/local/bin/script.sh`
 * Disable code coverage collection in run_all_tests.sh (e.g., `pytest --no-cov` or `coverage run` flags) - coverage reports are slow and not needed.
 * Emit status updates before and after each major action as plain text output (not via tool calls).
   Simply include the status line in your assistant message text, like:

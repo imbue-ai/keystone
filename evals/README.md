@@ -21,23 +21,23 @@ uv sync --extra dask
 
 ```bash
 # Test with samples/python_project
-uv run python -m evals.cli test-local samples/python_project --output-dir ./test_output
+uv run python -m evals.cli test_local --source_dir samples/python_project --output_dir ./test_output
 
 # With custom budget
-uv run python -m evals.cli test-local samples/python_project --max-budget-usd 2.0
+uv run python -m evals.cli test_local --source_dir samples/python_project --max_budget_usd 2.0
 ```
 
 ### Run on a list of repos
 
 ```bash
 # Local execution (ThreadPoolTaskRunner - default)
-uv run python -m evals.cli run evals/examples/agent_config.json5 evals/examples/repo_list.jsonl --mode local
+uv run python -m evals.cli run --agent_config_path evals/examples/agent_config.json5 --repo_list_path evals/examples/repo_list.jsonl --execution_mode local
 
 # Parallel processes (ProcessPoolTaskRunner)
-uv run python -m evals.cli run evals/examples/agent_config.json5 evals/examples/repo_list.jsonl --mode process
+uv run python -m evals.cli run --agent_config_path evals/examples/agent_config.json5 --repo_list_path evals/examples/repo_list.jsonl --execution_mode process
 
 # Distributed with Dask (requires prefect-dask)
-uv run python -m evals.cli run evals/examples/agent_config.json5 evals/examples/repo_list.jsonl --mode dask
+uv run python -m evals.cli run --agent_config_path evals/examples/agent_config.json5 --repo_list_path evals/examples/repo_list.jsonl --execution_mode dask
 ```
 
 ## Configuration

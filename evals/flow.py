@@ -172,7 +172,7 @@ def eval_flow(
     # Write summary
     summary_path = Path(output_dir) / "summary.json"
     summary_path.parent.mkdir(parents=True, exist_ok=True)
-    with Path(summary_path, "w").open() as f:
+    with summary_path.open("w") as f:
         json.dump([r.model_dump() for r in results], f, indent=2)
 
     return results

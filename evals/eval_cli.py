@@ -12,6 +12,36 @@ import typer
 from config import AgentConfig, EvalConfig
 from flow import create_tarball_from_dir, eval_flow, process_repo_task
 from rich.console import Console
+from rich.traceback import Traceback
+
+# Install custom traceback handler with relative paths
+_PROJECT_ROOT = Path(__file__).parent.parent.resolve()
+
+
+def _install_relative_traceback() -> None:
+    """Install exception handler that shows paths relative to project root."""
+    import io
+    import sys
+
+    def excepthook(
+        exc_type: type[BaseException],
+        exc_value: BaseException,
+        exc_tb: object,
+    ) -> None:
+        # Render traceback to string, then replace absolute paths with relative ones
+        string_io = io.StringIO()
+        temp_console = Console(file=string_io, force_terminal=True, width=120)
+        tb = Traceback.from_exception(exc_type, exc_value, exc_tb, show_locals=False)  # type: ignore[arg-type]
+        temp_console.print(tb)
+        text = string_io.getvalue()
+        # Replace absolute project paths with relative
+        text = text.replace(str(_PROJECT_ROOT) + "/", "")
+        Console(stderr=True).print(text, highlight=False)
+
+    sys.excepthook = excepthook
+
+
+_install_relative_traceback()
 
 # Configure logging with detailed format
 logging.basicConfig(

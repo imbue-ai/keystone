@@ -36,11 +36,4 @@ ignore = [
 [tool.ruff.lint.isort]
 known-first-party = ["bootstrap_devcontainer", "evals"]
 
-[tool.pyright]
-pythonVersion = "3.12"
-typeCheckingMode = "basic"
-reportMissingImports = true
-reportMissingTypeStubs = false
-exclude = ["github_datasets", "samples"]
-# prefect_dask is optional
-ignore = ["evals/flow.py"]
+# Pyright config in pyrightconfig.json (needs explicit include to avoid hanging on symlinks)

@@ -1,0 +1,8 @@
+{
+  "include": ["bootstrap_devcontainer", "evals"],
+  "exclude": ["**/node_modules", "**/.venv", "github_datasets", "samples"],
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": true,
+  "reportMissingTypeStubs": false
+}

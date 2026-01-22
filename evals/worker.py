@@ -189,13 +189,22 @@ def process_repo(
         bootstrap_result = None
         all_output = result.stdout + "\n" + result.stderr
         for line in reversed(all_output.strip().split("\n")):
-            try:
-                bootstrap_result = json.loads(line)
-                break
-            except json.JSONDecodeError:
-                continue
+            line = line.strip()
+            if line.startswith("{") and line.endswith("}"):
+                try:
+                    bootstrap_result = json.loads(line)
+                    break
+                except json.JSONDecodeError:
+                    continue
         
         success = result.returncode == 0
+        
+        # Debug: log if we couldn't parse result
+        if bootstrap_result is None and result.returncode == 0:
+            import sys
+            print(f"DEBUG: Could not parse bootstrap_result from output", file=sys.stderr)
+            print(f"DEBUG: stdout={result.stdout[:500]!r}", file=sys.stderr)
+            print(f"DEBUG: stderr={result.stderr[:500]!r}", file=sys.stderr)
         
         # Collect output artifacts
         output_dir.mkdir(parents=True, exist_ok=True)

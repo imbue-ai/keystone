@@ -11,8 +11,11 @@ Automatically generates a working `.devcontainer/` setup for any project using a
 Run directly from the repository using `uvx`:
 
 ```bash
-uvx --from 'git+https://github.com/imbue-ai/bootstrap_devcontainer@prod#subdirectory=bootstrap_devcontainer' \
-  bootstrap-devcontainer --project_root <project_path> --test_artifacts_dir ./artifacts
+uvx --from 'git+https://github.com/imbue-ai/bootstrap_devcontainer@main#subdirectory=bootstrap_devcontainer' \
+  bootstrap-devcontainer \
+  --sqlite_cache_dir ~/.cache/bootstrap_devcontainer.sqlite \
+  --test_artifacts_dir /tmp/test_artifacts \
+  --project_root ./samples/python_project
 ```
 
 ### Options

@@ -7,6 +7,7 @@ import subprocess
 import pytest
 from pathlib import Path
 
+from bootstrap_devcontainer.constants import DEFAULT_CACHE_PATH
 from bootstrap_devcontainer.process_runner import run_process
 
 logger = logging.getLogger(__name__)
@@ -175,7 +176,6 @@ def test_e2e_sample_project(tmp_path: Path) -> None:
     shutil.copytree(original_project_root, project_root)
 
     test_artifacts_dir = tmp_path / "test_artifacts"
-    from bootstrap_devcontainer.constants import DEFAULT_CACHE_PATH
     cache_file = DEFAULT_CACHE_PATH
 
     logger.info("=" * 60)

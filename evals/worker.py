@@ -185,17 +185,32 @@ def process_repo(
             timeout=timeout_secs,
         )
         
-        # Parse result from stdout or stderr (last JSON object)
+        # Parse result JSON from output (may be multi-line with indent=2)
         bootstrap_result = None
-        all_output = result.stdout + "\n" + result.stderr
-        for line in reversed(all_output.strip().split("\n")):
-            line = line.strip()
-            if line.startswith("{") and line.endswith("}"):
+        # Look for JSON object in stdout first, then stderr
+        for output in [result.stdout, result.stderr]:
+            # Find last occurrence of a JSON object
+            import re
+            # Match a JSON object that starts with { and ends with }
+            matches = list(re.finditer(r'\{[^{}]*"success"[^{}]*\}', output, re.DOTALL))
+            if matches:
                 try:
-                    bootstrap_result = json.loads(line)
+                    bootstrap_result = json.loads(matches[-1].group())
                     break
                 except json.JSONDecodeError:
-                    continue
+                    pass
+            # Also try to find multi-line JSON
+            if '"success":' in output and '"total_time":' in output:
+                # Find the start of the JSON object
+                idx = output.rfind('{\n  "success"')
+                if idx == -1:
+                    idx = output.rfind('{"success"')
+                if idx != -1:
+                    try:
+                        bootstrap_result = json.loads(output[idx:])
+                        break
+                    except json.JSONDecodeError:
+                        pass
         
         success = result.returncode == 0
         

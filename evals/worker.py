@@ -142,9 +142,9 @@ def process_repo(
         # Set up environment
         env = os.environ.copy()
         
-        # Propagate GitHub auth for private repo access
-        # Try GH_TOKEN first, then gh CLI, then GITHUB_TOKEN
-        if "GH_TOKEN" not in env and "GITHUB_TOKEN" not in env:
+        # Propagate GitHub auth for private repo access via GIT_ASKPASS
+        gh_token = env.get("GH_TOKEN") or env.get("GITHUB_TOKEN")
+        if not gh_token:
             try:
                 gh_result = subprocess.run(
                     ["gh", "auth", "token"],
@@ -153,9 +153,17 @@ def process_repo(
                     timeout=5,
                 )
                 if gh_result.returncode == 0 and gh_result.stdout.strip():
-                    env["GH_TOKEN"] = gh_result.stdout.strip()
+                    gh_token = gh_result.stdout.strip()
             except (subprocess.TimeoutExpired, FileNotFoundError):
                 pass  # gh CLI not available
+        
+        if gh_token:
+            # Create a simple askpass script that returns the token
+            askpass_script = work_dir / "git-askpass.sh"
+            askpass_script.write_text(f"#!/bin/bash\necho '{gh_token}'\n")
+            askpass_script.chmod(0o700)
+            env["GIT_ASKPASS"] = str(askpass_script)
+            env["GH_TOKEN"] = gh_token
         
         # If API key provided, set up isolated fake home with Claude config
         # Otherwise, use real home so claude CLI uses its own auth

@@ -232,7 +232,7 @@ def main(
     else:
         # Cache miss - run agent
         if cache is not None:
-            print("CACHE MISS: Running agent", file=sys.stderr)
+            print(f"CACHE MISS: Running agent (cache: {sqlite_cache_file})", file=sys.stderr)
         else:
             print(f"Starting agent with command: {agent_cmd}", file=sys.stderr)
 

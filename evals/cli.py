@@ -1,6 +1,8 @@
 """CLI for the eval harness."""
 
 import json
+import os
+import subprocess
 import tempfile
 from pathlib import Path
 from typing import Optional
@@ -11,6 +13,24 @@ from rich.console import Console
 
 from config import AgentConfig, EvalConfig
 from flow import create_tarball_from_dir, eval_flow, eval_local_tarball_flow
+
+
+def ensure_github_token() -> None:
+    """Ensure GH_TOKEN is set for private repo access."""
+    if os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN"):
+        return
+    try:
+        result = subprocess.run(
+            ["gh", "auth", "token"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            os.environ["GH_TOKEN"] = result.stdout.strip()
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass  # gh CLI not available
+
 
 app = typer.Typer(
     help="Eval harness for bootstrap_devcontainer",
@@ -34,6 +54,8 @@ def run(
     ),
 ):
     """Run the eval harness on a list of repos."""
+    ensure_github_token()
+
     # Load agent config
     with open(agent_config_path) as f:
         agent_config_dict = json5.load(f)
@@ -84,6 +106,8 @@ def test_local(
 
     Creates a tarball from the source directory and runs the eval.
     """
+    ensure_github_token()
+
     source_dir = source_dir.resolve()
 
     if output_dir is None:

@@ -178,35 +178,6 @@ def eval_flow(
     return results
 
 
-@flow(name="eval_local_tarball")
-def eval_local_tarball_flow(
-    tarball_path: str,
-    agent_config: Optional[AgentConfig] = None,
-    output_dir: Optional[str] = None,
-) -> WorkerResult:
-    """Convenience flow for testing with a local tarball.
-    
-    Args:
-        tarball_path: Path to local tarball
-        agent_config: Optional agent config (uses defaults if not provided)
-        output_dir: Output directory (uses temp dir if not provided)
-        
-    Returns:
-        WorkerResult
-    """
-    if agent_config is None:
-        agent_config = AgentConfig()
-    
-    if output_dir is None:
-        output_dir = tempfile.mkdtemp(prefix="eval_output_")
-    
-    return process_repo_task(
-        repo_source=tarball_path,
-        agent_config=agent_config,
-        output_dir=output_dir,
-    )
-
-
 def create_tarball_from_dir(source_dir: Path, output_path: Path) -> Path:
     """Create a tarball from a directory."""
     with tarfile.open(output_path, "w:gz") as tar:

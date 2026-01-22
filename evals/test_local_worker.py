@@ -1,4 +1,4 @@
-"""Test the eval harness on samples/python_project.
+"""Test the eval harness using repos from examples/repo_list.jsonl.
 
 This test uses caching to avoid repeated agent runs.
 
@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from config import AgentConfig
-from flow import create_tarball_from_dir, eval_local_tarball_flow
+from config import AgentConfig, EvalConfig
+from flow import eval_flow
 
 
 def get_git_info() -> tuple[str, bool]:
@@ -68,11 +68,11 @@ def check_commit_pushed(commit_hash: str) -> bool:
 
 
 @pytest.fixture
-def samples_dir() -> Path:
-    """Path to the sample python project."""
-    path = Path(__file__).parent.parent / "samples" / "python_project"
+def repo_list_path() -> Path:
+    """Path to the repo list JSONL file."""
+    path = Path(__file__).parent / "examples" / "repo_list.jsonl"
     if not path.exists():
-        pytest.skip(f"Sample project not found at {path}")
+        pytest.skip(f"Repo list not found at {path}")
     return path
 
 
@@ -90,12 +90,8 @@ def git_ref() -> str:
     return commit_hash
 
 
-def test_eval_local_tarball_flow(samples_dir: Path, tmp_path: Path, git_ref: str) -> None:
-    """Test that eval_local_tarball_flow succeeds on the sample project."""
-    # Create tarball
-    tarball_path = tmp_path / "python_project.tar.gz"
-    create_tarball_from_dir(samples_dir, tarball_path)
-    
+def test_eval_flow(repo_list_path: Path, tmp_path: Path, git_ref: str) -> None:
+    """Test that eval_flow succeeds on repos from repo_list.jsonl."""
     # Configure with caching enabled, using current git commit
     agent_config = AgentConfig(
         max_budget_usd=1.0,
@@ -104,27 +100,39 @@ def test_eval_local_tarball_flow(samples_dir: Path, tmp_path: Path, git_ref: str
         bootstrap_git_ref=git_ref,
     )
     
-    # Run the flow
-    result = eval_local_tarball_flow(
-        tarball_path=str(tarball_path),
+    eval_config = EvalConfig(
         agent_config=agent_config,
-        output_dir=str(tmp_path / "result"),
+        execution_mode="local",
+        max_workers=1,
     )
     
-    # Assert success
-    assert result.success, f"Eval failed: {result.error_message}"
+    output_dir = tmp_path / "results"
+    output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Verify output files exist
-    result_dir = tmp_path / "result"
-    assert result_dir.exists(), "Result directory not created"
+    # Run the flow
+    results = eval_flow(
+        repo_list_path=str(repo_list_path),
+        eval_config=eval_config,
+        output_dir=str(output_dir),
+    )
     
-    # Check bootstrap_result contents
-    assert result.bootstrap_result is not None, "bootstrap_result should be populated"
-    br = result.bootstrap_result
-    assert br.get("success") is True, f"bootstrap_result.success should be True: {br}"
-    assert "total_time" in br, "bootstrap_result should have total_time"
-    assert "cost_usd" in br, "bootstrap_result should have cost_usd"
-    assert "token_spending" in br, "bootstrap_result should have token_spending"
+    # Should have processed repos from the list
+    assert len(results) > 0, "No results returned"
     
-    # Verify devcontainer tarball was created
-    assert result.devcontainer_tarball_s3 is not None, "devcontainer tarball should exist"
+    # At least one should succeed (may vary based on repo state)
+    success_count = sum(1 for r in results if r.success)
+    assert success_count > 0, f"No repos succeeded: {[r.error_message for r in results]}"
+    
+    # Verify output structure
+    assert (output_dir / "summary.json").exists(), "Summary file not created"
+    
+    # Check successful results have expected fields
+    for result in results:
+        if result.success:
+            assert result.bootstrap_result is not None, "bootstrap_result should be populated"
+            br = result.bootstrap_result
+            assert br.get("success") is True, f"bootstrap_result.success should be True: {br}"
+            assert "total_time" in br, "bootstrap_result should have total_time"
+            assert "cost_usd" in br, "bootstrap_result should have cost_usd"
+            assert "token_spending" in br, "bootstrap_result should have token_spending"
+            assert result.devcontainer_tarball_s3 is not None, "devcontainer tarball should exist"

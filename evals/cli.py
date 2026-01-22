@@ -12,7 +12,7 @@ import typer
 from rich.console import Console
 
 from config import AgentConfig, EvalConfig
-from flow import create_tarball_from_dir, eval_flow, eval_local_tarball_flow
+from flow import create_tarball_from_dir, eval_flow, process_repo_task
 
 
 def ensure_github_token() -> None:
@@ -133,8 +133,8 @@ def test_local(
         use_cache=use_cache,
     )
 
-    result = eval_local_tarball_flow(
-        tarball_path=str(tarball_path),
+    result = process_repo_task.fn(
+        repo_source=str(tarball_path),
         agent_config=agent_config,
         output_dir=str(output_dir / "result"),
     )

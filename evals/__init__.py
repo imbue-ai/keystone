@@ -1,6 +1,6 @@
 """Eval harness for bootstrap_devcontainer."""
 from config import AgentConfig, EvalConfig, RepoEntry, WorkerResult
-from flow import create_tarball_from_dir, eval_flow, eval_local_tarball_flow
+from flow import create_tarball_from_dir, eval_flow
 
 __all__ = [
     "AgentConfig",
@@ -8,6 +8,5 @@ __all__ = [
     "RepoEntry",
     "WorkerResult",
     "eval_flow",
-    "eval_local_tarball_flow",
     "create_tarball_from_dir",
 ]

@@ -5,9 +5,9 @@ This allows testing the Docker mechanics without LLM dependencies.
 
 Usage: fake_agent.py --dangerously-skip-permissions -p PROMPT --output-format stream-json --verbose
 """
+
 import argparse
 import json
-import os
 from pathlib import Path
 
 # The devcontainer files to generate
@@ -91,7 +91,7 @@ def main() -> None:
     parser.add_argument("--output-format", type=str)
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--max-budget-usd", type=float, default=1.0)
-    args = parser.parse_args()
+    parser.parse_args()
 
     # Create .devcontainer directory
     devcontainer_dir = Path(".devcontainer")
@@ -115,9 +115,7 @@ def main() -> None:
     for status in status_messages:
         assistant_msg = {
             "type": "assistant",
-            "message": {
-                "content": [{"type": "text", "text": status}]
-            },
+            "message": {"content": [{"type": "text", "text": status}]},
         }
         print(json.dumps(assistant_msg))
 

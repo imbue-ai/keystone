@@ -5,17 +5,9 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
-
-# Configure logging with detailed format
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s %(levelname)s [%(filename)s:%(lineno)d %(funcName)s] [%(thread)d] %(message)s",
-    datefmt="%Y-%m-%dT%H:%M:%S%z",
-)
 
 from bootstrap_devcontainer.agent_cache import (
     AgentCache,
@@ -28,7 +20,12 @@ from bootstrap_devcontainer.agent_cache import (
 from bootstrap_devcontainer.process_runner import run_process
 from bootstrap_devcontainer.schema import BootstrapResult, TokenSpending
 
-from bootstrap_devcontainer.constants import DEFAULT_CACHE_PATH
+# Configure logging with detailed format
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s %(levelname)s [%(filename)s:%(lineno)d %(funcName)s] [%(thread)d] %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S%z",
+)
 
 app = typer.Typer()
 console = Console()
@@ -52,6 +49,7 @@ def check_docker_available() -> bool:
     except subprocess.TimeoutExpired:
         console.print("[red]Error: Docker command timed out.[/red]")
         return False
+
 
 STATUS_MARKER = "BOOTSTRAP_DEVCONTAINER_STATUS:"
 SUMMARY_MARKER = "BOOTSTRAP_DEVCONTAINER_SUMMARY:"
@@ -117,23 +115,21 @@ To verify, use something like this (adding arguments as appropriate for permissi
 
 
 @app.command()
-def main(
-    project_root: Optional[Path] = typer.Option(
+def bootstrap(
+    project_root: Path | None = typer.Option(
         ..., "--project_root", help="Path to the source project"
     ),
-    test_artifacts_dir: Optional[Path] = typer.Option(
+    test_artifacts_dir: Path | None = typer.Option(
         ..., "--test_artifacts_dir", help="Directory for test artifacts"
     ),
-    agent_cmd: Optional[str] = typer.Option(
-        "claude", "--agent_cmd", help="Agent command to run"
-    ),
-    max_budget_usd: Optional[float] = typer.Option(
+    agent_cmd: str | None = typer.Option("claude", "--agent_cmd", help="Agent command to run"),
+    max_budget_usd: float | None = typer.Option(
         1.0, "--max_budget_usd", help="Maximum dollar amount to spend on agent inference"
     ),
-    sqlite_cache_dir: Optional[Path] = typer.Option(
+    sqlite_cache_dir: Path | None = typer.Option(
         None, "--sqlite_cache_dir", help="SQLite cache file path (enables caching)"
     ),
-    output_file: Optional[Path] = typer.Option(
+    output_file: Path | None = typer.Option(
         None, "--output_file", help="Path to write JSON result (defaults to stdout)"
     ),
 ):
@@ -154,8 +150,8 @@ def main(
     start_time = time.time()
 
     # Set up cache if requested
-    cache: Optional[AgentCache] = None
-    cache_key: Optional[str] = None
+    cache: AgentCache | None = None
+    cache_key: str | None = None
     if sqlite_cache_dir is not None:
         cache = AgentCache(sqlite_cache_dir)
         cache_key = compute_cache_key(prompt, project_root)
@@ -197,9 +193,8 @@ def main(
                 for item in content:
                     if item.get("type") == "text":
                         txt = item.get("text", "").strip()
-                        if txt:
-                            if not check_and_print_status(txt):
-                                print(f"Assistant: {txt}", file=sys.stderr, flush=True)
+                        if txt and not check_and_print_status(txt):
+                            print(f"Assistant: {txt}", file=sys.stderr, flush=True)
                     elif item.get("type") == "tool_use":
                         name = item.get("name")
                         input_data = item.get("input", {})
@@ -223,7 +218,7 @@ def main(
         print(f"Agent stderr: {line}", file=sys.stderr, flush=True)
 
     # Check cache first
-    cached_value: Optional[CacheValue] = None
+    cached_value: CacheValue | None = None
     if cache is not None and cache_key is not None:
         cached_value = cache.get(cache_key)
 
@@ -244,7 +239,7 @@ def main(
         else:
             print(f"Starting agent with command: {agent_cmd}", file=sys.stderr)
 
-        event_collector: Optional[EventCollector] = None
+        event_collector: EventCollector | None = None
         if cache is not None:
             event_collector = EventCollector()
 
@@ -260,7 +255,8 @@ def main(
 
         try:
             # We use stream-json and verbose for progressive output and token tracking
-            full_cmd = shlex.split(agent_cmd) + [
+            full_cmd = [
+                *shlex.split(agent_cmd),
                 "--dangerously-skip-permissions",
                 "-p",
                 prompt,

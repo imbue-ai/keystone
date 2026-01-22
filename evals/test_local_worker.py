@@ -6,23 +6,23 @@ Usage:
     cd evals
     uv run pytest test_local_worker.py -v
 """
+
 import subprocess
 from pathlib import Path
 
 import pytest
-
 from config import AgentConfig, EvalConfig
 from flow import eval_flow
 
 
 def get_git_info() -> tuple[str, bool]:
     """Get current git commit hash and check if repo is clean.
-    
+
     Returns:
         (commit_hash, is_clean) tuple
     """
     repo_root = Path(__file__).parent.parent
-    
+
     # Get current commit hash
     result = subprocess.run(
         ["git", "rev-parse", "HEAD"],
@@ -32,7 +32,7 @@ def get_git_info() -> tuple[str, bool]:
         check=True,
     )
     commit_hash = result.stdout.strip()
-    
+
     # Check if repo is clean
     result = subprocess.run(
         ["git", "status", "--porcelain"],
@@ -42,14 +42,14 @@ def get_git_info() -> tuple[str, bool]:
         check=True,
     )
     is_clean = result.stdout.strip() == ""
-    
+
     return commit_hash, is_clean
 
 
 def check_commit_pushed(commit_hash: str) -> bool:
     """Check if commit exists on origin/main."""
     repo_root = Path(__file__).parent.parent
-    
+
     # Fetch latest from origin
     subprocess.run(
         ["git", "fetch", "origin", "main"],
@@ -57,7 +57,7 @@ def check_commit_pushed(commit_hash: str) -> bool:
         capture_output=True,
         check=True,
     )
-    
+
     # Check if commit is ancestor of origin/main
     result = subprocess.run(
         ["git", "merge-base", "--is-ancestor", commit_hash, "origin/main"],
@@ -80,13 +80,15 @@ def repo_list_path() -> Path:
 def git_ref() -> str:
     """Get the current git commit, ensuring repo is clean and pushed."""
     commit_hash, is_clean = get_git_info()
-    
+
     if not is_clean:
         pytest.fail("Git repo has uncommitted changes. Commit and push before running eval tests.")
-    
+
     if not check_commit_pushed(commit_hash):
-        pytest.fail(f"Commit {commit_hash[:8]} not pushed to origin/main. Push before running eval tests.")
-    
+        pytest.fail(
+            f"Commit {commit_hash[:8]} not pushed to origin/main. Push before running eval tests."
+        )
+
     return commit_hash
 
 
@@ -99,33 +101,33 @@ def test_eval_flow(repo_list_path: Path, tmp_path: Path, git_ref: str) -> None:
         bootstrap_git_ref=git_ref,
         # Uses default sqlite_cache_dir="~/.cache/bootstrap_devcontainer"
     )
-    
+
     eval_config = EvalConfig(
         agent_config=agent_config,
         execution_mode="local",
         max_workers=1,
     )
-    
+
     output_dir = tmp_path / "results"
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Run the flow
     results = eval_flow(
         repo_list_path=str(repo_list_path),
         eval_config=eval_config,
         output_dir=str(output_dir),
     )
-    
+
     # Should have processed repos from the list
     assert len(results) > 0, "No results returned"
-    
+
     # At least one should succeed (may vary based on repo state)
     success_count = sum(1 for r in results if r.success)
     assert success_count > 0, f"No repos succeeded: {[r.error_message for r in results]}"
-    
+
     # Verify output structure
     assert (output_dir / "summary.json").exists(), "Summary file not created"
-    
+
     # Check successful results have expected fields
     for result in results:
         if result.success:

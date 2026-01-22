@@ -47,3 +47,20 @@ bd sync               # Sync with git
 - **No inline imports** - Put all imports at the top of the file, not inside functions
 - **Always use type annotations** - Add Python type annotations to all function parameters and return values
 - **Use uv for running Python** - Run tests with `uv run pytest`, not `python -m pytest`
+
+## Linting & Type Checking
+
+This project uses **ruff** (linter/formatter) and **pyright** (type checker). Pre-commit hooks run these automatically.
+
+```bash
+uv run ruff check .           # Lint
+uv run ruff check . --fix     # Auto-fix lint issues
+uv run ruff format .          # Format code
+uv run pyright                # Type check
+```
+
+To install pre-commit hooks after cloning:
+```bash
+uv sync
+uv run pre-commit install
+```

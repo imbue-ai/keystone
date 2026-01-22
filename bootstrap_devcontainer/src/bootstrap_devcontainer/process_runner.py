@@ -4,8 +4,8 @@ import logging
 import os
 import subprocess
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ProcessResult:
     """Result of a process run with captured output."""
+
     returncode: int
     stdout: str
     stderr: str
@@ -25,7 +26,7 @@ def _stream_reader(
 ) -> None:
     """Read lines from stream, optionally calling callback for each line."""
     for line in stream:
-        line = line.rstrip('\n')
+        line = line.rstrip("\n")
         if line_callback:
             line_callback(line)
         lines_list.append(line)
@@ -74,9 +75,14 @@ def run_process(
     effective_stdout_cb = stdout_callback
     effective_stderr_cb = stderr_callback
     if log_prefix and not stdout_callback:
-        effective_stdout_cb = lambda line: logger.info("%s STDOUT: %s", log_prefix, line)
+
+        def effective_stdout_cb(line):
+            return logger.info("%s STDOUT: %s", log_prefix, line)
+
     if log_prefix and not stderr_callback:
-        effective_stderr_cb = lambda line: logger.info("%s STDERR: %s", log_prefix, line)
+
+        def effective_stderr_cb(line):
+            return logger.info("%s STDERR: %s", log_prefix, line)
 
     stdout_thread = threading.Thread(
         target=_stream_reader,
@@ -97,6 +103,6 @@ def run_process(
 
     return ProcessResult(
         returncode=process.returncode,
-        stdout='\n'.join(stdout_lines),
-        stderr='\n'.join(stderr_lines),
+        stdout="\n".join(stdout_lines),
+        stderr="\n".join(stderr_lines),
     )

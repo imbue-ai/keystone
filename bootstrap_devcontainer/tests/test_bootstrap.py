@@ -3,9 +3,9 @@ import logging
 import shlex
 import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
-from pathlib import Path
 
 from bootstrap_devcontainer.constants import DEFAULT_CACHE_PATH
 from bootstrap_devcontainer.process_runner import run_process
@@ -47,13 +47,17 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
 
     cmd = [
         "bootstrap-devcontainer",
-        "--project_root", str(project_root),
-        "--test_artifacts_dir", str(test_artifacts_dir),
-        "--agent_cmd", f"python3 {shlex.quote(str(fake_agent))}",
-        "--sqlite_cache_dir", str(cache_file),
+        "--project_root",
+        str(project_root),
+        "--test_artifacts_dir",
+        str(test_artifacts_dir),
+        "--agent_cmd",
+        f"python3 {shlex.quote(str(fake_agent))}",
+        "--sqlite_cache_dir",
+        str(cache_file),
     ]
 
-    logger.info("Running: %s", ' '.join(cmd))
+    logger.info("Running: %s", " ".join(cmd))
 
     result = run_process(cmd, log_prefix="[fake-agent]")
 
@@ -63,8 +67,7 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
     assert "CACHE MISS" in result.stderr, "Expected cache miss on first run"
 
     # Check that status lines were emitted to stdout (rich prints in blue)
-    assert "BOOTSTRAP_DEVCONTAINER_STATUS:" in result.stdout, \
-        "Expected status lines in stdout"
+    assert "BOOTSTRAP_DEVCONTAINER_STATUS:" in result.stdout, "Expected status lines in stdout"
 
     # Parse the JSON output (last line after status messages)
     # Find the JSON object in stdout (it spans multiple lines)
@@ -97,10 +100,14 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
 
     cmd2 = [
         "bootstrap-devcontainer",
-        "--project_root", str(project_root2),
-        "--test_artifacts_dir", str(test_artifacts_dir2),
-        "--agent_cmd", f"python3 {shlex.quote(str(fake_agent))}",
-        "--sqlite_cache_dir", str(cache_file),
+        "--project_root",
+        str(project_root2),
+        "--test_artifacts_dir",
+        str(test_artifacts_dir2),
+        "--agent_cmd",
+        f"python3 {shlex.quote(str(fake_agent))}",
+        "--sqlite_cache_dir",
+        str(cache_file),
     ]
 
     result2 = run_process(cmd2, log_prefix="[fake-agent-cached]")
@@ -133,12 +140,15 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path) -> None:
 
     cmd = [
         "bootstrap-devcontainer",
-        "--project_root", str(project_root),
-        "--test_artifacts_dir", str(test_artifacts_dir),
-        "--agent_cmd", f"python3 {shlex.quote(str(fake_agent))}",
+        "--project_root",
+        str(project_root),
+        "--test_artifacts_dir",
+        str(test_artifacts_dir),
+        "--agent_cmd",
+        f"python3 {shlex.quote(str(fake_agent))}",
     ]
 
-    logger.info("Running: %s", ' '.join(cmd))
+    logger.info("Running: %s", " ".join(cmd))
 
     result = run_process(cmd, log_prefix="[fake-agent-rust]")
 
@@ -156,12 +166,12 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path) -> None:
     if json_start is not None:
         json_str = "\n".join(stdout_lines[json_start:])
         output = json.loads(json_str)
-        assert result.returncode != 0 or not output.get("success", True), \
+        assert result.returncode != 0 or not output.get("success", True), (
             "Expected failure: Python devcontainer cannot run Rust tests"
+        )
     else:
         # If we can't parse JSON, the process must have failed
-        assert result.returncode != 0, \
-            "Expected failure: Python devcontainer cannot run Rust tests"
+        assert result.returncode != 0, "Expected failure: Python devcontainer cannot run Rust tests"
 
     # Verify the devcontainer was created (agent ran successfully)
     assert (project_root / ".devcontainer" / "devcontainer.json").exists()
@@ -187,14 +197,15 @@ def test_e2e_sample_project(tmp_path: Path) -> None:
     # Use -u for unbuffered Python output
     cmd = [
         "bootstrap-devcontainer",
-        "--project_root", str(project_root),
+        "--project_root",
+        str(project_root),
         "--test_artifacts_dir",
         str(test_artifacts_dir),
         "--sqlite_cache_dir",
         str(cache_file),
     ]
 
-    logger.info("Running: %s", ' '.join(cmd))
+    logger.info("Running: %s", " ".join(cmd))
 
     result = run_process(cmd, log_prefix="[e2e]")
 
@@ -221,7 +232,6 @@ def test_e2e_sample_project(tmp_path: Path) -> None:
     assert (project_root / ".devcontainer" / "run_all_tests.sh").exists()
 
 
-
 @pytest.mark.manual
 def test_max_budget_zero_fails(tmp_path: Path) -> None:
     """
@@ -242,12 +252,15 @@ def test_max_budget_zero_fails(tmp_path: Path) -> None:
 
     cmd = [
         "bootstrap-devcontainer",
-        "--project_root", str(project_root),
-        "--test_artifacts_dir", str(test_artifacts_dir),
-        "--max_budget_usd", "0",
+        "--project_root",
+        str(project_root),
+        "--test_artifacts_dir",
+        str(test_artifacts_dir),
+        "--max_budget_usd",
+        "0",
     ]
 
-    logger.info("Running: %s", ' '.join(cmd))
+    logger.info("Running: %s", " ".join(cmd))
 
     result = run_process(cmd, log_prefix="[budget-zero]")
 
@@ -264,10 +277,7 @@ def test_max_budget_zero_fails(tmp_path: Path) -> None:
     if json_start is not None:
         json_str = "\n".join(stdout_lines[json_start:])
         output = json.loads(json_str)
-        assert not output.get("success", True), \
-            "Expected failure with zero budget"
+        assert not output.get("success", True), "Expected failure with zero budget"
     else:
         # If no JSON output, process should have failed
-        assert result.returncode != 0, \
-            "Expected failure with zero budget"
-
+        assert result.returncode != 0, "Expected failure with zero budget"

@@ -1,23 +1,24 @@
 """Worker logic for processing a single repo."""
+
 import json
+import logging
 import os
 import shutil
-import logging
 import subprocess
 import tarfile
 import tempfile
 from pathlib import Path
-from typing import Optional
+
+from config import AgentConfig, WorkerResult
 
 from bootstrap_devcontainer.process_runner import run_process
-from config import AgentConfig, WorkerResult
 
 logger = logging.getLogger(__name__)
 
 
 def setup_claude_config(api_key: str, home_dir: Path) -> None:
     """Set up ~/.claude.json for non-interactive Claude Code usage.
-    
+
     Based on 2025/2026 best practices:
     - Pre-approve the API key to skip OAuth flow
     - Mark onboarding as complete
@@ -25,69 +26,54 @@ def setup_claude_config(api_key: str, home_dir: Path) -> None:
     """
     claude_dir = home_dir / ".claude"
     claude_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Get last 20 chars of API key for approval
     api_key_suffix = api_key[-20:] if len(api_key) >= 20 else api_key
-    
+
     claude_json = {
-        "customApiKeyResponses": {
-            "approved": [api_key_suffix],
-            "rejected": []
-        },
+        "customApiKeyResponses": {"approved": [api_key_suffix], "rejected": []},
         "hasCompletedOnboarding": True,
         "shiftEnterKeyBindingInstalled": True,
-        "theme": "dark"
+        "theme": "dark",
     }
-    
+
     claude_json_path = home_dir / ".claude.json"
-    with open(claude_json_path, "w") as f:
+    with Path(claude_json_path, "w").open() as f:
         json.dump(claude_json, f, indent=2)
-    
+
     # Also create settings.json with permissive defaults for automation
-    settings_json = {
-        "permissions": {
-            "allow": [
-                "Bash(*)",
-                "Read(*)",
-                "Write(*)",
-                "Edit(*)"
-            ]
-        }
-    }
+    settings_json = {"permissions": {"allow": ["Bash(*)", "Read(*)", "Write(*)", "Edit(*)"]}}
     settings_path = claude_dir / "settings.json"
-    with open(settings_path, "w") as f:
+    with Path(settings_path, "w").open() as f:
         json.dump(settings_json, f, indent=2)
 
 
-def find_session_file(project_path: Path, home_dir: Path) -> Optional[Path]:
+def find_session_file(project_path: Path, home_dir: Path) -> Path | None:
     """Find the Claude session JSONL file for a project.
-    
+
     Claude Code stores sessions in ~/.claude/projects/<encoded-path>/*.jsonl
     The path is encoded by replacing / with - and prepending -
     """
     projects_dir = home_dir / ".claude" / "projects"
     if not projects_dir.exists():
         return None
-    
+
     # Encode the project path like Claude does
     # /some/path -> -some-path
     encoded_path = str(project_path).replace("/", "-")
     if not encoded_path.startswith("-"):
         encoded_path = "-" + encoded_path
-    
+
     session_dir = projects_dir / encoded_path
     if not session_dir.exists():
         return None
-    
+
     # Find the most recent .jsonl file (not agent-* files)
-    jsonl_files = [
-        f for f in session_dir.glob("*.jsonl")
-        if not f.name.startswith("agent-")
-    ]
-    
+    jsonl_files = [f for f in session_dir.glob("*.jsonl") if not f.name.startswith("agent-")]
+
     if not jsonl_files:
         return None
-    
+
     # Return most recently modified
     return max(jsonl_files, key=lambda f: f.stat().st_mtime)
 
@@ -99,28 +85,28 @@ def process_repo(
     anthropic_api_key: str,
 ) -> WorkerResult:
     """Process a single repo tarball.
-    
+
     Args:
         tarball_path: Path to the input tarball
         agent_config: Configuration for the agent
         output_dir: Directory for output artifacts
         anthropic_api_key: API key for Claude
-        
+
     Returns:
         WorkerResult with success/failure and artifact paths
     """
     work_dir = Path(tempfile.mkdtemp(prefix="eval_worker_"))
     logger.info(f"Created work directory: {work_dir}")
-    
+
     try:
         # Extract tarball
         logger.info(f"Extracting tarball: {tarball_path}")
         project_dir = work_dir / "project"
         project_dir.mkdir()
-        
+
         with tarfile.open(tarball_path, "r:gz") as tar:
             tar.extractall(project_dir, filter="data")
-        
+
         # If tarball contained a single root dir, descend into it
         contents = list(project_dir.iterdir())
         if len(contents) == 1 and contents[0].is_dir():
@@ -128,21 +114,21 @@ def process_repo(
         else:
             actual_project_dir = project_dir
         logger.info(f"Project directory: {actual_project_dir}")
-        
+
         # Set up test artifacts dir
         test_artifacts_dir = work_dir / "test_artifacts"
         test_artifacts_dir.mkdir()
         logger.info(f"Test artifacts directory: {test_artifacts_dir}")
-        
+
         # Set up environment
         env = os.environ.copy()
-        
+
         # Disable git credential helpers to prevent keychain dialogs
         env["GIT_CONFIG_NOSYSTEM"] = "1"
         env["GIT_CONFIG_GLOBAL"] = "/dev/null"  # Ignore user's gitconfig
         env["GIT_TERMINAL_PROMPT"] = "0"
         env["GCM_INTERACTIVE"] = "never"
-        
+
         # Get GitHub token for private repo access
         gh_token = env.get("GH_TOKEN") or env.get("GITHUB_TOKEN")
         if not gh_token:
@@ -157,28 +143,40 @@ def process_repo(
                     gh_token = gh_result.stdout.strip()
             except (subprocess.TimeoutExpired, FileNotFoundError):
                 pass  # gh CLI not available
-        
+
         # Build the command using uvx with git spec
         # Embed token in URL for private repo access
         git_url = agent_config.bootstrap_git_url
         if gh_token and "github.com" in git_url:
-            git_url = git_url.replace("https://github.com", f"https://x-access-token:{gh_token}@github.com")
-        git_spec = f"git+{git_url}@{agent_config.bootstrap_git_ref}#subdirectory=bootstrap_devcontainer"
-        logger.info(f"Using bootstrap_devcontainer from: {agent_config.bootstrap_git_url}@{agent_config.bootstrap_git_ref}")
-        
+            git_url = git_url.replace(
+                "https://github.com", f"https://x-access-token:{gh_token}@github.com"
+            )
+        git_spec = (
+            f"git+{git_url}@{agent_config.bootstrap_git_ref}#subdirectory=bootstrap_devcontainer"
+        )
+        logger.info(
+            f"Using bootstrap_devcontainer from: {agent_config.bootstrap_git_url}@{agent_config.bootstrap_git_ref}"
+        )
+
         result_file = work_dir / "bootstrap_result.json"
         cmd = [
             "uvx",
-            "--from", git_spec,
+            "--from",
+            git_spec,
             "bootstrap-devcontainer",
-            "--project_root", str(actual_project_dir),
-            "--test_artifacts_dir", str(test_artifacts_dir),
-            "--max_budget_usd", str(agent_config.max_budget_usd),
-            "--output_file", str(result_file),
+            "--project_root",
+            str(actual_project_dir),
+            "--test_artifacts_dir",
+            str(test_artifacts_dir),
+            "--max_budget_usd",
+            str(agent_config.max_budget_usd),
+            "--output_file",
+            str(result_file),
         ]
-        
+
         # If API key provided, set up isolated fake home with Claude config
         # Otherwise, use real home so claude CLI uses its own auth
+        fake_home: Path | None = None
         if anthropic_api_key:
             fake_home = work_dir / "home"
             fake_home.mkdir()
@@ -186,7 +184,7 @@ def process_repo(
             env["HOME"] = str(fake_home)
             env["ANTHROPIC_API_KEY"] = anthropic_api_key
             logger.info(f"Set up fake home with Claude config: {fake_home}")
-        
+
         # Handle cache configuration
         if agent_config.sqlite_cache_dir:
             # Expand ~ to actual home path
@@ -195,11 +193,11 @@ def process_repo(
             cmd.extend(["--sqlite_cache_dir", str(cache_dir)])
             logger.info(f"Using cache directory: {cache_dir}")
         else:
-            log("Caching disabled")
-        
+            logger.info("Caching disabled")
+
         timeout_secs = agent_config.timeout_minutes * 60
         logger.info(f"Running command with {timeout_secs}s timeout: {' '.join(cmd[:6])}...")
-        
+
         # Use streaming process runner to re-stream bootstrap_devcontainer logs
         # TODO: Add timeout support via ["timeout", str(timeout_secs)] + cmd prefix if needed
         result = run_process(
@@ -208,7 +206,7 @@ def process_repo(
             env=env,
             cwd=str(actual_project_dir),
         )
-        
+
         # Read result from output file
         logger.info(f"Process completed with exit code: {result.returncode}")
         bootstrap_result = None
@@ -217,17 +215,17 @@ def process_repo(
                 bootstrap_result = json.loads(result_file.read_text())
                 logger.info(f"Loaded bootstrap result from {result_file}")
             except json.JSONDecodeError:
-                logger.info(f"Failed to parse bootstrap result JSON")
+                logger.info("Failed to parse bootstrap result JSON")
         else:
             logger.info(f"No result file found at {result_file}")
-        
+
         success = result.returncode == 0
         logger.info(f"Success: {success}")
-        
+
         # Collect output artifacts
         output_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"Collecting artifacts to: {output_dir}")
-        
+
         # Package .devcontainer as tarball
         devcontainer_dir = actual_project_dir / ".devcontainer"
         devcontainer_tarball = None
@@ -237,10 +235,10 @@ def process_repo(
                 tar.add(devcontainer_dir, arcname=".devcontainer")
             logger.info(f"Packaged .devcontainer to: {devcontainer_tarball}")
         else:
-            logger.info(f"No .devcontainer directory found")
-        
+            logger.info("No .devcontainer directory found")
+
         # Find and copy session file
-        home_dir = fake_home if anthropic_api_key else Path.home()
+        home_dir = fake_home if fake_home else Path.home()
         session_file = find_session_file(actual_project_dir, home_dir)
         session_output = None
         if session_file:
@@ -248,21 +246,21 @@ def process_repo(
             shutil.copy(session_file, session_output)
             logger.info(f"Copied session file to: {session_output}")
         else:
-            logger.info(f"No session file found")
-        
+            logger.info("No session file found")
+
         # Save bootstrap result JSON
         if bootstrap_result:
             result_json = output_dir / "bootstrap_result.json"
-            with open(result_json, "w") as f:
+            with Path(result_json, "w").open() as f:
                 json.dump(bootstrap_result, f, indent=2)
-        
+
         # Save stdout/stderr for debugging
-        with open(output_dir / "stdout.txt", "w") as f:
+        with Path(output_dir / "stdout.txt", "w").open() as f:
             f.write(result.stdout)
-        with open(output_dir / "stderr.txt", "w") as f:
+        with Path(output_dir / "stderr.txt", "w").open() as f:
             f.write(result.stderr)
-        logger.info(f"Saved stdout/stderr logs")
-        
+        logger.info("Saved stdout/stderr logs")
+
         return WorkerResult(
             s3_repo_tarball=str(tarball_path),  # Will be replaced with S3 URI by caller
             success=success,
@@ -271,7 +269,7 @@ def process_repo(
             devcontainer_tarball_s3=str(devcontainer_tarball) if devcontainer_tarball else None,
             session_jsonl_s3=str(session_output) if session_output else None,
         )
-        
+
     except subprocess.TimeoutExpired:
         return WorkerResult(
             s3_repo_tarball=str(tarball_path),

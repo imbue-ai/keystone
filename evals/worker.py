@@ -129,6 +129,12 @@ def process_repo(
         # Set up environment
         env = os.environ.copy()
         
+        # Disable git credential helpers to prevent keychain dialogs
+        env["GIT_CONFIG_NOSYSTEM"] = "1"
+        env["GIT_CONFIG_GLOBAL"] = "/dev/null"  # Ignore user's gitconfig
+        env["GIT_TERMINAL_PROMPT"] = "0"
+        env["GCM_INTERACTIVE"] = "never"
+        
         # Get GitHub token for private repo access
         gh_token = env.get("GH_TOKEN") or env.get("GITHUB_TOKEN")
         if not gh_token:

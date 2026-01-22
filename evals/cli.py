@@ -84,7 +84,10 @@ def run(
         status = "[green]✓[/green]" if result.success else "[red]✗[/red]"
         console.print(f"  {status} {result.s3_repo_tarball}")
         if not result.success and result.error_message:
-            console.print(f"    Error: {result.error_message[:100]}")
+            # Show first 5 lines of error
+            error_lines = result.error_message.strip().split('\n')[:5]
+            for line in error_lines:
+                console.print(f"    {line[:200]}")
 
 
 @app.command()

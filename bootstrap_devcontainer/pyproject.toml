@@ -29,6 +29,3 @@ markers = [
 testpaths = ["tests"]
 log_cli = true
 log_cli_level = "INFO"
-filterwarnings = [
-    "ignore::pytest.PytestUnknownMarkWarning",
-]

@@ -33,6 +33,3 @@ sources = { "." = "" }
 
 [tool.pytest.ini_options]
 testpaths = ["."]
-filterwarnings = [
-    "ignore::pytest.PytestUnknownMarkWarning",
-]

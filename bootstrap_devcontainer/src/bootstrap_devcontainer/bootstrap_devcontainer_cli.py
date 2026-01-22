@@ -14,7 +14,7 @@ from rich.console import Console
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s %(levelname)s [%(filename)s:%(lineno)d %(funcName)s] [%(thread)d] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
+    datefmt="%Y-%m-%dT%H:%M:%S%z",
 )
 
 from bootstrap_devcontainer.agent_cache import (

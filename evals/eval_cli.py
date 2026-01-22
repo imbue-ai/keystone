@@ -62,6 +62,13 @@ def run(
     """Run the eval harness on a list of repos."""
     ensure_github_token()
 
+    assert agent_config_path is not None, "--agent_config_path is required"
+    assert repo_list_path is not None, "--repo_list_path is required"
+    assert output_dir is not None, "--output_dir is required"
+    assert execution_mode in ("local", "process", "dask"), (
+        f"Invalid execution_mode: {execution_mode}"
+    )
+
     # Load agent config
     with Path(agent_config_path).open() as f:
         agent_config_dict = json5.load(f)
@@ -70,7 +77,7 @@ def run(
 
     eval_config = EvalConfig(
         agent_config=agent_config,
-        execution_mode=execution_mode,
+        execution_mode=execution_mode,  # type: ignore[arg-type]
     )
 
     console.print(f"[bold]Running eval with {execution_mode} mode[/bold]")
@@ -117,6 +124,7 @@ def test_local(
     """
     ensure_github_token()
 
+    assert source_dir is not None, "--source_dir is required"
     source_dir = source_dir.resolve()
 
     if output_dir is None:
@@ -135,8 +143,8 @@ def test_local(
 
     # Run eval
     agent_config = AgentConfig(
-        max_budget_usd=max_budget_usd,
-        use_cache=use_cache,
+        max_budget_usd=max_budget_usd or 1.0,
+        sqlite_cache_dir="~/.cache/bootstrap_devcontainer" if use_cache else None,
     )
 
     result = process_repo_task.fn(

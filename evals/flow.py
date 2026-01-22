@@ -101,7 +101,9 @@ def get_task_runner(execution_mode: str, max_workers: int):
     elif execution_mode == "process":
         return ProcessPoolTaskRunner(max_workers=max_workers)
     elif execution_mode == "dask":
-        from prefect_dask import DaskTaskRunner  # Optional dependency
+        from prefect_dask import (
+            DaskTaskRunner,  # type: ignore[import-not-found]  # Optional dependency
+        )
 
         return DaskTaskRunner()
     elif execution_mode == "modal":

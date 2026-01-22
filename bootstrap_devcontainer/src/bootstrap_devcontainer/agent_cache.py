@@ -109,6 +109,7 @@ class AgentCache:
         data = self._cache.get(key)
         if data is None:
             return None
+        assert isinstance(data, str | bytes | bytearray)
         return CacheValue.model_validate_json(data)
 
     def set(self, key: str, value: CacheValue) -> None:

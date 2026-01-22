@@ -141,6 +141,8 @@ def bootstrap(
         )
         raise typer.Exit(code=1)
 
+    assert project_root is not None, "--project_root is required"
+    assert test_artifacts_dir is not None, "--test_artifacts_dir is required"
     project_root = project_root.resolve()
     test_artifacts_dir = test_artifacts_dir.resolve()
     test_artifacts_dir.mkdir(parents=True, exist_ok=True)
@@ -255,6 +257,7 @@ def bootstrap(
 
         try:
             # We use stream-json and verbose for progressive output and token tracking
+            assert agent_cmd is not None
             full_cmd = [
                 *shlex.split(agent_cmd),
                 "--dangerously-skip-permissions",

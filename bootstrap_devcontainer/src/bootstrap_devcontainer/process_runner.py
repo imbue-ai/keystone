@@ -4,7 +4,7 @@ import logging
 import os
 import subprocess
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ class ProcessResult:
 
 
 def _stream_reader(
-    stream: object,
+    stream: Iterable[str],
     lines_list: list[str],
     line_callback: Callable[[str], None] | None,
 ) -> None:
@@ -72,17 +72,19 @@ def run_process(
     stderr_lines: list[str] = []
 
     # Use explicit callbacks if provided, otherwise fall back to log_prefix logging
-    effective_stdout_cb = stdout_callback
-    effective_stderr_cb = stderr_callback
+    effective_stdout_cb: Callable[[str], None] | None = stdout_callback
+    effective_stderr_cb: Callable[[str], None] | None = stderr_callback
+
+    def _log_stdout(line: str) -> None:
+        logger.info("%s STDOUT: %s", log_prefix, line)
+
+    def _log_stderr(line: str) -> None:
+        logger.info("%s STDERR: %s", log_prefix, line)
+
     if log_prefix and not stdout_callback:
-
-        def effective_stdout_cb(line):
-            return logger.info("%s STDOUT: %s", log_prefix, line)
-
+        effective_stdout_cb = _log_stdout
     if log_prefix and not stderr_callback:
-
-        def effective_stderr_cb(line):
-            return logger.info("%s STDERR: %s", log_prefix, line)
+        effective_stderr_cb = _log_stderr
 
     stdout_thread = threading.Thread(
         target=_stream_reader,

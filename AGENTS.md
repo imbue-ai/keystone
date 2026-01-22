@@ -23,7 +23,7 @@ bd sync               # Sync with git
 3. **Update issue status** - Close finished work, update in-progress items
 4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
-   git pull --rebase
+   git pull
    bd sync
    git push origin HEAD:main  # Push current branch to origin/main
    git status  # MUST show "up to date with origin"

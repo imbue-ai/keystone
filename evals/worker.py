@@ -203,8 +203,8 @@ def process_repo(
         if bootstrap_result is None and result.returncode == 0:
             import sys
             print(f"DEBUG: Could not parse bootstrap_result from output", file=sys.stderr)
-            print(f"DEBUG: stdout={result.stdout[:500]!r}", file=sys.stderr)
-            print(f"DEBUG: stderr={result.stderr[:500]!r}", file=sys.stderr)
+            print(f"DEBUG: stdout (last 1000)={result.stdout[-1000:]!r}", file=sys.stderr)
+            print(f"DEBUG: stderr (last 1000)={result.stderr[-1000:]!r}", file=sys.stderr)
         
         # Collect output artifacts
         output_dir.mkdir(parents=True, exist_ok=True)

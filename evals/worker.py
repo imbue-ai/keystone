@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+import traceback
 from pathlib import Path
 
 from config import AgentConfig, WorkerResult
@@ -38,7 +39,7 @@ def setup_claude_config(api_key: str, home_dir: Path) -> None:
     }
 
     claude_json_path = home_dir / ".claude.json"
-    with Path(claude_json_path, "w").open() as f:
+    with claude_json_path.open("w") as f:
         json.dump(claude_json, f, indent=2)
 
     # Also create settings.json with permissive defaults for automation
@@ -280,7 +281,7 @@ def process_repo(
         return WorkerResult(
             s3_repo_tarball=str(tarball_path),
             success=False,
-            error_message=str(e),
+            error_message=f"{e}\n{traceback.format_exc()}",
         )
     finally:
         # Clean up work dir

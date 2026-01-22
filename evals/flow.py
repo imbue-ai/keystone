@@ -51,13 +51,8 @@ def process_repo_task(
     Returns:
         WorkerResult with success/failure and artifact paths
     """
+    # API key is optional - if not set, relies on claude CLI's own auth
     anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not anthropic_api_key:
-        return WorkerResult(
-            s3_repo_tarball=repo_source,
-            success=False,
-            error_message="ANTHROPIC_API_KEY not set",
-        )
     
     # Handle S3 sources by downloading first
     tarball_path = Path(repo_source)

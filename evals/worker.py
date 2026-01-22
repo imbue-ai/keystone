@@ -126,11 +126,6 @@ def process_repo(
         test_artifacts_dir = work_dir / "test_artifacts"
         test_artifacts_dir.mkdir()
         
-        # Set up a fake home for Claude config
-        fake_home = work_dir / "home"
-        fake_home.mkdir()
-        setup_claude_config(anthropic_api_key, fake_home)
-        
         # Build the command using uvx with git spec
         git_spec = f"git+{agent_config.bootstrap_git_url}@{agent_config.bootstrap_git_ref}#subdirectory=bootstrap_devcontainer"
         cmd = [
@@ -142,15 +137,27 @@ def process_repo(
             "--max-budget-usd", str(agent_config.max_budget_usd),
         ]
         
-        if agent_config.use_cache:
-            cache_file = fake_home / ".cache" / "bootstrap_devcontainer.sqlite"
+        # Set up environment
+        env = os.environ.copy()
+        
+        # If API key provided, set up isolated fake home with Claude config
+        # Otherwise, use real home so claude CLI uses its own auth
+        if anthropic_api_key:
+            fake_home = work_dir / "home"
+            fake_home.mkdir()
+            setup_claude_config(anthropic_api_key, fake_home)
+            env["HOME"] = str(fake_home)
+            env["ANTHROPIC_API_KEY"] = anthropic_api_key
+            
+            if agent_config.use_cache:
+                cache_file = fake_home / ".cache" / "bootstrap_devcontainer.sqlite"
+                cache_file.parent.mkdir(parents=True, exist_ok=True)
+                cmd.extend(["--sqlite-cache-file", str(cache_file)])
+        elif agent_config.use_cache:
+            # Use real home cache location
+            cache_file = Path.home() / ".cache" / "bootstrap_devcontainer.sqlite"
             cache_file.parent.mkdir(parents=True, exist_ok=True)
             cmd.extend(["--sqlite-cache-file", str(cache_file)])
-        
-        # Run the bootstrap command
-        env = os.environ.copy()
-        env["HOME"] = str(fake_home)
-        env["ANTHROPIC_API_KEY"] = anthropic_api_key
         
         timeout_secs = agent_config.timeout_minutes * 60
         

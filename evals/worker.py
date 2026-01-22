@@ -45,7 +45,7 @@ def setup_claude_config(api_key: str, home_dir: Path) -> None:
     # Also create settings.json with permissive defaults for automation
     settings_json = {"permissions": {"allow": ["Bash(*)", "Read(*)", "Write(*)", "Edit(*)"]}}
     settings_path = claude_dir / "settings.json"
-    with Path(settings_path, "w").open() as f:
+    with settings_path.open("w") as f:
         json.dump(settings_json, f, indent=2)
 
 
@@ -252,13 +252,13 @@ def process_repo(
         # Save bootstrap result JSON
         if bootstrap_result:
             result_json = output_dir / "bootstrap_result.json"
-            with Path(result_json, "w").open() as f:
+            with result_json.open("w") as f:
                 json.dump(bootstrap_result, f, indent=2)
 
         # Save stdout/stderr for debugging
-        with Path(output_dir / "stdout.txt", "w").open() as f:
+        with (output_dir / "stdout.txt").open("w") as f:
             f.write(result.stdout)
-        with Path(output_dir / "stderr.txt", "w").open() as f:
+        with (output_dir / "stderr.txt").open("w") as f:
             f.write(result.stderr)
         logger.info("Saved stdout/stderr logs")
 

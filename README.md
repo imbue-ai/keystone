@@ -11,7 +11,7 @@ Automatically generates a working `.devcontainer/` setup for any project using a
 Run directly from the repository using `uvx`:
 
 ```bash
-uvx --from 'git+https://github.com/imbue-ai/bootstrap_devcontainer@prod' bootstrap-devcontainer <project_path>
+uvx --from 'git+https://github.com/imbue-ai/bootstrap_devcontainer@prod#subdirectory=bootstrap_devcontainer' bootstrap-devcontainer <project_path>
 ```
 
 ### Options

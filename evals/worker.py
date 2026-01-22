@@ -7,19 +7,12 @@ import subprocess
 import tarfile
 import tempfile
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Optional
 
 from bootstrap_devcontainer.process_runner import run_process
 from config import AgentConfig, WorkerResult
 
 logger = logging.getLogger(__name__)
-
-
-def log(msg: str, callback: Callable[[str], None] | None = None) -> None:
-    """Log a message to both logger and optional callback."""
-    logger.info(msg)
-    if callback:
-        callback(f"[worker] {msg}")
 
 
 def setup_claude_config(api_key: str, home_dir: Path) -> None:
@@ -104,7 +97,6 @@ def process_repo(
     agent_config: AgentConfig,
     output_dir: Path,
     anthropic_api_key: str,
-    log_callback: Callable[[str], None] | None = None,
 ) -> WorkerResult:
     """Process a single repo tarball.
     
@@ -118,11 +110,11 @@ def process_repo(
         WorkerResult with success/failure and artifact paths
     """
     work_dir = Path(tempfile.mkdtemp(prefix="eval_worker_"))
-    log(f"Created work directory: {work_dir}", log_callback)
+    logger.info(f"Created work directory: {work_dir}")
     
     try:
         # Extract tarball
-        log(f"Extracting tarball: {tarball_path}", log_callback)
+        logger.info(f"Extracting tarball: {tarball_path}")
         project_dir = work_dir / "project"
         project_dir.mkdir()
         
@@ -135,12 +127,12 @@ def process_repo(
             actual_project_dir = contents[0]
         else:
             actual_project_dir = project_dir
-        log(f"Project directory: {actual_project_dir}", log_callback)
+        logger.info(f"Project directory: {actual_project_dir}")
         
         # Set up test artifacts dir
         test_artifacts_dir = work_dir / "test_artifacts"
         test_artifacts_dir.mkdir()
-        log(f"Test artifacts directory: {test_artifacts_dir}", log_callback)
+        logger.info(f"Test artifacts directory: {test_artifacts_dir}")
         
         # Set up environment
         env = os.environ.copy()
@@ -172,7 +164,7 @@ def process_repo(
         if gh_token and "github.com" in git_url:
             git_url = git_url.replace("https://github.com", f"https://x-access-token:{gh_token}@github.com")
         git_spec = f"git+{git_url}@{agent_config.bootstrap_git_ref}#subdirectory=bootstrap_devcontainer"
-        log(f"Using bootstrap_devcontainer from: {agent_config.bootstrap_git_url}@{agent_config.bootstrap_git_ref}", log_callback)
+        logger.info(f"Using bootstrap_devcontainer from: {agent_config.bootstrap_git_url}@{agent_config.bootstrap_git_ref}")
         
         result_file = work_dir / "bootstrap_result.json"
         cmd = [
@@ -193,7 +185,7 @@ def process_repo(
             setup_claude_config(anthropic_api_key, fake_home)
             env["HOME"] = str(fake_home)
             env["ANTHROPIC_API_KEY"] = anthropic_api_key
-            log(f"Set up fake home with Claude config: {fake_home}", log_callback)
+            logger.info(f"Set up fake home with Claude config: {fake_home}")
         
         # Handle cache configuration
         if agent_config.sqlite_cache_dir:
@@ -201,42 +193,40 @@ def process_repo(
             cache_dir = Path(agent_config.sqlite_cache_dir).expanduser()
             cache_dir.mkdir(parents=True, exist_ok=True)
             cmd.extend(["--sqlite_cache_dir", str(cache_dir)])
-            log(f"Using cache directory: {cache_dir}", log_callback)
+            logger.info(f"Using cache directory: {cache_dir}")
         else:
-            log("Caching disabled", log_callback)
+            log("Caching disabled")
         
         timeout_secs = agent_config.timeout_minutes * 60
-        log(f"Running command with {timeout_secs}s timeout: {' '.join(cmd[:6])}...", log_callback)
+        logger.info(f"Running command with {timeout_secs}s timeout: {' '.join(cmd[:6])}...")
         
         # Use streaming process runner to re-stream bootstrap_devcontainer logs
         # TODO: Add timeout support via ["timeout", str(timeout_secs)] + cmd prefix if needed
         result = run_process(
             cmd,
-            log_prefix="" if log_callback else "bootstrap",
+            log_prefix="bootstrap",
             env=env,
             cwd=str(actual_project_dir),
-            stdout_callback=log_callback,
-            stderr_callback=log_callback,
         )
         
         # Read result from output file
-        log(f"Process completed with exit code: {result.returncode}", log_callback)
+        logger.info(f"Process completed with exit code: {result.returncode}")
         bootstrap_result = None
         if result_file.exists():
             try:
                 bootstrap_result = json.loads(result_file.read_text())
-                log(f"Loaded bootstrap result from {result_file}", log_callback)
+                logger.info(f"Loaded bootstrap result from {result_file}")
             except json.JSONDecodeError:
-                log(f"Failed to parse bootstrap result JSON", log_callback)
+                logger.info(f"Failed to parse bootstrap result JSON")
         else:
-            log(f"No result file found at {result_file}", log_callback)
+            logger.info(f"No result file found at {result_file}")
         
         success = result.returncode == 0
-        log(f"Success: {success}", log_callback)
+        logger.info(f"Success: {success}")
         
         # Collect output artifacts
         output_dir.mkdir(parents=True, exist_ok=True)
-        log(f"Collecting artifacts to: {output_dir}", log_callback)
+        logger.info(f"Collecting artifacts to: {output_dir}")
         
         # Package .devcontainer as tarball
         devcontainer_dir = actual_project_dir / ".devcontainer"
@@ -245,9 +235,9 @@ def process_repo(
             devcontainer_tarball = output_dir / "devcontainer.tar.gz"
             with tarfile.open(devcontainer_tarball, "w:gz") as tar:
                 tar.add(devcontainer_dir, arcname=".devcontainer")
-            log(f"Packaged .devcontainer to: {devcontainer_tarball}", log_callback)
+            logger.info(f"Packaged .devcontainer to: {devcontainer_tarball}")
         else:
-            log(f"No .devcontainer directory found", log_callback)
+            logger.info(f"No .devcontainer directory found")
         
         # Find and copy session file
         home_dir = fake_home if anthropic_api_key else Path.home()
@@ -256,9 +246,9 @@ def process_repo(
         if session_file:
             session_output = output_dir / "session.jsonl"
             shutil.copy(session_file, session_output)
-            log(f"Copied session file to: {session_output}", log_callback)
+            logger.info(f"Copied session file to: {session_output}")
         else:
-            log(f"No session file found", log_callback)
+            logger.info(f"No session file found")
         
         # Save bootstrap result JSON
         if bootstrap_result:
@@ -271,7 +261,7 @@ def process_repo(
             f.write(result.stdout)
         with open(output_dir / "stderr.txt", "w") as f:
             f.write(result.stderr)
-        log(f"Saved stdout/stderr logs", log_callback)
+        logger.info(f"Saved stdout/stderr logs")
         
         return WorkerResult(
             s3_repo_tarball=str(tarball_path),  # Will be replaced with S3 URI by caller

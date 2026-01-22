@@ -77,7 +77,7 @@ def process_repo_task(
             agent_config=agent_config,
             output_dir=Path(output_dir),
             anthropic_api_key=anthropic_api_key,
-            log_callback=lambda line: logger.info(line),
+
         )
         # Preserve the original source URI
         result.s3_repo_tarball = repo_source

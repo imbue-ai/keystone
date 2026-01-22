@@ -113,7 +113,7 @@ def process_repo(
         project_dir.mkdir()
         
         with tarfile.open(tarball_path, "r:gz") as tar:
-            tar.extractall(project_dir)
+            tar.extractall(project_dir, filter="data")
         
         # If tarball contained a single root dir, descend into it
         contents = list(project_dir.iterdir())

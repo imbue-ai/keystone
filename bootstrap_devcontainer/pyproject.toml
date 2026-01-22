@@ -24,8 +24,11 @@ packages = ["src/bootstrap_devcontainer"]
 
 [tool.pytest.ini_options]
 markers = [
-    "manual: marks tests as manual (select with '-m manual')",
+    "manual: marks tests as manual (deselect with '-k not manual')",
 ]
 testpaths = ["tests"]
 log_cli = true
 log_cli_level = "INFO"
+filterwarnings = [
+    "ignore::pytest.PytestUnknownMarkWarning",
+]

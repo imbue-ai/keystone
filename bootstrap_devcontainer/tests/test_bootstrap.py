@@ -46,7 +46,7 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
 
     cmd = [
         "bootstrap-devcontainer",
-        str(project_root),
+        "--project_root", str(project_root),
         "--test_artifacts_dir", str(test_artifacts_dir),
         "--agent_cmd", f"python3 {shlex.quote(str(fake_agent))}",
         "--sqlite_cache_file", str(cache_file),
@@ -96,7 +96,7 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
 
     cmd2 = [
         "bootstrap-devcontainer",
-        str(project_root2),
+        "--project_root", str(project_root2),
         "--test_artifacts_dir", str(test_artifacts_dir2),
         "--agent_cmd", f"python3 {shlex.quote(str(fake_agent))}",
         "--sqlite_cache_file", str(cache_file),
@@ -132,7 +132,7 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path) -> None:
 
     cmd = [
         "bootstrap-devcontainer",
-        str(project_root),
+        "--project_root", str(project_root),
         "--test_artifacts_dir", str(test_artifacts_dir),
         "--agent_cmd", f"python3 {shlex.quote(str(fake_agent))}",
     ]
@@ -186,7 +186,7 @@ def test_e2e_sample_project(tmp_path: Path) -> None:
     # Use -u for unbuffered Python output
     cmd = [
         "bootstrap-devcontainer",
-        str(project_root),
+        "--project_root", str(project_root),
         "--test_artifacts_dir",
         str(test_artifacts_dir),
         "--sqlite_cache_file",
@@ -241,7 +241,7 @@ def test_max_budget_zero_fails(tmp_path: Path) -> None:
 
     cmd = [
         "bootstrap-devcontainer",
-        str(project_root),
+        "--project_root", str(project_root),
         "--test_artifacts_dir", str(test_artifacts_dir),
         "--max_budget_usd", "0",
     ]

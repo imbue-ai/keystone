@@ -11,12 +11,18 @@ Automatically generates a working `.devcontainer/` setup for any project using a
 Run directly from the repository using `uvx`:
 
 ```bash
-uvx --from 'git+https://github.com/imbue-ai/bootstrap_devcontainer@prod#subdirectory=bootstrap_devcontainer' bootstrap-devcontainer <project_path>
+uvx --from 'git+https://github.com/imbue-ai/bootstrap_devcontainer@prod#subdirectory=bootstrap_devcontainer' \
+  bootstrap-devcontainer --project_root <project_path> --test_artifacts_dir ./artifacts
 ```
 
 ### Options
 
-- `--scratch-dir` - Directory for intermediate files (default: auto-generated temp dir)
+- `--project_root` - Path to the source project (required)
+- `--test_artifacts_dir` - Directory for test artifacts (required)
+- `--agent_cmd` - Agent command to run (default: `claude`)
+- `--max_budget_usd` - Maximum budget for agent inference (default: 1.0)
+- `--sqlite_cache_file` - SQLite cache file path (enables caching)
+- `--output_file` - Path to write JSON result (defaults to stdout)
 
 ---
 
@@ -25,9 +31,5 @@ uvx --from 'git+https://github.com/imbue-ai/bootstrap_devcontainer@prod#subdirec
 ### Running from source
 
 ```bash
-uv run python bootstrap_devcontainer.py samples/python_project
-```
-
-```bash
-uv run python bootstrap_devcontainer.py --scratch-dir `mktemp -d` ~/nix_pytest_docker_build.small/tmp/nix-build-python3.11-accuweather-2.1.1.drv-0 
+uv run bootstrap-devcontainer --project_root samples/python_project --test_artifacts_dir ./artifacts
 ```

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import shlex
@@ -14,6 +15,7 @@ from bootstrap_devcontainer.agent_cache import (
     CacheValue,
     EventCollector,
     compute_cache_key,
+    compute_directory_hash,
     create_devcontainer_tarball,
     extract_devcontainer_tarball,
 )
@@ -223,6 +225,12 @@ def bootstrap(
     # Check cache first
     cached_value: CacheValue | None = None
     if cache is not None and cache_key is not None:
+        # Print cache key components
+        dir_hash = compute_directory_hash(project_root)
+        prompt_hash = hashlib.md5(prompt.encode("utf-8")).hexdigest()
+        print(
+            f"Cache lookup - filesystem MD5: {dir_hash}, prompt MD5: {prompt_hash}", file=sys.stderr
+        )
         cached_value = cache.get(cache_key)
 
     if cached_value is not None:

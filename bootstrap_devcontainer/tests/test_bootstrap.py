@@ -84,8 +84,8 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
     output = json.loads(json_str)
     assert output["success"], f"Test failed: {output}"
 
-    # Verify python_test_summary contents
-    summary = output["python_test_summary"]
+    # Verify test_summary contents
+    summary = output["test_summary"]
     assert summary["passed_count"] == 2, f"Expected 2 passed tests: {summary}"
     assert summary["failed_count"] == 0, f"Expected 0 failed tests: {summary}"
     assert summary["skipped_count"] == 0, f"Expected 0 skipped tests: {summary}"
@@ -93,6 +93,8 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
         "tests/test_app.py::test_add",
         "tests/test_app.py::test_multiply",
     ], f"Expected sorted passed_tests list: {summary}"
+    assert summary["failed_tests"] == [], f"Expected no failed tests: {summary}"
+    assert summary["skipped_tests"] == [], f"Expected no skipped tests: {summary}"
 
     # Check artifacts
     assert (project_root / ".devcontainer" / "devcontainer.json").exists()

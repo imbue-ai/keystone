@@ -22,7 +22,7 @@ from bootstrap_devcontainer.agent_cache import (
 from bootstrap_devcontainer.process_runner import run_process
 from bootstrap_devcontainer.schema import (
     BootstrapResult,
-    PythonTestSummary,
+    TestSummary,
     TokenSpending,
 )
 
@@ -58,6 +58,111 @@ def check_docker_available() -> bool:
 
 
 STATUS_MARKER = "BOOTSTRAP_DEVCONTAINER_STATUS:"
+
+
+def parse_test_reports(test_artifacts_dir: Path) -> TestSummary | None:
+    """Parse test reports from various formats (pytest, go, node, cargo)."""
+    # Try pytest JSON report first
+    pytest_report = test_artifacts_dir / "pytest-json-report.json"
+    if pytest_report.exists():
+        try:
+            report_data = json.loads(pytest_report.read_text())
+            tests = report_data.get("tests", [])
+            passed = sorted([t["nodeid"] for t in tests if t.get("outcome") == "passed"])
+            failed = sorted([t["nodeid"] for t in tests if t.get("outcome") == "failed"])
+            skipped = sorted([t["nodeid"] for t in tests if t.get("outcome") == "skipped"])
+            return TestSummary(
+                passed_count=len(passed),
+                failed_count=len(failed),
+                skipped_count=len(skipped),
+                passed_tests=passed,
+                failed_tests=failed,
+                skipped_tests=skipped,
+            )
+        except Exception as e:
+            print(f"Error parsing pytest report: {e}", file=sys.stderr)
+
+    # Try Go test JSON report
+    go_report = test_artifacts_dir / "go-test-report.json"
+    if go_report.exists():
+        try:
+            passed, failed, skipped = [], [], []
+            for line in go_report.read_text().strip().split("\n"):
+                if not line:
+                    continue
+                event = json.loads(line)
+                if event.get("Action") == "pass" and event.get("Test"):
+                    passed.append(event["Test"])
+                elif event.get("Action") == "fail" and event.get("Test"):
+                    failed.append(event["Test"])
+                elif event.get("Action") == "skip" and event.get("Test"):
+                    skipped.append(event["Test"])
+            return TestSummary(
+                passed_count=len(passed),
+                failed_count=len(failed),
+                skipped_count=len(skipped),
+                passed_tests=sorted(passed),
+                failed_tests=sorted(failed),
+                skipped_tests=sorted(skipped),
+            )
+        except Exception as e:
+            print(f"Error parsing Go test report: {e}", file=sys.stderr)
+
+    # Try Node test JSON report
+    node_report = test_artifacts_dir / "node-test-report.json"
+    if node_report.exists():
+        try:
+            report_data = json.loads(node_report.read_text())
+            passed, failed, skipped = [], [], []
+            for test in report_data.get("tests", []):
+                name = test.get("name", "")
+                status = test.get("status", "")
+                if status == "passed":
+                    passed.append(name)
+                elif status == "failed":
+                    failed.append(name)
+                elif status == "skipped":
+                    skipped.append(name)
+            return TestSummary(
+                passed_count=len(passed),
+                failed_count=len(failed),
+                skipped_count=len(skipped),
+                passed_tests=sorted(passed),
+                failed_tests=sorted(failed),
+                skipped_tests=sorted(skipped),
+            )
+        except Exception as e:
+            print(f"Error parsing Node test report: {e}", file=sys.stderr)
+
+    # Try Cargo test JSON report
+    cargo_report = test_artifacts_dir / "cargo-test-report.json"
+    if cargo_report.exists():
+        try:
+            passed, failed, skipped = [], [], []
+            for line in cargo_report.read_text().strip().split("\n"):
+                if not line:
+                    continue
+                event = json.loads(line)
+                if event.get("type") == "test" and event.get("event") == "ok":
+                    passed.append(event.get("name", ""))
+                elif event.get("type") == "test" and event.get("event") == "failed":
+                    failed.append(event.get("name", ""))
+                elif event.get("type") == "test" and event.get("event") == "ignored":
+                    skipped.append(event.get("name", ""))
+            return TestSummary(
+                passed_count=len(passed),
+                failed_count=len(failed),
+                skipped_count=len(skipped),
+                passed_tests=sorted(passed),
+                failed_tests=sorted(failed),
+                skipped_tests=sorted(skipped),
+            )
+        except Exception as e:
+            print(f"Error parsing Cargo test report: {e}", file=sys.stderr)
+
+    return None
+
+
 SUMMARY_MARKER = "BOOTSTRAP_DEVCONTAINER_SUMMARY:"
 
 AGENT_PROMPT_TEMPLATE = """
@@ -312,7 +417,6 @@ def bootstrap(
     print("Verifying agent's work...", file=sys.stderr)
     verification_success = False
     verification_start_time = time.time()
-    python_test_summary: PythonTestSummary | None = None
     try:
         image_name = f"bootstrap-test-{project_root.name.lower()}"
 
@@ -362,23 +466,8 @@ def bootstrap(
 
     verification_wall_time = time.time() - verification_start_time
 
-    # Parse pytest JSON report if it exists
-    pytest_report_path = test_artifacts_dir / "pytest-json-report.json"
-    if pytest_report_path.exists():
-        try:
-            report_data = json.loads(pytest_report_path.read_text())
-            tests = report_data.get("tests", [])
-            passed_tests = sorted([t["nodeid"] for t in tests if t.get("outcome") == "passed"])
-            failed_count = sum(1 for t in tests if t.get("outcome") == "failed")
-            skipped_count = sum(1 for t in tests if t.get("outcome") == "skipped")
-            python_test_summary = PythonTestSummary(
-                passed_count=len(passed_tests),
-                failed_count=failed_count,
-                skipped_count=skipped_count,
-                passed_tests=passed_tests,
-            )
-        except Exception as e:
-            print(f"Error parsing pytest report: {e}", file=sys.stderr)
+    # Parse test reports from various formats
+    test_summary = parse_test_reports(test_artifacts_dir)
 
     output = BootstrapResult(
         success=verification_success and exit_code == 0,
@@ -388,7 +477,7 @@ def bootstrap(
         token_spending=TokenSpending(**token_spending),
         cost_usd=total_cost_usd,
         agent_exit_code=exit_code,
-        python_test_summary=python_test_summary,
+        test_summary=test_summary,
     )
 
     if output_file:

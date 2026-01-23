@@ -1,0 +1,7 @@
+[project]
+name = "sample-python-project-with-failing-test"
+version = "0.1.0"
+dependencies = [
+    "pytest",
+    "pytest-json-report",
+]

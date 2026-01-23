@@ -1,0 +1,63 @@
+# serializer version: 1
+# name: test_e2e_sample_project[fullstack_project]
+  dict({
+    'agent_exit_code': 0,
+    'model': '',
+    'python_test_summary': dict({
+      'failed_count': 0,
+      'passed_count': 0,
+      'passed_tests': list([
+      ]),
+      'skipped_count': 0,
+    }),
+    'success': True,
+  })
+# ---
+# name: test_e2e_sample_project[go_project]
+  dict({
+    'agent_exit_code': 0,
+    'model': '',
+    'python_test_summary': dict({
+      'failed_count': 0,
+      'passed_count': 2,
+      'passed_tests': list([
+        'TestAdd',
+        'TestMultiply',
+      ]),
+      'skipped_count': 0,
+    }),
+    'success': True,
+  })
+# ---
+# name: test_e2e_sample_project[node_project]
+  dict({
+    'agent_exit_code': 0,
+    'model': '',
+    'python_test_summary': None,
+    'success': True,
+  })
+# ---
+# name: test_e2e_sample_project[python_project]
+  dict({
+    'agent_exit_code': 0,
+    'model': '',
+    'python_test_summary': dict({
+      'failed_count': 0,
+      'passed_count': 2,
+      'passed_tests': list([
+        'tests/test_app.py::test_add',
+        'tests/test_app.py::test_multiply',
+      ]),
+      'skipped_count': 0,
+    }),
+    'success': True,
+  })
+# ---
+# name: test_e2e_sample_project[rust_project]
+  dict({
+    'agent_exit_code': 0,
+    'model': '',
+    'python_test_summary': None,
+    'success': True,
+  })
+# ---

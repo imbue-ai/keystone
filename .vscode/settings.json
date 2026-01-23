@@ -2,7 +2,8 @@
     "python.testing.pytestArgs": [
         "bootstrap_devcontainer",
         "evals",
-        "-sv"
+        "-sv",
+        "--log-cli-level=DEBUG",
     ],
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true

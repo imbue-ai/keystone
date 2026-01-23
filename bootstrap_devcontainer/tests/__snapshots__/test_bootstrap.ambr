@@ -71,8 +71,20 @@
     'go_test_summary': None,
     'model': '',
     'node_test_summary': None,
-    'pytest_summary': None,
-    'success': False,
+    'pytest_summary': dict({
+      'failed_count': 0,
+      'failed_tests': list([
+      ]),
+      'passed_count': 2,
+      'passed_tests': list([
+        'tests/test_app.py::test_add',
+        'tests/test_app.py::test_multiply',
+      ]),
+      'skipped_count': 0,
+      'skipped_tests': list([
+      ]),
+    }),
+    'success': True,
   })
 # ---
 # name: test_e2e_sample_project[python_with_failing_test]

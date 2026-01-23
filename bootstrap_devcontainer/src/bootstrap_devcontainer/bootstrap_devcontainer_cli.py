@@ -184,7 +184,7 @@ Instructions:
 
 1. Create a .devcontainer/devcontainer.json file at the project root.
 2. Create a .devcontainer/Dockerfile alongside that.
-3. Create a run_all_tests.sh script alongside the Dockerfile
+3. Create a .devcontainer/run_all_tests.sh script alongside the Dockerfile, and make it executable.
    a. run_all_tests.sh should take an arg called --test_artifact_dir
    b. It should return 0 (success) IFF all tests pass and forward enough information to stdout/stderr to enable debugging failing tests.
    c. test_artifact_dir should be populated with artifacts from running the tests:
@@ -197,7 +197,7 @@ Instructions:
           - Node.js: test_artifact_dir/node-test-report.json (use `node --test --test-reporter=json`)
           - Rust: test_artifact_dir/cargo-test-report.json (use `cargo test -- -Z unstable-options --format json` or parse output)
       v. A file called final_result.json stating success/failure.
-4. In the Dockerfile, COPY the input source tree into the image to /project_src as a penultimate step. (no volume mounts)
+4. In the Dockerfile, COPY the input source tree (including your newly created .devcontainer/ directory) into the image to /project_src as a penultimate step. (no volume mounts)
 5. The Dockerfile should leave the CWD as /project_src.
 
 Notes:

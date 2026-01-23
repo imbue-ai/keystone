@@ -43,25 +43,8 @@ WORKDIR /project_src
 RUN_ALL_TESTS_SH = """#!/bin/bash
 set -e
 
-# Parse arguments
-TEST_ARTIFACT_DIR=""
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --test_artifact_dir)
-            TEST_ARTIFACT_DIR="$2"
-            shift 2
-            ;;
-        *)
-            shift
-            ;;
-    esac
-done
-
-if [ -z "$TEST_ARTIFACT_DIR" ]; then
-    echo "Error: --test_artifact_dir is required" >&2
-    exit 1
-fi
-
+# Test artifacts are always written to /test_artifacts
+TEST_ARTIFACT_DIR="/test_artifacts"
 mkdir -p "$TEST_ARTIFACT_DIR/pytest"
 
 # Run pytest with json report

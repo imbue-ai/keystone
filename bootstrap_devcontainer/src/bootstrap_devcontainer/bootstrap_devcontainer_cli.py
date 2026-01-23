@@ -185,18 +185,18 @@ Instructions:
 1. Create a .devcontainer/devcontainer.json file at the project root.
 2. Create a .devcontainer/Dockerfile alongside that.
 3. Create a run_all_tests.sh script alongside the Dockerfile
-   a. run_all_tests.sh should take an arg called --test_artifact_dir
+   a. run_all_tests.sh takes no arguments. It always writes test artifacts to /test_artifacts.
    b. It should return 0 (success) IFF all tests pass and forward enough information to stdout/stderr to enable debugging failing tests.
-   c. test_artifact_dir should be populated with artifacts from running the tests:
+   c. /test_artifacts should be populated with artifacts from running the tests:
       i. For each command run, create a subdirectory with a good “name”.
       ii. In that directory, put files called stdout.txt and stderr.txt, with timestamps.
       iii. Tee the outputs to stdout/stderr.
-      iv. Create language-specific JSON test reports in the test_artifact_dir:
-          - Python: test_artifact_dir/pytest-json-report.json (use pytest-json-report plugin)
-          - Go: test_artifact_dir/go-test-report.json (use `go test -json ./...`)
-          - Node.js: test_artifact_dir/node-test-report.json (use `node --test --test-reporter=json`)
-          - Rust: test_artifact_dir/cargo-test-report.json (use `cargo test -- -Z unstable-options --format json` or parse output)
-      v. A file called final_result.json stating success/failure.
+      iv. Create language-specific JSON test reports in /test_artifacts:
+          - Python: /test_artifacts/pytest-json-report.json (use pytest-json-report plugin)
+          - Go: /test_artifacts/go-test-report.json (use `go test -json ./...`)
+          - Node.js: /test_artifacts/node-test-report.json (use `node --test --test-reporter=json`)
+          - Rust: /test_artifacts/cargo-test-report.json (use `cargo test -- -Z unstable-options --format json` or parse output)
+      v. A file called /test_artifacts/final_result.json stating success/failure.
 4. In the Dockerfile, COPY the input source tree into the image to /project_src as a penultimate step. (no volume mounts)
 5. The Dockerfile should leave the CWD as /project_src.
 
@@ -238,8 +238,8 @@ Please don't forget to emit the summary at the end.
 
 To verify, use something like this (adding arguments as appropriate for permissions, etc.)
 1. Build with `devcontainer build --workspace-folder .`
-2. Run `docker run -v /tmp/test_artifacts:/test_artifacts IMAGE ./.devcontainer/run_all_tests.sh --test_artifact_dir /test_artifacts` and check return code.
-3. Examine /tmp/test_artifacts content.
+2. Run `docker run IMAGE ./.devcontainer/run_all_tests.sh` and check return code.
+3. If needed, extract artifacts with `docker cp CONTAINER:/test_artifacts ./test_artifacts`.
 """
 
 
@@ -249,7 +249,7 @@ def bootstrap(
         ..., "--project_root", help="Path to the source project"
     ),
     test_artifacts_dir: Path | None = typer.Option(
-        ..., "--test_artifacts_dir", help="Directory for test artifacts"
+        None, "--test_artifacts_dir", help="Directory for test artifacts (optional)"
     ),
     agent_cmd: str | None = typer.Option("claude", "--agent_cmd", help="Agent command to run"),
     max_budget_usd: float | None = typer.Option(
@@ -271,10 +271,10 @@ def bootstrap(
         raise typer.Exit(code=1)
 
     assert project_root is not None, "--project_root is required"
-    assert test_artifacts_dir is not None, "--test_artifacts_dir is required"
     project_root = project_root.resolve()
-    test_artifacts_dir = test_artifacts_dir.resolve()
-    test_artifacts_dir.mkdir(parents=True, exist_ok=True)
+    if test_artifacts_dir is not None:
+        test_artifacts_dir = test_artifacts_dir.resolve()
+        test_artifacts_dir.mkdir(parents=True, exist_ok=True)
 
     prompt = AGENT_PROMPT_TEMPLATE
 
@@ -449,20 +449,37 @@ def bootstrap(
         build_proc = subprocess.run(build_cmd, capture_output=True, text=True)
 
         if build_proc.returncode == 0:
-            # 2. Run tests
+            # 2. Run tests (no --rm so we can extract artifacts)
+            container_name = f"bootstrap-test-{project_root.name.lower()}-container"
             test_cmd = [
                 "docker",
                 "run",
-                "--rm",
-                "-v",
-                f"{test_artifacts_dir}:/test_artifacts",
+                "--name",
+                container_name,
                 image_name,
                 "./.devcontainer/run_all_tests.sh",
-                "--test_artifact_dir",
-                "/test_artifacts",
             ]
             print(f"Running tests: {shlex.join(test_cmd)}", file=sys.stderr)
             test_run = subprocess.run(test_cmd, capture_output=True, text=True)
+
+            # 3. Extract artifacts from container if test_artifacts_dir is provided
+            if test_artifacts_dir is not None:
+                cp_cmd = [
+                    "docker",
+                    "cp",
+                    f"{container_name}:/test_artifacts/.",
+                    str(test_artifacts_dir),
+                ]
+                print(f"Extracting artifacts: {shlex.join(cp_cmd)}", file=sys.stderr)
+                cp_result = subprocess.run(cp_cmd, capture_output=True, text=True)
+                if cp_result.returncode != 0:
+                    print(
+                        f"Warning: artifact extraction failed: {cp_result.stderr}", file=sys.stderr
+                    )
+
+            # 4. Clean up container
+            subprocess.run(["docker", "rm", container_name], capture_output=True)
+
             if test_run.returncode == 0:
                 print("Verification successful!", file=sys.stderr)
                 verification_success = True
@@ -483,7 +500,9 @@ def bootstrap(
     verification_wall_time = time.time() - verification_start_time
 
     # Parse test reports from various formats
-    test_reports = parse_test_reports(test_artifacts_dir)
+    test_reports = TestReports()
+    if test_artifacts_dir is not None:
+        test_reports = parse_test_reports(test_artifacts_dir)
 
     output = BootstrapResult(
         success=verification_success and exit_code == 0,

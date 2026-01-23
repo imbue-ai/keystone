@@ -10,21 +10,19 @@ Automatically generates a working `.devcontainer/` setup for any project using a
 
 Run directly from the repository using `uvx`:
 
+IMPORTANT WARNING: Running this command invokes Claude Code with `--dangerously-skip-permissions` in your current environment.
+
 ```bash
 uvx --from 'git+https://github.com/imbue-ai/bootstrap_devcontainer@main#subdirectory=bootstrap_devcontainer' \
   bootstrap-devcontainer \
   --sqlite_cache_dir ~/.cache/bootstrap_devcontainer.sqlite \
   --test_artifacts_dir /tmp/test_artifacts \
+  --max_budget_usd 2.0 \
   --project_root ./samples/python_project
-
-# Run local code tree on a project.
-uv run bootstrap-devcontainer \
-  --sqlite_cache_dir ~/.cache/bootstrap_devcontainer.sqlite \
-  --test_artifacts_dir /tmp/test_artifacts \
-  --project_root ~/nix_pytest_docker_build.small/tmp/nix-build-python3.11-geopy-2.4.0.drv-0/
-
-
 ```
+
+Not currently supported:
+* Setting up environments for projects that use Docker. (Does not currently work on itself.)
 
 ### Options
 
@@ -42,5 +40,9 @@ uv run bootstrap-devcontainer \
 ### Running from source
 
 ```bash
-uv run bootstrap-devcontainer --project_root samples/python_project --test_artifacts_dir ./artifacts
+# Run local code tree on a project.
+uv run bootstrap-devcontainer \
+  --sqlite_cache_dir ~/.cache/bootstrap_devcontainer.sqlite \
+  --test_artifacts_dir /tmp/test_artifacts \
+  --project_root ~/nix_pytest_docker_build.small/tmp/nix-build-python3.11-geopy-2.4.0.drv-0/
 ```

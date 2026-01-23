@@ -76,10 +76,10 @@ def run_process(
     effective_stderr_cb: Callable[[str], None] | None = stderr_callback
 
     def _log_stdout(line: str) -> None:
-        logger.info("%s STDOUT: %s", log_prefix, line)
+        print(f"{log_prefix} STDOUT: {line}", flush=True)
 
     def _log_stderr(line: str) -> None:
-        logger.info("%s STDERR: %s", log_prefix, line)
+        print(f"{log_prefix} STDERR: {line}", flush=True)
 
     if log_prefix and not stdout_callback:
         effective_stdout_cb = _log_stdout

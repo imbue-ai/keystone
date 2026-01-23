@@ -5,8 +5,7 @@
     'cargo_test_summary': None,
     'go_test_summary': None,
     'model': '',
-    'node_test_summary': None,
-    'pytest_summary': dict({
+    'node_test_summary': dict({
       'failed_count': 0,
       'failed_tests': list([
       ]),
@@ -17,6 +16,7 @@
       'skipped_tests': list([
       ]),
     }),
+    'pytest_summary': None,
     'success': True,
   })
 # ---
@@ -24,10 +24,7 @@
   dict({
     'agent_exit_code': 0,
     'cargo_test_summary': None,
-    'go_test_summary': None,
-    'model': '',
-    'node_test_summary': None,
-    'pytest_summary': dict({
+    'go_test_summary': dict({
       'failed_count': 0,
       'failed_tests': list([
       ]),
@@ -40,6 +37,9 @@
       'skipped_tests': list([
       ]),
     }),
+    'model': '',
+    'node_test_summary': None,
+    'pytest_summary': None,
     'success': True,
   })
 # ---
@@ -49,7 +49,17 @@
     'cargo_test_summary': None,
     'go_test_summary': None,
     'model': '',
-    'node_test_summary': None,
+    'node_test_summary': dict({
+      'failed_count': 0,
+      'failed_tests': list([
+      ]),
+      'passed_count': 0,
+      'passed_tests': list([
+      ]),
+      'skipped_count': 0,
+      'skipped_tests': list([
+      ]),
+    }),
     'pytest_summary': None,
     'success': True,
   })
@@ -61,9 +71,21 @@
     'go_test_summary': None,
     'model': '',
     'node_test_summary': None,
+    'pytest_summary': None,
+    'success': False,
+  })
+# ---
+# name: test_e2e_sample_project[python_with_failing_test]
+  dict({
+    'agent_exit_code': 0,
+    'cargo_test_summary': None,
+    'go_test_summary': None,
+    'model': '',
+    'node_test_summary': None,
     'pytest_summary': dict({
-      'failed_count': 0,
+      'failed_count': 1,
       'failed_tests': list([
+        'tests/test_app.py::test_impossible',
       ]),
       'passed_count': 2,
       'passed_tests': list([
@@ -74,7 +96,7 @@
       'skipped_tests': list([
       ]),
     }),
-    'success': True,
+    'success': False,
   })
 # ---
 # name: test_e2e_sample_project[rust_project]
@@ -85,6 +107,6 @@
     'model': '',
     'node_test_summary': None,
     'pytest_summary': None,
-    'success': True,
+    'success': False,
   })
 # ---

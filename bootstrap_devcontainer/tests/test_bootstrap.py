@@ -201,6 +201,7 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path) -> None:
         "go_project",
         "rust_project",
         "fullstack_project",
+        "python_with_failing_test",
     ],
 )
 def test_e2e_sample_project(tmp_path: Path, sample_name: str, snapshot: SnapshotAssertion) -> None:

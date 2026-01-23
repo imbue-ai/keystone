@@ -191,7 +191,11 @@ Instructions:
       i. For each command run, create a subdirectory with a good “name”.
       ii. In that directory, put files called stdout.txt and stderr.txt, with timestamps.
       iii. Tee the outputs to stdout/stderr.
-      iv. For python code, create an aggregated JSON report in pytest-json-report format at test_artifact_dir/pytest-json-report.json (make sure to install the pytest-json-report plugin for Python)
+      iv. Create language-specific JSON test reports in the test_artifact_dir:
+          - Python: test_artifact_dir/pytest-json-report.json (use pytest-json-report plugin)
+          - Go: test_artifact_dir/go-test-report.json (use `go test -json ./...`)
+          - Node.js: test_artifact_dir/node-test-report.json (use `node --test --test-reporter=json`)
+          - Rust: test_artifact_dir/cargo-test-report.json (use `cargo test -- -Z unstable-options --format json` or parse output)
       v. A file called final_result.json stating success/failure.
 4. In the Dockerfile, COPY the input source tree into the image to /project_src as a penultimate step. (no volume mounts)
 5. The Dockerfile should leave the CWD as /project_src.

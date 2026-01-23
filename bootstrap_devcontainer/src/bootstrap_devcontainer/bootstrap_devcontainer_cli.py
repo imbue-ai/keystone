@@ -184,7 +184,7 @@ Instructions:
 
 1. Create a .devcontainer/devcontainer.json file at the project root.
 2. Create a .devcontainer/Dockerfile alongside that.
-3. Create a run_all_tests.sh script alongside the Dockerfile
+3. Create a .devcontainer/run_all_tests.sh script alongside the Dockerfile
    a. run_all_tests.sh takes no arguments. It always writes test artifacts to /test_artifacts.
    b. It should return 0 (success) IFF all tests pass and forward enough information to stdout/stderr to enable debugging failing tests.
    c. /test_artifacts should be populated with artifacts from running the tests:
@@ -197,7 +197,7 @@ Instructions:
           - Node.js: /test_artifacts/node-test-report.json (use `node --test --test-reporter=json`)
           - Rust: /test_artifacts/cargo-test-report.json (use `cargo test -- -Z unstable-options --format json` or parse output)
       v. A file called /test_artifacts/final_result.json stating success/failure.
-4. In the Dockerfile, COPY the input source tree into the image to /project_src as a penultimate step. (no volume mounts)
+4. In the Dockerfile, COPY the input source tree into the image to /project_src as a penultimate step. (no volume mounts for the code.)
 5. The Dockerfile should leave the CWD as /project_src.
 
 Notes:
@@ -216,8 +216,7 @@ Notes:
     -v /var/run/docker.sock:/var/run/docker.sock \\
     docker:cli ps
   ```
-* If tests cannot be fixed by environment changes, disable them via command line args.
-* You can set file permissions directly in COPY commands: `COPY --chmod=0755 script.sh /usr/local/bin/script.sh`
+* If tests cannot be fixed by Dockerfile changes, disable them via command line args.
 * Disable code coverage collection in run_all_tests.sh (e.g., `pytest --no-cov` or `coverage run` flags) - coverage reports are slow and not needed.
 * Emit status updates before and after each major action as plain text output (not via tool calls).
   Simply include the status line in your assistant message text, like:

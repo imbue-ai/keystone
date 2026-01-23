@@ -4,8 +4,10 @@ import shlex
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
+from syrupy.assertion import SnapshotAssertion
 
 from bootstrap_devcontainer.constants import DEFAULT_CACHE_PATH
 from bootstrap_devcontainer.process_runner import run_process
@@ -199,7 +201,7 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path) -> None:
         "fullstack_project",
     ],
 )
-def test_e2e_sample_project(tmp_path: Path, sample_name: str) -> None:
+def test_e2e_sample_project(tmp_path: Path, sample_name: str, snapshot: SnapshotAssertion) -> None:
     # Copy sample project to tmp_path to avoid modifying the original source tree
     original_project_root = Path(__file__).parent.parent.parent / f"samples/{sample_name}"
     project_root = tmp_path / "project"
@@ -250,6 +252,22 @@ def test_e2e_sample_project(tmp_path: Path, sample_name: str) -> None:
     assert (project_root / ".devcontainer" / "devcontainer.json").exists()
     assert (project_root / ".devcontainer" / "Dockerfile").exists()
     assert (project_root / ".devcontainer" / "run_all_tests.sh").exists()
+
+    # Snapshot test - strip non-deterministic fields
+    snapshot_data = _strip_nondeterministic_fields(output)
+    assert snapshot_data == snapshot
+
+
+def _strip_nondeterministic_fields(output: dict[str, Any]) -> dict[str, Any]:
+    """Remove timing and cost fields that vary between runs."""
+    result = output.copy()
+    # Remove timing fields
+    result.pop("agent_work_time", None)
+    result.pop("verification_wall_time", None)
+    result.pop("cost_usd", None)
+    # Token counts vary, but success/model/test results should be stable
+    result.pop("token_spending", None)
+    return result
 
 
 @pytest.mark.manual

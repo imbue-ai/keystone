@@ -9,6 +9,7 @@ dependencies = [
     "pydantic>=2.0.0",
     "pytest>=9.0.2",
     "rich>=14.0.0",
+    "syrupy>=4.0.0",
     "typer>=0.21.1",
 ]
 

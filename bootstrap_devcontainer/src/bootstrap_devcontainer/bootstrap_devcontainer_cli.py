@@ -60,9 +60,21 @@ def check_docker_available() -> bool:
 STATUS_MARKER = "BOOTSTRAP_DEVCONTAINER_STATUS:"
 
 
-def parse_test_reports(test_artifacts_dir: Path) -> TestSummary | None:
+class TestReports:
+    """Container for per-language test summaries."""
+
+    def __init__(self) -> None:
+        self.pytest_summary: TestSummary | None = None
+        self.go_test_summary: TestSummary | None = None
+        self.node_test_summary: TestSummary | None = None
+        self.cargo_test_summary: TestSummary | None = None
+
+
+def parse_test_reports(test_artifacts_dir: Path) -> TestReports:
     """Parse test reports from various formats (pytest, go, node, cargo)."""
-    # Try pytest JSON report first
+    reports = TestReports()
+
+    # Try pytest JSON report
     pytest_report = test_artifacts_dir / "pytest-json-report.json"
     if pytest_report.exists():
         try:
@@ -71,7 +83,7 @@ def parse_test_reports(test_artifacts_dir: Path) -> TestSummary | None:
             passed = sorted([t["nodeid"] for t in tests if t.get("outcome") == "passed"])
             failed = sorted([t["nodeid"] for t in tests if t.get("outcome") == "failed"])
             skipped = sorted([t["nodeid"] for t in tests if t.get("outcome") == "skipped"])
-            return TestSummary(
+            reports.pytest_summary = TestSummary(
                 passed_count=len(passed),
                 failed_count=len(failed),
                 skipped_count=len(skipped),
@@ -97,7 +109,7 @@ def parse_test_reports(test_artifacts_dir: Path) -> TestSummary | None:
                     failed.append(event["Test"])
                 elif event.get("Action") == "skip" and event.get("Test"):
                     skipped.append(event["Test"])
-            return TestSummary(
+            reports.go_test_summary = TestSummary(
                 passed_count=len(passed),
                 failed_count=len(failed),
                 skipped_count=len(skipped),
@@ -123,7 +135,7 @@ def parse_test_reports(test_artifacts_dir: Path) -> TestSummary | None:
                     failed.append(name)
                 elif status == "skipped":
                     skipped.append(name)
-            return TestSummary(
+            reports.node_test_summary = TestSummary(
                 passed_count=len(passed),
                 failed_count=len(failed),
                 skipped_count=len(skipped),
@@ -149,7 +161,7 @@ def parse_test_reports(test_artifacts_dir: Path) -> TestSummary | None:
                     failed.append(event.get("name", ""))
                 elif event.get("type") == "test" and event.get("event") == "ignored":
                     skipped.append(event.get("name", ""))
-            return TestSummary(
+            reports.cargo_test_summary = TestSummary(
                 passed_count=len(passed),
                 failed_count=len(failed),
                 skipped_count=len(skipped),
@@ -160,7 +172,7 @@ def parse_test_reports(test_artifacts_dir: Path) -> TestSummary | None:
         except Exception as e:
             print(f"Error parsing Cargo test report: {e}", file=sys.stderr)
 
-    return None
+    return reports
 
 
 SUMMARY_MARKER = "BOOTSTRAP_DEVCONTAINER_SUMMARY:"
@@ -467,7 +479,7 @@ def bootstrap(
     verification_wall_time = time.time() - verification_start_time
 
     # Parse test reports from various formats
-    test_summary = parse_test_reports(test_artifacts_dir)
+    test_reports = parse_test_reports(test_artifacts_dir)
 
     output = BootstrapResult(
         success=verification_success and exit_code == 0,
@@ -477,7 +489,10 @@ def bootstrap(
         token_spending=TokenSpending(**token_spending),
         cost_usd=total_cost_usd,
         agent_exit_code=exit_code,
-        test_summary=test_summary,
+        pytest_summary=test_reports.pytest_summary,
+        go_test_summary=test_reports.go_test_summary,
+        node_test_summary=test_reports.node_test_summary,
+        cargo_test_summary=test_reports.cargo_test_summary,
     )
 
     if output_file:

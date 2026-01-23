@@ -84,8 +84,8 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
     output = json.loads(json_str)
     assert output["success"], f"Test failed: {output}"
 
-    # Verify test_summary contents
-    summary = output["test_summary"]
+    # Verify pytest_summary contents
+    summary = output["pytest_summary"]
     assert summary["passed_count"] == 2, f"Expected 2 passed tests: {summary}"
     assert summary["failed_count"] == 0, f"Expected 0 failed tests: {summary}"
     assert summary["skipped_count"] == 0, f"Expected 0 skipped tests: {summary}"

@@ -9,7 +9,7 @@ class TokenSpending(BaseModel):
 
 
 class TestSummary(BaseModel):
-    """Generic test summary for any language."""
+    """Test summary for a single test framework."""
 
     passed_count: int = 0
     failed_count: int = 0
@@ -27,4 +27,8 @@ class BootstrapResult(BaseModel):
     token_spending: TokenSpending
     cost_usd: float
     agent_exit_code: int
-    test_summary: TestSummary | None = None
+    # Per-language test summaries - each is populated only if that report format was found
+    pytest_summary: TestSummary | None = None
+    go_test_summary: TestSummary | None = None
+    node_test_summary: TestSummary | None = None
+    cargo_test_summary: TestSummary | None = None

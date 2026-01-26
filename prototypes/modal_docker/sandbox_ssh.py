@@ -58,6 +58,9 @@ def main():
     """Create a sandbox and provide SSH access."""
     print("Creating Modal sandbox with Docker...")
 
+    # Initialize app lazily
+    app = modal.App.lookup("bootstrap-devcontainer", create_if_missing=True)
+
     # Create a sandbox - this gives us an interactive container
     sb = modal.Sandbox.create(
         app=app,

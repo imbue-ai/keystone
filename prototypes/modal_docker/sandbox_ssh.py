@@ -96,12 +96,11 @@ def main():
     print(f"\nSandbox tunnels: {tunnel}")
 
     print("\n" + "=" * 60)
-    print("Sandbox is running! You can interact via Modal CLI:")
-    print(f"  modal sandbox exec {sb.object_id} bash")
-    print("\nOr run commands directly:")
-    print(f"  modal sandbox exec {sb.object_id} docker build .")
-    print("\nTo terminate:")
-    print(f"  modal sandbox terminate {sb.object_id}")
+    print("Sandbox is running!")
+    print("\nIn another terminal, run:")
+    print(f"  modal shell {sb.object_id}")
+    print("\nThen test Docker with:")
+    print("  cd /root/test-build && docker build -t hello-test . && docker run hello-test")
     print("=" * 60)
 
     # Keep running - user can Ctrl+C to exit
@@ -110,9 +109,11 @@ def main():
         while True:
             time.sleep(60)
     except KeyboardInterrupt:
-        print("\nTerminating sandbox...")
-        sb.terminate()
-        print("Done!")
+        pass
+
+    print("\nTerminating sandbox...")
+    sb.terminate()
+    print("Done!")
 
 
 if __name__ == "__main__":

@@ -26,29 +26,37 @@ echo "Build succeeded at $(date)"
 
 START_DOCKERD_SCRIPT = """\
 #!/bin/bash
-# Start Docker daemon on Modal (gVisor environment)
+set -xe -o pipefail
 
-# Set up IP forwarding for container networking
-echo 1 > /proc/sys/net/ipv4/ip_forward 2>/dev/null || true
+# Find default network device and IP
+dev=$(ip route show default | awk '/default/ {print $5}')
+if [ -z "$dev" ]; then
+    echo "Error: No default device found."
+    ip route show
+    exit 1
+else
+    echo "Default device: $dev"
+fi
+addr=$(ip addr show dev "$dev" | grep -w inet | awk '{print $2}' | cut -d/ -f1)
+if [ -z "$addr" ]; then
+    echo "Error: No IP address found for device $dev."
+    ip addr show dev "$dev"
+    exit 1
+else
+    echo "IP address for $dev: $addr"
+fi
 
-# Switch to iptables-legacy (gVisor doesn't support nftables)
-update-alternatives --set iptables /usr/sbin/iptables-legacy 2>/dev/null || true
-update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy 2>/dev/null || true
+# Set up IP forwarding and NAT for container networking
+echo 1 > /proc/sys/net/ipv4/ip_forward
+iptables-legacy -t nat -A POSTROUTING -o "$dev" -j SNAT --to-source "$addr" -p tcp
+iptables-legacy -t nat -A POSTROUTING -o "$dev" -j SNAT --to-source "$addr" -p udp
 
-# Start dockerd without iptables management (we handle it above)
-dockerd --iptables=false --ip6tables=false -D &
+# gVisor doesn't support nftables yet (https://github.com/google/gvisor/issues/10510)
+# Explicitly use iptables-legacy
+update-alternatives --set iptables /usr/sbin/iptables-legacy
+update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
 
-# Wait for Docker to be ready
-for i in {1..30}; do
-    if docker info >/dev/null 2>&1; then
-        echo "Docker daemon is ready"
-        exit 0
-    fi
-    sleep 1
-done
-
-echo "Docker daemon failed to start"
-exit 1
+exec /usr/bin/dockerd --iptables=false --ip6tables=false -D
 """
 
 # Image with Docker installed
@@ -62,6 +70,8 @@ image = (
         "git",
         "vim",
         "iptables",
+        "iproute2",
+        "wget",
     )
     # Install Docker
     .run_commands(
@@ -75,6 +85,14 @@ image = (
         "docker-ce-cli",
         "containerd.io",
         "docker-buildx-plugin",
+        "docker-compose-plugin",
+    )
+    # Fix runc for Modal/gVisor compatibility
+    .run_commands(
+        "rm -f $(which runc) || true",
+        "wget https://github.com/opencontainers/runc/releases/download/v1.3.0/runc.amd64",
+        "chmod +x runc.amd64",
+        "mv runc.amd64 /usr/local/bin/runc",
     )
     # Add start-dockerd script
     .run_commands(

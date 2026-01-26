@@ -290,7 +290,6 @@ def _strip_nondeterministic_fields(output: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-@pytest.mark.manual
 def test_max_budget_zero_fails(tmp_path: Path) -> None:
     """
     Test that setting --max_budget_usd 0 causes the claude agent to fail

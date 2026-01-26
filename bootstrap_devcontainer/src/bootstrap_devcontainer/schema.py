@@ -21,12 +21,14 @@ class TestSummary(BaseModel):
 
 class BootstrapResult(BaseModel):
     success: bool
-    agent_work_time: float
-    verification_wall_time: float | None = None
+
     model: str = ""
-    token_spending: TokenSpending
-    cost_usd: float
     agent_exit_code: int
+    agent_work_time: float
+    cost_usd: float
+    token_spending: TokenSpending
+
+    verification_wall_time: float | None = None
     # Per-language test summaries - each is populated only if that report format was found
     pytest_summary: TestSummary | None = None
     go_test_summary: TestSummary | None = None

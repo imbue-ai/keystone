@@ -94,10 +94,10 @@ def main():
 
     # Start Docker daemon in the sandbox
     print("Starting Docker daemon...")
-    sb.exec("dockerd", "--host=unix:///var/run/docker.sock")
+    sb.exec("/start-dockerd.sh")
 
     # Give it a moment to start
-    time.sleep(5)
+    time.sleep(10)
 
     # Create test project directory with Dockerfile
     print("Setting up test Docker project in /root/test-build...")

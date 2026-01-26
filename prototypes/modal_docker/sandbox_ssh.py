@@ -66,6 +66,7 @@ image = (
     .add_local_file(
         str(SCRIPT_DIR / "start-dockerd.sh"),
         "/start-dockerd.sh",
+        copy=True,
     )
     .run_commands("chmod +x /start-dockerd.sh")
 )

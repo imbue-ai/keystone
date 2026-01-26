@@ -34,7 +34,7 @@ logging.basicConfig(
 )
 
 app = typer.Typer()
-console = Console()
+console = Console(force_terminal=True)
 
 
 def check_docker_available() -> bool:
@@ -301,13 +301,13 @@ def bootstrap(
                 # Extract the status message after the marker
                 idx = line.find(STATUS_MARKER)
                 status_msg = line[idx:].strip()
-                console.print(status_msg, style="blue")
+                print(status_msg, flush=True)
                 found = True
             elif SUMMARY_MARKER in line:
                 # Extract the summary message after the marker
                 idx = line.find(SUMMARY_MARKER)
                 summary_msg = line[idx:].strip()
-                console.print(summary_msg, style="blue")
+                print(summary_msg, flush=True)
                 found = True
         return found
 

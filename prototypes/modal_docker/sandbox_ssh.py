@@ -106,6 +106,7 @@ app = modal.App("docker-sandbox-ssh", image=image)
 
 def main():
     """Create a sandbox and provide SSH access."""
+    modal.enable_output()
     print("Creating Modal sandbox with Docker...")
 
     # Initialize app lazily

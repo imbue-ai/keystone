@@ -96,12 +96,29 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
     assert summary["failed_tests"] == [], f"Expected no failed tests: {summary}"
     assert summary["skipped_tests"] == [], f"Expected no skipped tests: {summary}"
 
-    # Check artifacts
+    # Check devcontainer files were created
     assert (project_root / ".devcontainer" / "devcontainer.json").exists()
     assert (project_root / ".devcontainer" / "Dockerfile").exists()
     assert (project_root / ".devcontainer" / "run_all_tests.sh").exists()
-    assert (test_artifacts_dir / "pytest-json-report.json").exists()
-    assert (test_artifacts_dir / "final_result.json").exists()
+
+    # Verify test artifacts were extracted from container via docker cp
+    assert (test_artifacts_dir / "pytest-json-report.json").exists(), (
+        "pytest-json-report.json should be extracted from /test_artifacts in container"
+    )
+    assert (test_artifacts_dir / "final_result.json").exists(), (
+        "final_result.json should be extracted from /test_artifacts in container"
+    )
+    assert (test_artifacts_dir / "pytest" / "stdout.txt").exists(), (
+        "pytest/stdout.txt should be extracted from /test_artifacts in container"
+    )
+
+    # Verify the content of extracted artifacts
+    final_result = json.loads((test_artifacts_dir / "final_result.json").read_text())
+    assert final_result["success"] is True, "final_result.json should indicate success"
+
+    pytest_report = json.loads((test_artifacts_dir / "pytest-json-report.json").read_text())
+    assert "tests" in pytest_report, "pytest report should have tests"
+    assert len(pytest_report["tests"]) == 2, "Should have 2 tests in pytest report"
 
     # Test cache hit: copy fresh project, run again with same cache
     logger.info("=" * 60)

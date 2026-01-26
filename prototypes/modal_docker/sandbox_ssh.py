@@ -9,6 +9,7 @@ Usage:
 """
 
 import time
+from pathlib import Path
 
 import modal
 
@@ -24,40 +25,7 @@ echo "Hello World from Docker!"
 echo "Build succeeded at $(date)"
 """
 
-START_DOCKERD_SCRIPT = """\
-#!/bin/bash
-set -xe -o pipefail
-
-# Find default network device and IP
-dev=$(ip route show default | awk '/default/ {print $5}')
-if [ -z "$dev" ]; then
-    echo "Error: No default device found."
-    ip route show
-    exit 1
-else
-    echo "Default device: $dev"
-fi
-addr=$(ip addr show dev "$dev" | grep -w inet | awk '{print $2}' | cut -d/ -f1)
-if [ -z "$addr" ]; then
-    echo "Error: No IP address found for device $dev."
-    ip addr show dev "$dev"
-    exit 1
-else
-    echo "IP address for $dev: $addr"
-fi
-
-# Set up IP forwarding and NAT for container networking
-echo 1 > /proc/sys/net/ipv4/ip_forward
-iptables-legacy -t nat -A POSTROUTING -o "$dev" -j SNAT --to-source "$addr" -p tcp
-iptables-legacy -t nat -A POSTROUTING -o "$dev" -j SNAT --to-source "$addr" -p udp
-
-# gVisor doesn't support nftables yet (https://github.com/google/gvisor/issues/10510)
-# Explicitly use iptables-legacy
-update-alternatives --set iptables /usr/sbin/iptables-legacy
-update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
-
-exec /usr/bin/dockerd --iptables=false --ip6tables=false -D
-"""
+SCRIPT_DIR = Path(__file__).parent
 
 # Image with Docker installed
 image = (
@@ -95,10 +63,11 @@ image = (
         "mv runc.amd64 /usr/local/bin/runc",
     )
     # Add start-dockerd script
-    .run_commands(
-        f"cat > /start-dockerd.sh << 'SCRIPT'\n{START_DOCKERD_SCRIPT}SCRIPT",
-        "chmod +x /start-dockerd.sh",
+    .add_local_file(
+        str(SCRIPT_DIR / "start-dockerd.sh"),
+        "/start-dockerd.sh",
     )
+    .run_commands("chmod +x /start-dockerd.sh")
 )
 
 app = modal.App("docker-sandbox-ssh", image=image)

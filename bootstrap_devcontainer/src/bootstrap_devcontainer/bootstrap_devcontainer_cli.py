@@ -184,7 +184,7 @@ Instructions:
 
 1. Create a .devcontainer/devcontainer.json file at the project root.
 2. Create a .devcontainer/Dockerfile alongside that.
-3. Create a .devcontainer/run_all_tests.sh script alongside the Dockerfile
+3. Create a .devcontainer/run_all_tests.sh script alongside the Dockerfile (don't forget to make it executable!)
    a. run_all_tests.sh takes no arguments. It always writes test artifacts to /test_artifacts.
    b. It should return 0 (success) IFF all tests pass and forward enough information to stdout/stderr to enable debugging failing tests.
    c. /test_artifacts should be populated with artifacts from running the tests:

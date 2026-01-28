@@ -39,12 +39,13 @@ def test_run_modal_command_interleaved_streaming():
           else
             echo "ERR: $i" >&2
           fi
-          sleep 0.1
+          sleep 0.2
         done
         """
 
         print("\nExecuting command...")
-        events = list(run_modal_command(sb, "bash", "-c", bash_script, pty=False))
+        proc = run_modal_command(sb, "bash", "-c", bash_script, pty=False, capture=True)
+        events = list(proc.stream())
 
         # Print events for inspection
         print("\nCaptured events:")

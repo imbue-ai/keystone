@@ -75,7 +75,7 @@ def test_eval_flow(repo_list_path: Path, tmp_path: Path, git_ref: str) -> None:
             assert result.bootstrap_result is not None, "bootstrap_result should be populated"
             br = result.bootstrap_result
             assert br.get("success") is True, f"bootstrap_result.success should be True: {br}"
-            assert "agent_work_time" in br, "bootstrap_result should have agent_work_time"
+            assert "agent_work_seconds" in br, "bootstrap_result should have agent_work_seconds"
             assert "cost_usd" in br, "bootstrap_result should have cost_usd"
             assert "token_spending" in br, "bootstrap_result should have token_spending"
             assert result.devcontainer_tarball_s3 is not None, "devcontainer tarball should exist"

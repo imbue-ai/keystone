@@ -426,7 +426,7 @@ def bootstrap(
             cache.set(cache_key, cache_value)
             cache.close()
 
-    agent_work_time = time.time() - start_time
+    agent_work_seconds = time.time() - start_time
 
     # Verification step
     print("Verifying agent's work...", file=sys.stderr)
@@ -496,7 +496,7 @@ def bootstrap(
     except Exception as e:
         print(f"Verification error: {e}", file=sys.stderr)
 
-    verification_wall_time = time.time() - verification_start_time
+    verification_seconds = time.time() - verification_start_time
 
     # Parse test reports from various formats
     test_reports = TestReports()
@@ -505,8 +505,8 @@ def bootstrap(
 
     output = BootstrapResult(
         success=verification_success and exit_code == 0,
-        agent_work_time=agent_work_time,
-        verification_wall_time=verification_wall_time,
+        agent_work_seconds=agent_work_seconds,
+        verification_seconds=verification_seconds,
         model=model_name,
         token_spending=TokenSpending(**token_spending),
         cost_usd=total_cost_usd,

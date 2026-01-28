@@ -265,7 +265,7 @@ def test_e2e_sample_project(tmp_path: Path, sample_name: str, snapshot: Snapshot
     output = json.loads(json_str)
 
     assert "success" in output
-    assert "agent_work_time" in output
+    assert "agent_work_seconds" in output
     assert "token_spending" in output
 
     # Check if .devcontainer was created
@@ -282,8 +282,8 @@ def _strip_nondeterministic_fields(output: dict[str, Any]) -> dict[str, Any]:
     """Remove timing and cost fields that vary between runs."""
     result = output.copy()
     # Remove timing fields
-    result.pop("agent_work_time", None)
-    result.pop("verification_wall_time", None)
+    result.pop("agent_work_seconds", None)
+    result.pop("verification_seconds", None)
     result.pop("cost_usd", None)
     # Token counts vary, but success/model/test results should be stable
     result.pop("token_spending", None)

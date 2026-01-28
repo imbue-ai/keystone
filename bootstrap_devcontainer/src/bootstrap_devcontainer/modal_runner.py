@@ -4,6 +4,7 @@ import base64
 import io
 import os
 import queue
+import shlex
 import sys
 import tarfile
 import threading
@@ -181,7 +182,11 @@ def create_modal_image() -> modal.Image:
         # Add start-dockerd script via base64 (heredocs don't work in Modal)
         .run_commands(
             f"echo '{script_b64}' | base64 -d > /start-dockerd.sh",
-            "chmod +x /start-dockerd.sh",
+            "chmod 4755 /start-dockerd.sh",
+        )
+        .run_commands(
+            "useradd -m -s /bin/bash agent",
+            "usermod -aG docker agent",
         )
     )
 
@@ -285,6 +290,7 @@ class ModalAgentRunner(AgentRunner):
         # Write tarball via base64 encoding (Modal stdin API uses bytes differently)
         tarball_b64 = base64.b64encode(project_tarball).decode("ascii")
         sb.exec("sh", "-c", f"echo '{tarball_b64}' | base64 -d | tar -xzf - -C /project").wait()
+        sb.exec("chown", "-R", "agent:agent", "/project").wait()
 
         # 3. Set up Claude auth
         yield StreamEvent(stream="stderr", line="Setting up Claude authentication...")
@@ -293,8 +299,11 @@ class ModalAgentRunner(AgentRunner):
         if "CLAUDE_CONFIG_JSON" in auth_env:
             # Write config file
             config_content = auth_env["CLAUDE_CONFIG_JSON"]
-            sb.exec("mkdir", "-p", "/root").wait()
-            sb.exec("sh", "-c", f"cat > /root/.claude.json << 'EOF'\n{config_content}\nEOF").wait()
+            sb.exec("mkdir", "-p", "/home/agent").wait()
+            sb.exec(
+                "sh", "-c", f"cat > /home/agent/.claude.json << 'EOF'\n{config_content}\nEOF"
+            ).wait()
+            sb.exec("chown", "agent:agent", "/home/agent/.claude.json").wait()
 
         # 4. Run the agent
         yield StreamEvent(stream="stderr", line="Starting agent...")
@@ -326,17 +335,33 @@ class ModalAgentRunner(AgentRunner):
         ]
 
         # Run agent in project directory
-        full_cmd = f"cd /project && {' '.join(cmd_parts)}"
+        # Run agent in project directory
+        # We write a wrapper script to avoid quoting hell with 'su -c'
+        agent_script_content = f"""#!/bin/bash
+set -e
+cd /project
+{f"export ANTHROPIC_API_KEY={shlex.quote(env_vars['ANTHROPIC_API_KEY'])}" if "ANTHROPIC_API_KEY" in env_vars else ""}
+exec {shlex.join(cmd_parts)}
+"""
+        # Upload script
+        # encode to base64 to avoid heredoc issues
+        script_b64 = base64.b64encode(agent_script_content.encode()).decode()
+        sb.exec("sh", "-c", f"echo '{script_b64}' | base64 -d > /run_agent.sh").wait()
+        sb.exec("chmod", "+x", "/run_agent.sh").wait()
+        sb.exec("chown", "agent:agent", "/run_agent.sh").wait()
+
         # Log just the command without the full prompt
         yield StreamEvent(
             stream="stderr",
-            line=f"Executing: cd /project && {agent_cmd} --dangerously-skip-permissions -p '<prompt>' ...",
+            line="Executing: su agent -c /run_agent.sh",
         )
         agent_proc = sb.exec(
-            "sh",
+            "su",
+            "agent",
             "-c",
-            full_cmd,
-            env=env_vars if env_vars else None,
+            "/run_agent.sh",
+            env=None,
+            pty=True,
         )
 
         yield StreamEvent(stream="stderr", line="Agent process started, streaming output...")

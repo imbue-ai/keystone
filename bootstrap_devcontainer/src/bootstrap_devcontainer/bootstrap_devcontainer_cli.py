@@ -361,7 +361,9 @@ Example: `docker run --network host IMAGE CMD`
                 logging.debug(f"Agent message type={msg_type}: {line[:200]}")
 
         except json.JSONDecodeError:
-            # Not JSON or partial JSON, just ignore
+            # Not JSON or partial JSON, log it for debugging purposes
+            # We use debug level because legitimate partial chunks might trigger this
+            logging.debug(f"Agent stdout (non-JSON): {line.strip()}")
             pass
 
     def process_stderr_line(line: str) -> None:

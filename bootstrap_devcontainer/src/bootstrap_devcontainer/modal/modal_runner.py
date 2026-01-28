@@ -2,6 +2,7 @@
 
 import base64
 import io
+import logging
 import os
 import queue
 import shlex
@@ -24,64 +25,91 @@ from bootstrap_devcontainer.modal.image import create_modal_image
 def _stream_reader(
     stream: Iterable[str],
     stream_name: str,
-    output_queue: "queue.Queue[StreamEvent | None]",
+    output_queue: "queue.Queue[StreamEvent | None] | None",
+    prefix: str = "",
 ) -> None:
-    """Read lines from stream and put them on the queue."""
+    """Read lines from stream, log them, and optionally put them on the queue."""
+    logger = logging.getLogger("bootstrap_devcontainer.modal")
     for line in stream:
-        output_queue.put(StreamEvent(stream=stream_name, line=line.rstrip("\n")))
-    output_queue.put(None)  # Signal this stream is done
+        clean_line = line.rstrip("\n")
+        # Log immediately to the Python logging system
+        logger.info(f"{prefix}[{stream_name}] {clean_line}")
+        if output_queue is not None:
+            output_queue.put(StreamEvent(stream=stream_name, line=clean_line))
+    if output_queue is not None:
+        output_queue.put(None)  # Signal this stream is done
 
 
-def stream_modal_process(proc: Any) -> Iterator[StreamEvent]:
+def stream_modal_process(
+    proc: Any,
+    output_queue: "queue.Queue[StreamEvent | None] | None" = None,
+    prefix: str = "",
+) -> Iterator[StreamEvent]:
     """
     Stream stdout and stderr from a Modal process using threads.
 
-    Similar to process_runner.run_process but for Modal sandbox exec results.
-    Uses a queue to interleave stdout and stderr as they arrive.
+    If output_queue is provided, it will also put events there.
+    Returns an iterator of StreamEvents if output_queue is None.
     """
-    output_queue: queue.Queue[StreamEvent | None] = queue.Queue()
+    # If no queue provided, we use a local one to drive the iterator
+    q = output_queue if output_queue is not None else queue.Queue()
 
     stdout_thread = threading.Thread(
         target=_stream_reader,
-        args=(proc.stdout, "stdout", output_queue),
-        name="modal-stdout-reader",
+        args=(proc.stdout, "stdout", q, prefix),
+        name=f"modal-stdout-reader-{prefix}",
+        daemon=True,
     )
     stderr_thread = threading.Thread(
         target=_stream_reader,
-        args=(proc.stderr, "stderr", output_queue),
-        name="modal-stderr-reader",
+        args=(proc.stderr, "stderr", q, prefix),
+        name=f"modal-stderr-reader-{prefix}",
+        daemon=True,
     )
 
     stdout_thread.start()
     stderr_thread.start()
 
-    streams_done = 0
-    while streams_done < 2:
-        event = output_queue.get()
-        if event is None:
-            streams_done += 1
-        else:
-            yield event
+    if output_queue is None:
+        # We are the consumer of the local queue
+        streams_done = 0
+        while streams_done < 2:
+            event = q.get()
+            if event is None:
+                streams_done += 1
+            else:
+                yield event
+        stdout_thread.join()
+        stderr_thread.join()
+        proc.wait()
+    else:
+        # Caller will handle the queue or we are in background
+        pass
 
-    stdout_thread.join()
-    stderr_thread.join()
-    proc.wait()
 
-
-def run_modal_command(sb: modal.Sandbox, *args: str, **kwargs: Any) -> Iterator[StreamEvent]:
+def run_modal_command(
+    sb: modal.Sandbox, *args: str, background: bool = False, prefix: str = "", **kwargs: Any
+) -> Iterator[StreamEvent]:
     """
     Execute a command in a Modal sandbox and stream its output.
 
     Args:
         sb: The Modal sandbox instance.
         *args: Command and arguments to execute.
+        background: If True, start streaming in background threads and return immediately.
+        prefix: Prefix for log messages.
         **kwargs: Additional arguments for sb.exec() (e.g., pty, env).
 
     Yields:
-        StreamEvent objects for each line of stdout and stderr.
+        StreamEvent objects if background=False.
     """
     proc = sb.exec(*args, **kwargs)
-    yield from stream_modal_process(proc)
+    if background:
+        # Start background streaming to logs (None queue means just log)
+        stream_modal_process(proc, output_queue=None, prefix=prefix)
+        return
+    else:
+        yield from stream_modal_process(proc, prefix=prefix)
 
 
 _SCRIPT_DIR = Path(__file__).parent
@@ -174,18 +202,20 @@ class ModalAgentRunner(AgentRunner):
         sb = self._sandbox
 
         # 1. Start Docker daemon
-        yield from run_modal_command(sb, "/start-dockerd.sh")
+        yield from run_modal_command(sb, "/start-dockerd.sh", background=True, prefix="dockerd: ")
         time.sleep(10)  # Give Docker time to start
 
         # 2. Upload project
         yield StreamEvent(stream="stderr", line="Uploading project to sandbox...")
         project_tarball = _create_project_tarball(project_root)
-        sb.exec("mkdir", "-p", "/project").wait()
+        yield from run_modal_command(sb, "mkdir", "-p", "/project")
 
         # Write tarball via base64 encoding (Modal stdin API uses bytes differently)
         tarball_b64 = base64.b64encode(project_tarball).decode("ascii")
-        sb.exec("sh", "-c", f"echo '{tarball_b64}' | base64 -d | tar -xzf - -C /project").wait()
-        sb.exec("chown", "-R", "agent:agent", "/project").wait()
+        yield from run_modal_command(
+            sb, "sh", "-c", f"echo '{tarball_b64}' | base64 -d | tar -xzf - -C /project"
+        )
+        yield from run_modal_command(sb, "chown", "-R", "agent:agent", "/project")
 
         # 3. Set up Claude auth
         yield StreamEvent(stream="stderr", line="Setting up Claude authentication...")
@@ -194,11 +224,14 @@ class ModalAgentRunner(AgentRunner):
         if "CLAUDE_CONFIG_JSON" in auth_env:
             # Write config file
             config_content = auth_env["CLAUDE_CONFIG_JSON"]
-            sb.exec("mkdir", "-p", "/home/agent").wait()
-            sb.exec(
-                "sh", "-c", f"cat > /home/agent/.claude.json << 'EOF'\n{config_content}\nEOF"
-            ).wait()
-            sb.exec("chown", "agent:agent", "/home/agent/.claude.json").wait()
+            yield from run_modal_command(sb, "mkdir", "-p", "/home/agent")
+            yield from run_modal_command(
+                sb,
+                "sh",
+                "-c",
+                f"cat > /home/agent/.claude.json << 'EOF'\n{config_content}\nEOF",
+            )
+            yield from run_modal_command(sb, "chown", "agent:agent", "/home/agent/.claude.json")
 
         # 4. Run the agent
         yield StreamEvent(stream="stderr", line="Starting agent...")
@@ -241,11 +274,12 @@ exec {shlex.join(cmd_parts)}
         # Upload script
         # encode to base64 to avoid heredoc issues
         script_b64 = base64.b64encode(agent_script_content.encode()).decode()
-        sb.exec("sh", "-c", f"echo '{script_b64}' | base64 -d > /run_agent.sh").wait()
-        sb.exec("chmod", "+x", "/run_agent.sh").wait()
-        sb.exec("chown", "agent:agent", "/run_agent.sh").wait()
+        yield from run_modal_command(
+            sb, "sh", "-c", f"echo '{script_b64}' | base64 -d > /run_agent.sh"
+        )
+        yield from run_modal_command(sb, "chmod", "+x", "/run_agent.sh")
+        yield from run_modal_command(sb, "chown", "agent:agent", "/run_agent.sh")
 
-        # Log just the command without the full prompt
         yield StreamEvent(
             stream="stderr",
             line="Executing: su agent -c /run_agent.sh",
@@ -258,16 +292,18 @@ exec {shlex.join(cmd_parts)}
             env=None,
             pty=False,
         )
-        yield from stream_modal_process(agent_proc)
+        yield from stream_modal_process(agent_proc, prefix="agent: ")
         self._exit_code = agent_proc.returncode or 0
 
         # 5. Extract .devcontainer directory
         yield StreamEvent(stream="stderr", line="Extracting .devcontainer from sandbox...")
         # Use base64 to handle binary data through text streams
         tar_proc = sb.exec("sh", "-c", "tar -czf - -C /project .devcontainer | base64")
-        tar_proc.wait()
-        tarball_b64 = tar_proc.stdout.read()
-        self._devcontainer_tarball = base64.b64decode(tarball_b64)
+        tar_lines = []
+        for event in stream_modal_process(tar_proc, prefix="tar: "):
+            if event.stream == "stdout":
+                tar_lines.append(event.line)
+        self._devcontainer_tarball = base64.b64decode("".join(tar_lines))
 
     @property
     def exit_code(self) -> int:

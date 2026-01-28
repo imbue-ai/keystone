@@ -65,10 +65,10 @@ To verify, use something like this (adding arguments as appropriate for permissi
 """
 
 MODAL_ADDENDUM = """
-IMPORTANT: You are running in a Modal sandbox environment. When using `docker run`,
-you MUST use `--network host` for containers to have network access. Bridge networking
-does not work in this environment due to gVisor/veth restrictions.
-
+IMPORTANT: You are running in a Modal sandbox environment.
+Bridge networking does not work in this environment due to gVisor/veth restrictions.
+When using `docker run`, you MUST use `--network host` for containers to have network access.
+When configuring the devcontainer, add "--network=host" to devcontainer.json build options.
 Example: `docker run --network host IMAGE CMD`
 """
 

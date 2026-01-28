@@ -132,6 +132,23 @@ def create_modal_image() -> modal.Image:
             "iptables",
             "iproute2",
             "wget",
+            # Nice-to-have CLI utilities
+            "ncdu",
+            "less",
+            "gawk",
+            "mawk",
+            "coreutils",  # includes cut, head, tail, etc.
+            "findutils",  # find, xargs
+            "grep",
+            "sed",
+            "diffutils",
+            "procps",  # ps, top, etc.
+            "htop",
+            "tree",
+            "jq",
+            "file",
+            "ripgrep",
+            "fd-find",
         )
         # Install Docker
         .run_commands(
@@ -227,6 +244,7 @@ class ModalAgentRunner(AgentRunner):
             app=app,
             image=image,
             timeout=self._timeout_seconds,
+            region="us-west-2",
             experimental_options={"enable_docker": True},
         )
 

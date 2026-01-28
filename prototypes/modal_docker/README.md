@@ -48,13 +48,23 @@ modal setup
 
 ## gVisor Limitations
 
-Modal uses gVisor which doesn't support nftables. The `/start-dockerd.sh` script:
-- Switches to iptables-legacy
-- Starts dockerd with `--iptables=false --ip6tables=false`
-- Sets up IP forwarding for container networking
+Modal uses gVisor which has networking limitations:
 
-If you need simpler builds without networking, you can use:
+1. **nftables not supported** - The script switches to iptables-legacy
+2. **Container networking limited** - `docker run` may fail with network errors
+
+The `/start-dockerd.sh` script:
+- Cleans up stale PID files and docker0 bridge from previous runs
+- Switches to iptables-legacy
+- Sets up IP forwarding and NAT rules
+- Starts dockerd with `--iptables=false --ip6tables=false`
+
+### Running containers
+
+Due to gVisor limitations, you may need to run containers without networking:
 ```bash
-dockerd --iptables=false --bridge=none &
+docker run --network=none hello-test
 ```
-But containers won't have network access.
+
+Docker **builds** work normally (including `RUN` commands with network access).
+Docker **run** with bridge networking may fail with "failed to subscribe to link updates: permission denied".

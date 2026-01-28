@@ -1,6 +1,16 @@
 #!/bin/bash
 set -xe -o pipefail
 
+# Clean up stale state from previous runs
+rm -f /var/run/docker.pid /run/docker/containerd/containerd.pid \
+      /var/run/docker/containerd/containerd.pid /var/run/docker.sock
+
+# Remove stale docker0 bridge if it exists (can take time to take effect)
+if ip link show docker0 &>/dev/null; then
+    ip link delete docker0 || true
+    sleep 2
+fi
+
 # Find default network device and IP
 dev=$(ip route show default | awk '/default/ {print $5}')
 if [ -z "$dev" ]; then

@@ -36,7 +36,7 @@ logging.basicConfig(
 logging.getLogger("bootstrap_devcontainer").setLevel(logging.DEBUG)
 
 app = typer.Typer()
-console = Console(force_terminal=True)
+console = Console(stderr=True, force_terminal=True)
 
 
 def check_docker_available() -> bool:
@@ -47,15 +47,8 @@ def check_docker_available() -> bool:
             capture_output=True,
             timeout=10,
         )
-        if result.returncode != 0:
-            console.print("[red]Error: Docker daemon is not running.[/red]")
-            return False
-        return True
-    except FileNotFoundError:
-        console.print("[red]Error: Docker CLI is not installed or not in PATH.[/red]")
-        return False
-    except subprocess.TimeoutExpired:
-        console.print("[red]Error: Docker command timed out.[/red]")
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
         return False
 
 
@@ -268,14 +261,6 @@ def bootstrap(
         help="Run agent in Modal sandbox (default) or locally",
     ),
 ):
-    # Check Docker is available before proceeding
-    if not check_docker_available():
-        console.print(
-            "[red]Docker is required but not available. "
-            "Please ensure Docker is installed and the daemon is running.[/red]"
-        )
-        raise typer.Exit(code=1)
-
     assert project_root is not None, "--project_root is required"
     project_root = project_root.resolve()
     if test_artifacts_dir is not None:
@@ -441,72 +426,82 @@ Example: `docker run --network host IMAGE CMD`
     agent_work_seconds = time.time() - start_time
 
     # Verification step
-    print("Verifying agent's work...", file=sys.stderr)
-    verification_success = False
-    verification_start_time = time.time()
-    try:
-        image_name = f"bootstrap-test-{project_root.name.lower()}"
+    if not check_docker_available():
+        print(
+            "Skipping local verification because Docker is not available.",
+            file=sys.stderr,
+        )
+        # Initialize verification_start_time so verification_seconds calculation works
+        verification_start_time = time.time()
+        verification_success = False
+    else:
+        print("Verifying agent's work...", file=sys.stderr)
+        verification_success = False
+        verification_start_time = time.time()
+        try:
+            image_name = f"bootstrap-test-{project_root.name.lower()}"
 
-        # 1. Build the image
-        build_cmd = [
-            "devcontainer",
-            "build",
-            "--workspace-folder",
-            str(project_root),
-            "--image-name",
-            image_name,
-        ]
-        print(f"Building image: {shlex.join(build_cmd)}", file=sys.stderr)
-        build_proc = subprocess.run(build_cmd, capture_output=True, text=True)
-
-        if build_proc.returncode == 0:
-            # 2. Run tests (no --rm so we can extract artifacts)
-            container_name = f"bootstrap-test-{project_root.name.lower()}-container"
-            test_cmd = [
-                "docker",
-                "run",
-                "--name",
-                container_name,
+            # 1. Build the image
+            build_cmd = [
+                "devcontainer",
+                "build",
+                "--workspace-folder",
+                str(project_root),
+                "--image-name",
                 image_name,
-                "./.devcontainer/run_all_tests.sh",
             ]
-            print(f"Running tests: {shlex.join(test_cmd)}", file=sys.stderr)
-            test_run = subprocess.run(test_cmd, capture_output=True, text=True)
+            print(f"Building image: {shlex.join(build_cmd)}", file=sys.stderr)
+            build_proc = subprocess.run(build_cmd, capture_output=True, text=True)
 
-            # 3. Extract artifacts from container if test_artifacts_dir is provided
-            if test_artifacts_dir is not None:
-                cp_cmd = [
+            if build_proc.returncode == 0:
+                # 2. Run tests (no --rm so we can extract artifacts)
+                container_name = f"bootstrap-test-{project_root.name.lower()}-container"
+                test_cmd = [
                     "docker",
-                    "cp",
-                    f"{container_name}:/test_artifacts/.",
-                    str(test_artifacts_dir),
+                    "run",
+                    "--name",
+                    container_name,
+                    image_name,
+                    "./.devcontainer/run_all_tests.sh",
                 ]
-                print(f"Extracting artifacts: {shlex.join(cp_cmd)}", file=sys.stderr)
-                cp_result = subprocess.run(cp_cmd, capture_output=True, text=True)
-                if cp_result.returncode != 0:
+                print(f"Running tests: {shlex.join(test_cmd)}", file=sys.stderr)
+                test_run = subprocess.run(test_cmd, capture_output=True, text=True)
+
+                # 3. Extract artifacts from container if test_artifacts_dir is provided
+                if test_artifacts_dir is not None:
+                    cp_cmd = [
+                        "docker",
+                        "cp",
+                        f"{container_name}:/test_artifacts/.",
+                        str(test_artifacts_dir),
+                    ]
+                    print(f"Extracting artifacts: {shlex.join(cp_cmd)}", file=sys.stderr)
+                    cp_result = subprocess.run(cp_cmd, capture_output=True, text=True)
+                    if cp_result.returncode != 0:
+                        print(
+                            f"Warning: artifact extraction failed: {cp_result.stderr}",
+                            file=sys.stderr,
+                        )
+
+                # 4. Clean up container
+                subprocess.run(["docker", "rm", container_name], capture_output=True)
+
+                if test_run.returncode == 0:
+                    print("Verification successful!", file=sys.stderr)
+                    verification_success = True
+                else:
                     print(
-                        f"Warning: artifact extraction failed: {cp_result.stderr}", file=sys.stderr
+                        f"Test run failed with return code {test_run.returncode}",
+                        file=sys.stderr,
                     )
-
-            # 4. Clean up container
-            subprocess.run(["docker", "rm", container_name], capture_output=True)
-
-            if test_run.returncode == 0:
-                print("Verification successful!", file=sys.stderr)
-                verification_success = True
+                    print(f"STDOUT: {test_run.stdout}", file=sys.stderr)
+                    print(f"STDERR: {test_run.stderr}", file=sys.stderr)
             else:
-                print(
-                    f"Test run failed with return code {test_run.returncode}",
-                    file=sys.stderr,
-                )
-                print(f"STDOUT: {test_run.stdout}", file=sys.stderr)
-                print(f"STDERR: {test_run.stderr}", file=sys.stderr)
-        else:
-            print("Build failed", file=sys.stderr)
-            print(f"STDOUT: {build_proc.stdout}", file=sys.stderr)
-            print(f"STDERR: {build_proc.stderr}", file=sys.stderr)
-    except Exception as e:
-        print(f"Verification error: {e}", file=sys.stderr)
+                print("Build failed", file=sys.stderr)
+                print(f"STDOUT: {build_proc.stdout}", file=sys.stderr)
+                print(f"STDERR: {build_proc.stderr}", file=sys.stderr)
+        except Exception as e:
+            print(f"Verification error: {e}", file=sys.stderr)
 
     verification_seconds = time.time() - verification_start_time
 

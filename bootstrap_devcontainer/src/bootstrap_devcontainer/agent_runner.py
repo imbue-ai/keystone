@@ -1,6 +1,7 @@
 """Agent runner abstraction for local and Modal execution."""
 
 import shlex
+import subprocess
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -62,6 +63,18 @@ class LocalAgentRunner(AgentRunner):
         self._exit_code: int = 1
         self._project_root: Path | None = None
 
+    def _check_docker_available(self) -> bool:
+        """Check if Docker is available locally."""
+        try:
+            result = subprocess.run(
+                ["docker", "ps"],
+                capture_output=True,
+                timeout=10,
+            )
+            return result.returncode == 0
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return False
+
     def run(
         self,
         prompt: str,
@@ -69,6 +82,14 @@ class LocalAgentRunner(AgentRunner):
         max_budget_usd: float,
         agent_cmd: str,
     ) -> Iterator[StreamEvent]:
+        if not self._check_docker_available():
+            yield StreamEvent(
+                stream="stderr",
+                line="Error: Docker is required for local agent execution but not available.",
+            )
+            self._exit_code = 1
+            return
+
         self._project_root = project_root
         events: list[StreamEvent] = []
 
@@ -81,13 +102,13 @@ class LocalAgentRunner(AgentRunner):
         full_cmd = [
             *shlex.split(agent_cmd),
             "--dangerously-skip-permissions",
-            "-p",
-            prompt,
             "--output-format",
             "stream-json",
             "--verbose",
             "--max-budget-usd",
             str(max_budget_usd),
+            "-p",
+            prompt,
         ]
 
         result = run_process(

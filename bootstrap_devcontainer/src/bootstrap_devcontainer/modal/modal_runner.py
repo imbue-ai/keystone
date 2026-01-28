@@ -258,7 +258,6 @@ class ModalAgentRunner(AgentRunner):
         ]
 
         # Run agent in project directory
-        # Run agent in project directory
         # We write a wrapper script to avoid quoting hell with 'su -c'
         agent_script_content = f"""#!/bin/bash
 set -e
@@ -284,7 +283,7 @@ exec {shlex.join(cmd_parts)}
             "-c",
             "/run_agent.sh",
             env=None,
-            pty=False,
+            pty=True,
             prefix="agent: ",
             capture=True,
         )

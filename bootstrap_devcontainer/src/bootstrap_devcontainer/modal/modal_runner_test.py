@@ -1,4 +1,6 @@
 import logging
+import os
+import shlex
 
 import modal
 
@@ -17,19 +19,21 @@ logging.getLogger("hpack").setLevel(logging.INFO)
 logging.getLogger("httpcore").setLevel(logging.INFO)
 logging.getLogger("httpx").setLevel(logging.INFO)
 
+logger = logging.getLogger("bootstrap_devcontainer.modal_test")
+
 
 def test_run_modal_command_interleaved_streaming():
     """
     Verify that run_modal_command correctly handles interleaved stdout/stderr.
     This uses a real Modal sandbox.
     """
-    print("Connecting to Modal...")
+    logger.info("Connecting to Modal...")
     app = modal.App.lookup("bootstrap-devcontainer-test", create_if_missing=True)
     image = create_modal_image()
 
     sb = modal.Sandbox.create(app=app, image=image, timeout=300)
     try:
-        print(f"Sandbox created: {sb.object_id}")
+        logger.info(f"Sandbox created: {sb.object_id}")
 
         # Command that produces interleaved output on stdout/stderr
         bash_script = """
@@ -43,20 +47,22 @@ def test_run_modal_command_interleaved_streaming():
         done
         """
 
-        print("\nExecuting command...")
+        logger.info("\nExecuting command...")
         proc = run_modal_command(sb, "bash", "-c", bash_script, pty=False, capture=True)
         events = list(proc.stream())
 
-        # Print events for inspection
-        print("\nCaptured events:")
+        # Log events for inspection
+        logger.info("\nCaptured events:")
         for e in events:
-            print(f"[{e.stream}] {e.line}")
+            logger.info(f"[{e.stream}] {e.line}")
 
         # Check that we got the interleaved output
         stdout_lines = [e.line for e in events if e.stream == "stdout" and "OUT:" in e.line]
         stderr_lines = [e.line for e in events if e.stream == "stderr" and "ERR:" in e.line]
 
-        print(f"\nFound {len(stdout_lines)} stdout lines and {len(stderr_lines)} stderr lines.")
+        logger.info(
+            f"\nFound {len(stdout_lines)} stdout lines and {len(stderr_lines)} stderr lines."
+        )
 
         assert len(stdout_lines) == 3, f"Expected 3 stdout lines, found {len(stdout_lines)}"
         assert len(stderr_lines) == 3, f"Expected 3 stderr lines, found {len(stderr_lines)}"
@@ -75,11 +81,11 @@ def test_docker_readiness_and_run():
     """
     Verify that we can start dockerd, wait for it, and run a container.
     """
-    print("\nConnecting to Modal for Docker test...")
+    logger.info("\nConnecting to Modal for Docker test...")
     app = modal.App.lookup("bootstrap-devcontainer-test", create_if_missing=True)
     image = create_modal_image()
 
-    print("Creating sandbox with Docker enabled...")
+    logger.info("Creating sandbox with Docker enabled...")
     # NOTE: experimental_options={"enable_docker": True} is required for Docker
     sb = modal.Sandbox.create(
         app=app,
@@ -88,16 +94,16 @@ def test_docker_readiness_and_run():
         experimental_options={"enable_docker": True},
     )
     try:
-        print(f"Sandbox created: {sb.object_id}")
+        logger.info(f"Sandbox created: {sb.object_id}")
 
-        print("Starting Docker daemon...")
+        logger.info("Starting Docker daemon...")
         run_modal_command(sb, "/start-dockerd.sh", prefix="dockerd: ")
 
-        print("Waiting for Docker readiness...")
+        logger.info("Waiting for Docker readiness...")
         run_modal_command(sb, "/wait_for_docker.sh", prefix="docker-wait: ").wait()
-        print("Docker is ready!")
+        logger.info("Docker is ready!")
 
-        print("Running 'docker run --network host hello-world'...")
+        logger.info("Running 'docker run --network host hello-world'...")
         # hello-world is a very small image that prints a message and exits
         # Use --network host to avoid permission issues with creating network interfaces in the sandbox
         proc = run_modal_command(
@@ -112,9 +118,9 @@ def test_docker_readiness_and_run():
         )
         events = list(proc.stream())
 
-        print("\nDocker output:")
+        logger.info("\nDocker output:")
         for e in events:
-            print(f"[{e.stream}] {e.line}")
+            logger.info(f"[{e.stream}] {e.line}")
 
         # Basic check that it worked
         output_concat = "".join(e.line for e in events)
@@ -125,6 +131,76 @@ def test_docker_readiness_and_run():
         sb.terminate()
 
 
+def test_claude_streaming():
+    """
+    Verify that Claude CLI can run and stream its output.
+    """
+    logger.info("\nConnecting to Modal for Claude test...")
+    app = modal.App.lookup("bootstrap-devcontainer-test", create_if_missing=True)
+    image = create_modal_image()
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        logger.info("Skipping Claude test: ANTHROPIC_API_KEY not set in environment.")
+        return
+
+    logger.info("Creating sandbox with ANTHROPIC_API_KEY...")
+    sb = modal.Sandbox.create(
+        app=app,
+        image=image,
+        timeout=300,
+        env={"ANTHROPIC_API_KEY": api_key},
+    )
+    try:
+        logger.info(f"Sandbox created: {sb.object_id}")
+
+        logger.info("Running 'claude -p ...'...")
+        # Run Claude as agent user with explicit env
+        # Use a longer timeout as Claude takes time to initialize
+        claude_cmd = shlex.join(
+            [
+                f"ANTHROPIC_API_KEY={shlex.quote(api_key)}",
+                *("timeout", "60"),
+                "claude",
+                "--verbose",
+                "--dangerously-skip-permissions",
+                *("--output-format", "stream-json"),
+                *("--max-budget-usd", "0.10"),
+                *("-p", "Figure out what OS you are on and provide evidence."),
+            ]
+        )
+
+        proc = run_modal_command(
+            sb,
+            "su",
+            "agent",
+            "-c",
+            claude_cmd,
+            prefix="claude: ",
+            capture=True,
+            # Claude just plain doesn't work with pty=False
+            pty=True,
+        )
+
+        logger.info("\nStreaming Claude output:")
+        found_content = False
+        for e in proc.stream():
+            logger.info(f"[{e.stream}] {e.line}")
+            if e.line.strip():
+                found_content = True
+
+        assert found_content, "Claude produced no output"
+        # timeout returns 124 if it killed the process, but we want to see the output
+        exit_code = proc.wait()
+        logger.info(f"\nClaude finished with exit code {exit_code}")
+        assert exit_code == 0
+        logger.info("\nClaude test successful!")
+
+    finally:
+        sb.terminate()
+
+
 if __name__ == "__main__":
     test_run_modal_command_interleaved_streaming()
     test_docker_readiness_and_run()
+    test_claude_streaming()

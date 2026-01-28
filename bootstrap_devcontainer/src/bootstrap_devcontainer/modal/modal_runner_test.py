@@ -3,7 +3,7 @@ import logging
 import modal
 
 from bootstrap_devcontainer.modal.image import create_modal_image
-from bootstrap_devcontainer.modal.modal_runner import run_modal_command
+from bootstrap_devcontainer.modal.modal_runner import run_modal_command, wait_for_docker
 
 # Configure logging to silence noisy third-party libraries
 logging.basicConfig(
@@ -71,5 +71,60 @@ def test_run_modal_command_interleaved_streaming():
         sb.terminate()
 
 
+def test_docker_readiness_and_run():
+    """
+    Verify that we can start dockerd, wait for it, and run a container.
+    """
+    print("\nConnecting to Modal for Docker test...")
+    app = modal.App.lookup("bootstrap-devcontainer-test", create_if_missing=True)
+    image = create_modal_image()
+
+    print("Creating sandbox with Docker enabled...")
+    # NOTE: experimental_options={"enable_docker": True} is required for Docker
+    sb = modal.Sandbox.create(
+        app=app,
+        image=image,
+        timeout=300,
+        experimental_options={"enable_docker": True},
+    )
+    try:
+        print(f"Sandbox created: {sb.object_id}")
+
+        print("Starting Docker daemon...")
+        run_modal_command(sb, "/start-dockerd.sh", prefix="dockerd: ")
+
+        print("Waiting for Docker readiness...")
+        wait_for_docker(sb)
+        print("Docker is ready!")
+
+        print("Running 'docker run --network host hello-world'...")
+        # hello-world is a very small image that prints a message and exits
+        # Use --network host to avoid permission issues with creating network interfaces in the sandbox
+        proc = run_modal_command(
+            sb,
+            "docker",
+            "run",
+            "--network",
+            "host",
+            "hello-world",
+            prefix="docker-run: ",
+            capture=True,
+        )
+        events = list(proc.stream())
+
+        print("\nDocker output:")
+        for e in events:
+            print(f"[{e.stream}] {e.line}")
+
+        # Basic check that it worked
+        output_concat = "".join(e.line for e in events)
+        assert "Hello from Docker!" in output_concat
+        assert proc.wait() == 0
+
+    finally:
+        sb.terminate()
+
+
 if __name__ == "__main__":
     test_run_modal_command_interleaved_streaming()
+    test_docker_readiness_and_run()

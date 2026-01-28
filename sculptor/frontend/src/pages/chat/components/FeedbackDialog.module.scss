@@ -1,0 +1,29 @@
+.dialogContent {
+  border-radius: var(--radius-4) !important;
+  max-width: 400px;
+}
+
+.feedbackButton {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  transition: all 0.2s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+  }
+}
+
+.commentArea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.privacyLink {
+  color: var(--gold-9) !important;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}

@@ -30,7 +30,7 @@ modal setup
    /start-dockerd.sh
    cd /root/test-build
    docker build -t hello-test .
-   docker run hello-test
+   docker run --network host hello-test
    ```
 
 4. Press Ctrl+C in the first terminal to terminate the sandbox.
@@ -61,10 +61,14 @@ The `/start-dockerd.sh` script:
 
 ### Running containers
 
-Due to gVisor limitations, you may need to run containers without networking:
+Due to gVisor limitations, you **must** use `--network host` when running containers:
 ```bash
-docker run --network=none hello-test
+docker run --network host hello-test
+```
+
+This is because gVisor doesn't support creating veth pairs/network namespaces needed for Docker's default bridge networking. Without `--network host`, you'll get:
+```
+failed to add interface vethXXX to sandbox: failed to subscribe to link updates: permission denied
 ```
 
 Docker **builds** work normally (including `RUN` commands with network access).
-Docker **run** with bridge networking may fail with "failed to subscribe to link updates: permission denied".

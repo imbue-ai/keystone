@@ -1,0 +1,22 @@
+.disabledOption {
+  // Match Radix UI Select.Item structure and spacing
+  display: flex;
+  align-items: center;
+  padding: 0 35px 0 25px; // Match Select.Item's default padding
+  height: 25px; // Match Select.Item's default height
+  position: relative;
+  user-select: none;
+  outline: none;
+
+  // Disabled appearance
+  opacity: 0.5;
+  cursor: not-allowed;
+  font-size: var(--font-size-2);
+  line-height: var(--line-height-2);
+  color: var(--gray-11);
+
+  // Match the Select.Item hover behavior but keep disabled appearance
+  &:hover {
+    background-color: var(--gray-a3);
+  }
+}

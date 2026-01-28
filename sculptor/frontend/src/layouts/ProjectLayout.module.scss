@@ -1,0 +1,38 @@
+.panelGroup {
+  width: 100%;
+  height: 100%;
+  flex-grow: 1;
+  overflow: hidden;
+}
+
+.resizeHandle {
+  width: 1px;
+  background-color: var(--gray-a5);
+  transition: background-color 0.2s;
+
+  &:hover {
+    background-color: var(--gray-a7);
+  }
+
+  &[data-resize-handle-active] {
+    background-color: var(--accent-9);
+  }
+}
+
+.sidebarOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9;
+  background-color: transparent;
+}
+
+.narrowSidebar {
+  position: absolute;
+  width: 320px;
+  height: 100%;
+  z-index: 10;
+  box-shadow: 0 4px 16px -8px var(--Overlays-Black-Alpha-2, rgba(0, 0, 0, 0.10)), 0 3px 12px -4px var(--Overlays-Black-Alpha-2, rgba(0, 0, 0, 0.10)), 0 2px 3px -2px var(--neutral-a-3, rgba(117, 96, 0, 0.09));
+}

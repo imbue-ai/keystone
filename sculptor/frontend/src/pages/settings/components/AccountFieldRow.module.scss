@@ -1,0 +1,39 @@
+.settingRow {
+  border-bottom: 1px solid var(--gold-4);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.descriptionText {
+  color: var(--gold-11);
+  flex: 1;
+}
+
+.readOnlyField {
+  padding: 8px 12px;
+  background: var(--gold-4);
+  border-radius: 6px;
+  color: var(--gold-11);
+  cursor: pointer;
+  height: 32px;
+
+  &:hover {
+    background: var(--gold-5);
+  }
+}
+
+.readOnlyFieldNonEditable {
+  padding: 8px 12px;
+  background: var(--gold-4);
+  border-radius: 6px;
+  color: var(--gold-11);
+  cursor: text;
+  height: 32px;
+}
+
+.textField {
+  width: 100%;
+  height: 32px;
+}

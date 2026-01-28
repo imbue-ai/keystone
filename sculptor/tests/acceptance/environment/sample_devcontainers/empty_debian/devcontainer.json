@@ -1,0 +1,9 @@
+{
+    "name": "Empty Debian",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": "."
+    },
+    "workspaceFolder": "/workspace",
+    "remoteUser": "root"
+}

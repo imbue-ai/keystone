@@ -1,0 +1,111 @@
+
+.collapsibleHeader {
+  cursor: pointer;
+  border-radius: var(--radius-2);
+  color: var(--gold-11);
+
+  &:hover {
+    background-color: var(--gold-4);
+  }
+}
+
+.ghostText {
+  color: var(--gold-8);
+  font-weight: 500;
+  font-size: 12px;
+  font-family: var(--font-family-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+
+.currentToolName {
+  font-style: italic;
+}
+
+.toolCountBadge {
+  border-radius: var(--radius-1, 3px);
+  background: var(--gold-5);
+  color: var(--gold-11);
+
+  &:hover {
+    background: none;
+  }
+}
+
+.chevronIcon {
+  color: var(--gold-9);
+
+  &:hover {
+    background: none;
+  }
+}
+
+.toolsContainer {
+  border-left: 2px solid var(--gold-5);
+  padding-left: var(--space-3);
+}
+
+.toolHeader {
+  cursor: pointer;
+  border-radius: var(--radius-2);
+  color: var(--gold-11);
+
+  &:hover {
+    background-color: var(--gold-4);
+  }
+}
+
+.toolDisplayName {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.toolInputContainer {
+  border-radius: var(--radius-2);
+  border: 1px solid var(--gold-4);
+  overflow: hidden;
+}
+
+.toolInputHeader {
+  background: var(--artifact-base-bg, var(--gold-2));
+  border-bottom: 1px solid var(--gold-4);
+  font-family: var(--font-family-default);
+  font-size: var(--font-size-1);
+  font-weight: 500;
+  color: var(--gold-12);
+}
+
+.toolInput {
+  display: block;
+  white-space: pre-wrap;
+  background-color: var(--gray-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-2);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-1);
+  overflow-x: auto;
+}
+
+.toolResult {
+  display: block;
+  white-space: pre-wrap;
+  padding: var(--space-2);
+  border-radius: var(--radius-2);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-1);
+  overflow-x: auto;
+
+  &.success {
+    background-color: var(--green-1);
+    border: 1px solid var(--green-4);
+  }
+
+  &.error {
+    background-color: var(--red-1);
+    border: 1px solid var(--red-4);
+    color: var(--red-11);
+  }
+}

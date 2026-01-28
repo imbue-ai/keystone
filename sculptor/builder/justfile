@@ -1,0 +1,31 @@
+default: help
+
+# Use bash with strict flags
+set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
+set dotenv-load := true
+
+session_name := env('SESSION_NAME', 'sculptor-session')
+ENABLED_FRONTEND_ARTIFACT_VIEWS := env('ENABLED_FRONTEND_ARTIFACT_VIEWS', '')
+MODE := env('MODE', '')  # lets you override --mode if desired
+_ENV_SHELL := env('SHELL', '/bin/bash')
+
+export ENVIRONMENT := env('ENVIRONMENT',  'dev')
+export DEV_MODE := env('DEV_MODE', 'false')
+
+[group('ssh')]
+[working-directory("../..")]
+ssh-linux-executor:
+  fly ssh --config fly/linux-sculptor-builder/fly.toml console -a 'imbue-linux-sculptor-builder'
+
+# Stop the linux sculptor builder executor, rebuild it, and start it again
+[group('management')]
+[working-directory("../..")]
+redeploy-linux-executor:
+    # I want fly to rebuild this executor for the app from scratch
+    fly deploy --config fly/linux-sculptor-builder/fly.toml --no-cache --strategy immediate .
+
+# Show a help message listing all the commands
+help:
+  @echo "Justfile for the Builder of Sculptor"
+  @echo "Contains commands useful for troubleshooting and manually performing builds and releases"
+  @just --list --unsorted

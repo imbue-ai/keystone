@@ -1,0 +1,43 @@
+.mentionList {
+  background: var(--gold-1);
+  color: var(--gold-12);
+  border-radius: var(--radius-3, 6px);
+  box-shadow: var(--shadow-4);
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  padding: var(--space-1);
+  position: relative;
+  min-width: 120px;
+  border: 1px solid var(--gold-a4);
+
+  // Must float above the TaskModal
+  z-index: 1010;
+
+  button {
+    border: none;
+    text-align: left;
+    background-color: transparent;
+    color: inherit;
+    border-radius: var(--radius-2);
+    gap: 8px;
+
+    font-family: var(--Typography-Font-family-text, Inter);
+    font-size: var(--Typography-Font-size-1, 12px);
+    font-style: normal;
+    font-weight: 400;
+
+    &:hover,
+    &:hover.selected {
+      background-color: var(--gold-3);
+    }
+
+    &.selected {
+      background-color: var(--gold-3);
+    }
+  }
+
+  .item {
+    padding: var(--space-1) var(--space-2);
+  }
+}

@@ -1,0 +1,110 @@
+.panel {
+  width: 400px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.panelTitle {
+  color: var(--accent-12);
+}
+
+.panelLabel {
+  color: var(--accent-12);
+}
+
+.panelText {
+  color: var(--accent-11);
+}
+
+.panelNotice {
+  color: var(--accent-10);
+}
+
+.helpText {
+  color: var(--accent-11);
+  line-height: 1.5;
+  margin-top: var(--space-2);
+  display: block;
+}
+
+.deleteLink {
+  text-decoration: underline;
+  color: var(--accent-11);
+
+  &:hover {
+    color: var(--accent-12);
+  }
+}
+
+.separator {
+  color: var(--accent-4);
+}
+
+.codeText {
+  font-family: var(--mono-font-family), monospace;
+  font-size: calc(var(--font-size-2) - 1px);
+}
+
+.syncButtonContainer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.stashButton {
+  background-color: var(--accent-12);
+  color: var(--amber-1);
+
+  .buttonText {
+    transition: opacity 0.25s 0.1s ease-in-out;
+    opacity: 1;
+    &.textEmpty {
+      width: 0;
+      opacity: 0;
+      display: contents;
+    }
+  }
+
+  &.warning {
+    background-color: var(--amber-11);
+    color: white;
+  }
+}
+
+
+// Notice styles (from consolidated ExpandableNotice)
+.noticeSection {
+  background-color: var(--accent-a2);
+}
+
+.notice {
+  color: var(--accent-10);
+}
+
+.textViewContainer {
+  // applies to the ScrollArea viewport
+  > div {
+    max-height: 400px;
+    max-width: 515px;
+  }
+
+  button {
+    position: absolute;
+    z-index: 1;
+    top: 10px;
+    right: 10px;
+    color: var(--accent-9);
+  }
+
+  pre {
+    // need room for the copy button on the right
+    padding: 1em 32px 1em 1em;
+    margin: 0;
+
+    word-break: initial;
+
+    color: var(--accent-11);
+    font-family: var(--mono-font-family), monospace;
+    font-size: calc(var(--font-size-2) - 1px);
+  }
+}

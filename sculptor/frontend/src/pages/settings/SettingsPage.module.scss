@@ -1,0 +1,77 @@
+
+.container {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  background: var(--gold-3);
+}
+
+.title {
+  margin-bottom: 24px;
+  color: var(--gold-12);
+}
+
+.navItem {
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--gold-11);
+
+  &:hover {
+    background: var(--gold-4);
+    color: var(--gold-12);
+  }
+
+  &.active {
+    background: var(--gold-5);
+    color: var(--gold-12);
+    font-weight: 500;
+  }
+}
+
+.settingControl {
+  min-width: 200px;
+  max-width: 250px;
+}
+
+.telemetrySelect {
+
+  .rt-SelectTrigger {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.telemetryContent {
+  width: 420px;
+  padding: 10px;
+}
+
+.telemetryItem {
+  white-space: normal;
+  word-wrap: normal;
+  height: auto;
+  padding: 10px 25px;
+}
+
+.telemetryBody {
+  min-width: 0;
+}
+
+.anthropicIcon {
+  width: 48px;
+  height: 48px;
+  background: var(--amber-5);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--amber-11);
+}
+
+.connectedIndicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green-9);
+}

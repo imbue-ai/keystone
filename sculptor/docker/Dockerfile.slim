@@ -1,0 +1,77 @@
+# syntax = docker/dockerfile:1.4.0
+
+# Reminder: If you update this image, you should run `uv run cli refresh-image`
+# So that Modal knows to see your updates.
+
+FROM ubuntu:24.04
+
+WORKDIR /tmp
+
+# note: these are ignored in modal anyway...
+# CMD ["/main.sh"]
+# EXPOSE 65022
+
+COPY ./docker/00_apt_install.sh /tmp/
+COPY ./docker/00_apt_wrapper /tmp/
+RUN bash 00_apt_install.sh
+
+COPY ./docker/20_install_ttyd.sh /tmp/
+RUN bash 20_install_ttyd.sh
+
+COPY ./docker/91_root_authorized_keys.sh /tmp/
+RUN bash 91_root_authorized_keys.sh
+
+COPY ./docker/99_container_main.sh /main.sh
+RUN chmod ugo+x /main.sh
+
+COPY ./docker/10_heart_beat.sh /tmp/
+RUN bash 10_heart_beat.sh
+
+# install docker for modal
+COPY ./docker/92_modal_docker.sh /tmp/
+RUN bash 92_modal_docker.sh
+
+# configure git?  Probably we remove this later
+RUN git config --global user.email "buildbot@imbue.com" && \
+    git config --global user.name "Buildbot"
+
+RUN curl -L -o /tmp/mutagen_linux_amd64_v0.18.1.tar.gz https://github.com/mutagen-io/mutagen/releases/download/v0.18.1/mutagen_linux_amd64_v0.18.1.tar.gz && \
+    cd /usr/local/bin/ && \
+    sudo tar xvf /tmp/mutagen_linux_amd64_v0.18.1.tar.gz && \
+    rm /tmp/mutagen_linux_amd64_v0.18.1.tar.gz
+
+# install uv
+RUN curl -LsSf https://astral.sh/uv/0.7.22/install.sh > /tmp/uv-installer.sh
+RUN sh /tmp/uv-installer.sh && rm /tmp/uv-installer.sh
+
+# Xvfb is needed for running tests against Electron
+RUN apt install -y xvfb
+
+# Ensure uv in on PATH
+ENV PATH="/root/.local/bin:$PATH"
+
+# Install just
+RUN curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+
+# TODO: directly tie this to the version in our repo instead
+ENV NODE_VERSION="20.13.1"
+
+# very important on modal -- without there is a crazy bug that means that some files do not show up in snapshots!  this was a nightmare to debug.
+ENV UV_LINK_MODE=copy
+
+# the first call to `nvm install` will set that version as the default via .bashrc,
+# so `node` will be available to future interactive bash shells.
+# `source` is not available in `/bin/sh` where `RUN` commands are executed, so we need to use `bash -c`
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash && \
+    bash -c "source /root/.nvm/nvm.sh && nvm install $NODE_VERSION"
+
+
+COPY .git/ /user_home/workspace/.git/
+
+WORKDIR /user_home/workspace
+
+RUN git reset --hard
+
+RUN unset UV_INDEX_URL && uv sync --project sculptor --dev --active --locked --all-extras
+RUN unset UV_INDEX_URL && uv run --project sculptor -m playwright install --with-deps
+RUN bash -c "source ~/.nvm/nvm.sh && cd sculptor/frontend && nvm use && npm install"

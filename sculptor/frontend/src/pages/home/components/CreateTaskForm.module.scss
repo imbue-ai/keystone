@@ -1,0 +1,75 @@
+.repoInfo {
+  color: var(--gold-11, #71624b);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.textarea {
+  resize: none;
+  padding: var(--space-3);
+  min-height: 120px;
+  max-height: 240px;
+  border-radius: var(--radius-4, 8px);
+  border: 2px solid var(--gold-6);
+  background: var(--gold-1);
+  font-family: var(--default-font-family);
+  font-style: normal;
+  font-weight: 400;
+  font-size: 14px;
+  color: var(--gold-12);
+
+  &:focus {
+    outline: none;
+    border-color: var(--gold-8);
+  }
+}
+
+.systemPromptIcon {
+  color: var(--gold-11);
+  border-radius: var(--radius-2);
+  margin-right: 0;
+
+  &:not(:hover) {
+    background: none;
+  }
+}
+
+.dropdownButton {
+  border-radius: var(--radius-2, 4px);
+  box-shadow: none;
+  color: var(--gold-11);
+
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 500;
+
+  /* Limit the width to prevent overflow and pushing other buttons */
+  max-width: 200px;
+  overflow: hidden;
+}
+
+.branchName {
+  /* Truncate text with ellipsis when it overflows */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 120px; /* Leave space for the icon */
+}
+
+.sendButton {
+  border-radius: var(--radius-2, 4px);
+  background: #3e63dd;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 500;
+
+  &:hover {
+    background: #3358d4;
+  }
+
+  &:disabled {
+    background: var(--gold-5);
+    cursor: not-allowed;
+  }
+}

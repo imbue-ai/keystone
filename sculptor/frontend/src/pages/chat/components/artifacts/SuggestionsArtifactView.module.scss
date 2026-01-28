@@ -1,0 +1,429 @@
+@import "./shared-suggestion-styles.module.scss";
+
+.container {
+  height: 100%;
+  overflow: auto;
+}
+
+.hoverPopup {
+  position: fixed;
+  background: var(--gray-1);
+  border: 1px solid var(--gray-4);
+  border-radius: var(--radius-2);
+  box-shadow: var(--shadow-4);
+  z-index: 1000;
+  width: 715px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow: hidden;
+
+  .popupTitle {
+    color: var(--gray-12);
+    line-height: 1.4;
+    word-wrap: break-word;
+    white-space: normal;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+
+  .suggestedFixArea {
+    margin-top: 8px;
+  }
+
+  .suggestedFixLabel {
+    color: var(--gray-12);
+    margin-bottom: 8px;
+    font-weight: normal;
+  }
+
+  .popupUseButton {
+    background: var(--use-button-bg);
+    color: var(--use-button-text);
+    border: none;
+
+    &:hover {
+      background: var(--gold-5);
+    }
+  }
+
+  .codeBlock {
+    background: var(--gray-2);
+    border: 1px solid var(--gray-4);
+    border-radius: var(--radius-1);
+    padding: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    position: relative;
+    width: 100%;
+    min-width: 0;
+    max-height: 200px;
+    overflow-y: auto;
+    overflow-wrap: break-word;
+  }
+
+  .copyButton {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: transparent;
+    color: var(--gold-9);
+    border: none;
+
+    &:hover {
+      background: transparent;
+      color: var(--gold-12);
+    }
+  }
+
+  .copyButtonSpacer {
+    width: 40px;
+    flex-shrink: 0;
+  }
+
+  .codeText {
+    color: var(--gray-12);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    line-height: 1.4;
+    overflow-wrap: break-word;
+    flex: 1;
+    min-width: 0;
+    max-width: 100%;
+    word-break: break-word;
+    overflow: hidden;
+  }
+}
+
+.suggestionsContainer {
+  background: var(--artifact-base-bg, var(--gold-2));
+  padding: 0 4px 8px 4px;
+  border-radius: var(--radius-2);
+}
+
+.suggestionsBadge {
+  font-weight: 500;
+
+  &.noSuggestions {
+    background: var(--green-3);
+    color: var(--green-11);
+    border: 1px solid var(--green-5);
+  }
+
+  &.hasSuggestions {
+    background: var(--red-3);
+    color: var(--red-11);
+    border: 1px solid var(--red-5);
+  }
+}
+
+.suggestionsHeader {
+  padding: 0 0 4px 0;
+  margin-top: -4px;
+}
+
+.navigationControls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 8px;
+}
+
+.dropdownSpacer {
+  width: 6px;
+  height: 24px;
+}
+
+.navButton {
+  height: 25px !important;
+  min-height: 25px !important;
+  max-height: 25px !important;
+  line-height: 25px !important;
+  padding: 0 4px !important;
+  color: var(--gray-11);
+  background: var(--artifact-base-bg, var(--gold-2));
+
+  &:hover {
+    background: var(--artifact-darker-bg, var(--gold-3));
+    color: var(--gray-12);
+  }
+}
+
+.navDropdownButton {
+  height: 25px !important;
+  min-height: 25px !important;
+  max-height: 25px !important;
+  line-height: 25px !important;
+  padding: 0 8px !important;
+  color: var(--gray-11);
+  min-width: 60px;
+  background: var(--artifact-base-bg, var(--gold-2));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  &:hover {
+    background: var(--artifact-darker-bg, var(--gold-3));
+    color: var(--gray-12);
+  }
+}
+
+.dropdownIcon {
+  width: 12px;
+  height: 12px;
+  color: var(--gray-11);
+}
+
+
+.toggleButtonGroup {
+  display: flex;
+  gap: 0;
+
+  .toggleButton {
+    border-radius: 0;
+
+    &:first-child {
+      border-top-left-radius: var(--radius-1);
+      border-bottom-left-radius: var(--radius-1);
+    }
+
+    &:last-child {
+      border-top-right-radius: var(--radius-1);
+      border-bottom-right-radius: var(--radius-1);
+    }
+
+    &:not(:last-child) {
+      border-right: none;
+    }
+  }
+}
+
+.toggleButton {
+  background: var(--artifact-base-bg, var(--gold-2));
+  color: var(--gray-11);
+  border: 1px solid var(--artifact-base-bg, var(--gold-2));
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    background: var(--artifact-darker-bg, var(--gold-3));
+    border-color: var(--artifact-darker-bg, var(--gold-3));
+  }
+
+  &.active {
+    background: var(--artifact-darker-bg, var(--gold-3));
+    border-color: var(--artifact-darker-bg, var(--gold-3));
+    color: var(--gray-11);
+  }
+}
+
+.clickableArea {
+  cursor: default;
+}
+
+.selectAllButton {
+  background: var(--artifact-base-bg, var(--gold-2));
+  color: var(--gray-11);
+  border: none;
+  height: 25px !important;
+  min-height: 25px !important;
+  max-height: 25px !important;
+  line-height: 25px !important;
+
+  &:hover {
+    background: var(--artifact-darker-bg, var(--gold-3));
+  }
+}
+
+.noSuggestions {
+  border-radius: var(--radius-4, 8px);
+  border: 1px solid var(--artifact-border-color, var(--gold-4));
+  background: var(--artifact-darker-bg, var(--gold-3));
+}
+
+:root {
+  --search-text-color: var(--gold-9);
+  --search-bg-color: var(--gold-1);
+}
+
+/* Dark mode overrides */
+.dark,
+.dark-theme {
+  --search-text-color: var(--gray-9);
+  --search-bg-color: var(--gray-2);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.lightbulbIcon {
+  width: 16px;
+  height: 16px;
+  color: currentColor;
+}
+
+.suggestionGroup {
+  border: 1px solid var(--artifact-border-color, var(--gold-4));
+  border-radius: var(--radius-2);
+  margin-bottom: 8px;
+  background: var(--artifact-lighter-bg, var(--gold-1));
+}
+
+.groupHeader {
+  background: var(--artifact-base-bg, var(--gold-2));
+  border-bottom: 1px solid var(--artifact-border-color, var(--gold-4));
+  border-radius: var(--radius-2) var(--radius-2) 0 0;
+
+  &:hover {
+    background: var(--artifact-darker-bg, var(--gold-3));
+  }
+}
+
+.groupContent {
+  padding: 4px 0;
+}
+
+.checkStatusIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+}
+
+.checkCircle {
+  width: 12px;
+  height: 12px;
+  background: var(--green-3);
+  border: 1px solid var(--green-9);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.checkMark {
+  color: var(--green-9);
+  width: 8px;
+  height: 8px;
+}
+
+.failedCircle {
+  width: 12px;
+  height: 12px;
+  background: var(--red-3);
+  border: 1px solid var(--red-9);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.failedMark {
+  color: var(--red-9);
+  font-size: 8px;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.idleCircle {
+  width: 12px;
+  height: 12px;
+  background: var(--artifact-border-color, var(--gold-4));
+  border: 1px solid var(--gray-8);
+  border-radius: 50%;
+}
+
+.checkActionButton {
+  background: transparent;
+  color: var(--gold-9);
+  border: none;
+  padding: 4px;
+  min-width: 24px;
+  height: 24px;
+
+  &:hover {
+    background: transparent;
+    color: var(--gold-12);
+  }
+
+  &:disabled {
+    color: var(--gray-6);
+    cursor: not-allowed;
+  }
+}
+
+.highlighted {
+  animation: highlightPulse 2s ease-in-out;
+  background: var(--gold-4) !important;
+}
+
+@keyframes highlightPulse {
+  0%, 100% {
+    background: var(--artifact-base-bg, var(--gold-2));
+  }
+  50% {
+    background: var(--gold-5);
+  }
+}
+
+:global(.rt-TooltipContent:has([data-suggestion-tooltip="true"])) {
+  background: var(--color-background) !important;
+  border: 2px solid var(--gold-6) !important;
+  color: var(--gray-12) !important;
+  border-radius: var(--radius-3) !important;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+  animation: none !important;
+  transition: none !important;
+  pointer-events: auto !important;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    bottom: -8px;
+    left: -8px;
+    pointer-events: none;
+    z-index: -1;
+  }
+}
+
+:global(.rt-TooltipContent:has([data-suggestion-tooltip="true"]) ~ .rt-TooltipArrow),
+:global(.rt-TooltipContent:has([data-suggestion-tooltip="true"]) .rt-TooltipArrow) {
+  display: none !important;
+}
+
+.suggestionItem:hover {
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    right: -60px;
+    top: -25px;
+    width: 60px;
+    height: calc(100% + 50px);
+    background: transparent;
+    pointer-events: none;
+    z-index: 9999;
+  }
+}
+
+.generatingBanner {
+  border-radius: var(--radius-2);
+  background: var(--artifact-darker-bg, var(--gold-3));
+  border: 1px solid var(--gold-5);
+  margin-top: 8px;
+}

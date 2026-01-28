@@ -1,0 +1,58 @@
+.footer {
+  background: var(--color-panel-solid);
+  border-top: 1px solid var(--gray-a5);
+  width: 100%;
+  z-index: 2;
+  flex-shrink: 0;
+  min-height: 42px;
+}
+
+.footerDiminished {
+  background: var(--gold-4);
+  border-top: 1px solid var(--gray-a5);
+  width: 100%;
+  z-index: 2;
+  flex-shrink: 0;
+  min-height: 42px;
+}
+
+.primaryText {
+  color: var(--gold-12, #3B352B);
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 600;
+  z-index: inherit;
+}
+
+.secondaryText {
+  color: var(--gold-10, #8C7A5E);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 400;
+  z-index: inherit;
+}
+
+.taskLink {
+  color: var(--gold-12, #3B352B);
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 600;
+  z-index: inherit;
+  text-decoration: underline;
+}
+
+.tooltipEmphasis {
+  font-weight: 600;
+
+  text-decoration: underline;
+}
+
+.codeTooltip {
+  font-family: var(--mono-font-family);
+}
+
+// TODO slopy
+.multilineCodeTooltip {
+  font-family: var(--mono-font-family);
+  white-space: pre-wrap;
+}

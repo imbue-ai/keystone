@@ -1,0 +1,128 @@
+# Imbue's "wrapper" Dockerfile, which builds atop the user's Dockerfile.
+# The Imbue control plane is expected to exist at "/imbue" and "/nix/store", but is not
+# provided as a layer, but rather as a volume mounted at "/imbue".
+# This means that it can't be used during image build, but only after the container is created.
+# A symlink from /nix pointing to /imbue/nix gets /nix into the right location.
+
+# This alpine image is never used, but Docker gave a warning if there was no default here.
+# Instead, we pass the user's image as the base image to derive from.
+ARG BASE_IMAGE=debian:stable-slim
+FROM $BASE_IMAGE
+
+ARG BUILT_FROM_SCULPTOR_VERSION=unknown
+ARG BUILT_FROM_SCULPTOR_GIT_HASH=unknown
+
+# CONTAINER_USER is the user specified in devcontainer.json's containerUser field, if any.
+# If not provided, we'll detect the default user from the base image.
+ARG CONTAINER_USER
+
+# ON_CREATE_COMMAND is the onCreateCommand from devcontainer.json, if any.
+# This will be stored and executed when the container is first created.
+ARG ON_CREATE_COMMAND
+
+# UPDATE_CONTENT_COMMAND is the updateContentCommand from devcontainer.json, if any.
+# This will be stored and executed when content is updated.
+ARG UPDATE_CONTENT_COMMAND
+
+# CODE_DIR is the directory where the user's code will be extracted
+ARG CODE_DIR=/code
+
+# Determine and save the container user before we switch to root.
+# If CONTAINER_USER (from devcontainer.json's containerUser) is specified, use that.
+# Otherwise, use the base image's default user (captured via whoami).
+# We save to /tmp first since non-root users may not have permission to create /imbue_addons.
+# See: https://containers.dev/implementors/spec/#users
+RUN if [ -n "${CONTAINER_USER}" ]; then \
+        echo "${CONTAINER_USER}" > /tmp/container_user.txt; \
+    else \
+        whoami > /tmp/container_user.txt; \
+    fi
+
+# Save onCreateCommand if provided
+RUN if [ -n "${ON_CREATE_COMMAND}" ]; then \
+        echo "${ON_CREATE_COMMAND}" > /tmp/on_create_command.json; \
+    else \
+        echo "null" > /tmp/on_create_command.json; \
+    fi
+
+# Save updateContentCommand if provided
+RUN if [ -n "${UPDATE_CONTENT_COMMAND}" ]; then \
+        echo "${UPDATE_CONTENT_COMMAND}" > /tmp/update_content_command.json; \
+    else \
+        echo "null" > /tmp/update_content_command.json; \
+    fi
+
+# We save their original PATH so that we can restore it when we run claude and terminal.
+ENV _IMBUE_USER_ORIGINAL_PATH=$PATH
+
+# Set this path, but it doesn't work yet because we don't have the control plane mounted.
+ENV _IMBUE_CONTROL_PLANE_PATH=/imbue_addons/agent_path_extension_bin:/imbue/bin:/imbue/nix_bin
+
+# Even if the user ended their Dockerfile not as root, we need to be root for these steps.
+USER root
+
+# Create /imbue_addons and move the files there.
+RUN mkdir -p /imbue_addons && \
+    mv /tmp/container_user.txt /imbue_addons/container_user.txt && \
+    mv /tmp/on_create_command.json /imbue_addons/on_create_command.json && \
+    mv /tmp/update_content_command.json /imbue_addons/update_content_command.json
+
+WORKDIR /imbue_addons
+
+# Copy all files needed for building /imbue_addons (except code tarball which comes later).
+COPY imbue_post_container_build.sh bash_with_user_env.sh imbue_image_build_run_as_root.sh ./
+COPY imbue-cli.sh claude ./agent_path_extension_bin/
+COPY --from=ssh_keypair_dir . /tmp/ssh_keys/
+
+# Build /imbue_addons in a single layer.
+# Run the root script to set up user configuration, SSH keys, and symlinks.
+RUN /imbue_addons/imbue_image_build_run_as_root.sh
+
+# Copy in the user's repo tarball and extract it. This preserves mtimes, allowing mutagen
+# to run 5x faster as it brings the in-container repo up to date for new tasks.
+COPY --from=imbue_user_repo /repo.tar /tmp/repo.tar
+RUN CONTAINER_USER=$(cat /imbue_addons/container_user.txt) && \
+    USER_GROUP=$(cat /imbue_addons/container_user_group.txt) && \
+    mkdir -p ${CODE_DIR} && \
+    chown "${CONTAINER_USER}:${USER_GROUP}" ${CODE_DIR} && \
+    chown "${CONTAINER_USER}:${USER_GROUP}" /tmp/repo.tar
+
+# Suppresses the following Apple-related warning, which is consistently spammed:
+#     tar: Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
+RUN CONTAINER_USER=$(cat /imbue_addons/container_user.txt) && \
+    su "${CONTAINER_USER}" -c "cd /code && tar -xf /tmp/repo.tar 2>/tmp/tar.err"; status=$?; \
+    grep -v "Ignoring unknown extended header keyword" /tmp/tar.err >&2; \
+    rm /tmp/tar.err; \
+    [ $status -eq 0 ] && rm /tmp/repo.tar || exit $status
+
+# Assumption about user image: cat, date.
+# We don't pass date through an ARG, since that would invalidate the Docker build cache every time.
+RUN cat > /imbue_addons/version.json <<EOF
+{
+  "built_at_timestamp": "$(date +%Y-%m-%dT%H:%M:%S%z)",
+  "built_from_sculptor_version": "${BUILT_FROM_SCULPTOR_VERSION}",
+  "built_from_sculptor_git_hash": "${BUILT_FROM_SCULPTOR_GIT_HASH}"
+}
+EOF
+
+# Last step, since once we set PATH, we can't run much else anymore.
+# There's no point in setting this earlier, since /imbue/nix doesn't exist yet,
+# and /imbue/nix_bin just points into that.
+# This is the Imbue control plane PATH.  For running user tools, we should use _IMBUE_USER_ORIGINAL_PATH.
+# This PATH provides bash, git, claude, mutagen, sshd, tmux, ttyd, python, etc.
+# To the extent possible, we don't want the user's toolchain mixing with ours.  Don't cross the streams!
+ENV PATH=${_IMBUE_CONTROL_PLANE_PATH}
+
+# We are leaving the default user as root, rather than restoring to what the user had in the image we're wrapping,
+# because Thad doesn't know how to do that.
+
+# The ENTRYPOINT will be inherited from the user's image if not overridden here!
+ENTRYPOINT []
+
+# Run idly forever while being responsive to SIGTERM.
+# TODO: Consider running this from Python rather asumming it will be defaulted here.
+# PID 1 must explicitly install signal handlers in order to respect signals.
+# `tail -f /dev/null` does not do this.
+# Since `docker stop` issues a `SIGTERM`, we use an explicit `trap`.
+# In practice, this appears to enable rapid interactions using `docker stop`.
+CMD ["sh", "-c", "trap 'exit 0' TERM; tail -f /dev/null & wait"]

@@ -1,0 +1,27 @@
+.logo {
+  width: 80px;
+  fill: var(--gold-5);
+}
+
+.container {
+  background: var(--gold-3);
+}
+
+.text {
+  text-align: center;
+  color: var(--gold-11);
+  font-size: 20px;
+  font-weight: 400;
+  margin-bottom: 30px;
+}
+
+.errorBox {
+  background-color: var(--gold-4);
+  border-radius: var(--radius-3);
+  border: 1px solid var(--gold-7);
+}
+
+.errorText {
+  white-space: pre-wrap;
+  word-break: break-all;
+}

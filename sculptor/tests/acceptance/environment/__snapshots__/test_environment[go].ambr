@@ -1,0 +1,203 @@
+# serializer version: 1
+# name: test_environment[go]
+  dict({
+    'command': list([
+      '/imbue_addons/bash_with_user_env.sh',
+      '/check_environment.sh',
+    ]),
+    'exit_code': 0,
+    'stderr': '',
+    'stdout': '''
+      === Go Environment Check ===
+      - Go:
+      go version go1.21.13 linux/<PLATFORM>
+      - Go environment:
+        GOROOT: 
+        GOPATH: /go
+        linux
+        <PLATFORM>
+      ✅ Go environment checks passed!
+  
+    ''',
+  })
+# ---
+# name: test_environment[go].001
+  dict({
+    'command': list([
+      'bash',
+      '-c',
+      'echo $PATH',
+    ]),
+    'exit_code': 0,
+    'stderr': '',
+    'stdout': '''
+      /imbue_addons/agent_path_extension_bin:/imbue/bin:/imbue/nix_bin
+  
+    ''',
+  })
+# ---
+# name: test_environment[go].002
+  dict({
+    'command': list([
+      'bash',
+      '-c',
+      'echo $_IMBUE_USER_ORIGINAL_PATH && echo $LD_LIBRARY_PATH && echo $SSL_CERT_FILE',
+    ]),
+    'exit_code': 0,
+    'stderr': '',
+    'stdout': '''
+      /go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      
+      
+  
+    ''',
+  })
+# ---
+# name: test_environment[go].003
+  dict({
+    'command': list([
+      'bash',
+      '-c',
+      'which bash && which claude && which imbue-cli.sh && which git && which git-receive-pack && which tmux && which mutagen && which nginx && which rg && which sed && which xargs',
+    ]),
+    'exit_code': 0,
+    'stderr': '',
+    'stdout': '''
+      /imbue_addons/agent_path_extension_bin/bash
+      /imbue_addons/agent_path_extension_bin/claude
+      /imbue_addons/agent_path_extension_bin/imbue-cli.sh
+      /imbue/nix_bin/git
+      /imbue/nix_bin/git-receive-pack
+      /imbue/nix_bin/tmux
+      /imbue/nix_bin/mutagen
+      /imbue/nix_bin/nginx
+      /imbue/nix_bin/rg
+      /imbue/nix_bin/sed
+      /imbue/nix_bin/xargs
+  
+    ''',
+  })
+# ---
+# name: test_environment[go].004
+  dict({
+    'command': list([
+      '/bin/su',
+      '-',
+      'root',
+      '-c',
+      'which bash && which claude && which imbue-cli.sh && which git && which git-receive-pack && which tmux && which mutagen && which nginx && which rg && which sed && which xargs',
+    ]),
+    'exit_code': 0,
+    'stderr': '',
+    'stdout': '''
+      /imbue_addons/agent_path_extension_bin/bash
+      /imbue_addons/agent_path_extension_bin/claude
+      /imbue_addons/agent_path_extension_bin/imbue-cli.sh
+      /imbue/nix_bin/git
+      /imbue/nix_bin/git-receive-pack
+      /imbue/nix_bin/tmux
+      /imbue/nix_bin/mutagen
+      /imbue/nix_bin/nginx
+      /imbue/nix_bin/rg
+      /imbue/nix_bin/sed
+      /imbue/nix_bin/xargs
+  
+    ''',
+  })
+# ---
+# name: test_environment[go].005
+  dict({
+    'command': list([
+      'bash',
+      '-c',
+      'bash --version && claude --version && git --version && mutagen --version',
+    ]),
+    'exit_code': 0,
+    'stderr': '',
+    'stdout': '''
+      GNU bash, version 5.3.0(1)-release (<PLATFORM>-linux-gnu)
+      Copyright (C) 2025 Free Software Foundation, Inc.
+      License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+      
+      This is free software; you are free to change and redistribute it.
+      There is NO WARRANTY, to the extent permitted by law.
+      2.0.51 (Claude Code)
+      git version 2.50.1
+      Mutagen version 0.18.0
+  
+    ''',
+  })
+# ---
+# name: test_environment[go].006
+  dict({
+    'command': list([
+      'imbue-cli.sh',
+      '--help',
+    ]),
+    'exit_code': 0,
+    'stderr': '''
+      /imbue/.venv/lib/python3.11/site-packages/pydantic/_internal/_config.py:323: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.11/migration/
+        warnings.warn(DEPRECATION_MESSAGE, DeprecationWarning)
+  
+    ''',
+    'stdout': '''
+                                                                                      
+       Usage: imbue-cli [OPTIONS] COMMAND [ARGS]...                                   
+                                                                                      
+      ╭─ Options ────────────────────────────────────────────────────────────────────╮
+      │ --debug               -d            Enable debug mode.                       │
+      │ --log-to-file                 PATH  Forward all the logs to the specified    │
+      │                                     file, in addition to outputing to        │
+      │                                     stderr.                                  │
+      │                                     [default: None]                          │
+      │ --install-completion                Install completion for the current       │
+      │                                     shell.                                   │
+      │ --show-completion                   Show completion for the current shell,   │
+      │                                     to copy it or customize the              │
+      │                                     installation.                            │
+      │ --help                              Show this message and exit.              │
+      ╰──────────────────────────────────────────────────────────────────────────────╯
+      ╭─ Commands ───────────────────────────────────────────────────────────────────╮
+      │ mcp                                                                          │
+      │ check                                                                        │
+      ╰──────────────────────────────────────────────────────────────────────────────╯
+      
+  
+    ''',
+  })
+# ---
+# name: test_environment[go].007
+  dict_keys(['_IMBUE_BUILT_FROM_GIT_HASH', '_IMBUE_BUILT_FROM_GIT_BRANCH', '_IMBUE_BUILT_AT_TIMESTAMP', '_IMBUE_BUILT_AT_LAST_COMMIT_DATE', '_IMBUE_BUILT_AT_LAST_COMMIT_TIMESTAMP', '_IMBUE_BUILT_BY_USER', '_IMBUE_BUILT_ON_HOSTNAME'])
+# ---
+# name: test_environment[go].008
+  dict_keys(['built_at_timestamp', 'built_from_sculptor_version', 'built_from_sculptor_git_hash'])
+# ---
+# name: test_environment[go].009
+  dict({
+    'command': list([
+      'whoami',
+    ]),
+    'exit_code': 0,
+    'stderr': '',
+    'stdout': '''
+      root
+  
+    ''',
+  })
+# ---
+# name: test_environment[go].010
+  dict({
+    'command': list([
+      'ls',
+      '/code',
+    ]),
+    'exit_code': 0,
+    'stderr': '',
+    'stdout': '''
+      README.md
+      data
+      src
+  
+    ''',
+  })
+# ---

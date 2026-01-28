@@ -1,0 +1,46 @@
+#!/bin/bash
+set -eu
+version=0.18.1
+os=$(uname -s | tr '[:upper:]' '[:lower:]')
+
+arch="${ARCH:-$(uname -m)}"
+
+normalize_arch() {
+  case "$1" in
+    x86_64|amd64) echo "amd64" ;;
+    arm64|aarch64) echo "arm64" ;;
+    *)
+      echo "Unsupported ARCH '$1' (expected one of: x86_64, amd64, arm64, aarch64)" >&2
+      exit 1
+      ;;
+  esac
+}
+
+if [[ -n "${ARCH:-}" ]]; then
+  # User explicitly requested an arch; trust it and skip Rosetta detection.
+  arch="$(normalize_arch "$ARCH")"
+else
+  # Auto-detect arch; correct for Rosetta on Apple Silicon.
+  detected="$(uname -m)"
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    # sysctl.proc_translated == 1 when process is running under Rosetta 2
+    if [[ "$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)" == "1" ]]; then
+      detected="arm64"
+    fi
+  fi
+  arch="$(normalize_arch "$detected")"
+fi
+
+
+mkdir -p dist/mutagen
+
+MUTAGEN_FILENAME=mutagen_"$os"_"$arch"_v"$version".tar.gz
+
+if [ ! -f dist/mutagen/"$MUTAGEN_FILENAME" ]; then
+  curl -L https://github.com/mutagen-io/mutagen/releases/download/v"$version"/"$MUTAGEN_FILENAME" -o dist/mutagen/"$MUTAGEN_FILENAME"
+else
+  echo "Mutagen already downloaded - skipping"
+fi
+
+echo "Extracting"
+tar -xvz -f dist/mutagen/"$MUTAGEN_FILENAME" -C dist/mutagen

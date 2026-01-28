@@ -1,0 +1,9 @@
+{
+    "name": "NPM Bug",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": "."
+    },
+    "workspaceFolder": "/workspace",
+    "remoteUser": "root"
+}

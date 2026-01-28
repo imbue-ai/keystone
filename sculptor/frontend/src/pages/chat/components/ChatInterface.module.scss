@@ -1,0 +1,41 @@
+.mainContent {
+  min-width: 0;
+  height: 100%;
+  overflow-y: hidden;
+  background: var(--gold-3);
+}
+
+.messageArea * * {
+  max-width: 100%;
+}
+
+.messageContainer {
+  position: relative;
+  top: calc(var(--space-6) * -1);
+  width: calc(min(80%, var(--main-content-width)));
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.spacer {
+  height: 30px;
+}
+
+.archiveBox {
+  width: calc(min(80%, var(--main-content-width)));
+  max-width: 80% ;
+  background: var(--gold-4);
+  border: 1px solid var(--gold-5);
+  border-radius: var(--radius-4);
+}
+
+.buildingMessage {
+  font-family: var(--default-font-family);
+  font-size: 14px;
+}
+
+// Apply top margin only to the first fork block in a sequence
+// (when a fork block follows a regular message)
+.regularMessage + .forkBlockMessage {
+  margin-top: var(--space-4);
+}

@@ -1,0 +1,53 @@
+
+.outerBlock {
+  background: var(--gold-2);
+  border-radius: var(--radius-2);
+  border: 1px solid var(--gold-5);
+  display: flex;
+  align-items: center;
+}
+
+.forkIcon {
+  color: var(--gold-9);
+  flex-shrink: 0;
+  height: 12px;
+  width: 12px;
+}
+
+.contentWrapper {
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+.leftSection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.titleText {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  min-width: 0;
+  font-weight: 500;
+  color: var(--gold-12);
+}
+
+.rightSection {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.branchName {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  min-width: 0;
+  color: var(--gold-10)
+}

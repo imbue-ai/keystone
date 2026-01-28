@@ -1,0 +1,13 @@
+{
+    // Container name for display purposes
+    "name": "Empty Alpine",
+    // Build configuration
+    "build": {
+        "dockerfile": "Dockerfile",  // Path to Dockerfile
+        "context": "."  // Build context directory
+    },
+    // The workspace folder inside the container
+    "workspaceFolder": "/workspace",
+    // User to run commands as inside the container
+    "remoteUser": "root"
+}

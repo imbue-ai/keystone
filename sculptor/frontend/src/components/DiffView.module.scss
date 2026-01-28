@@ -1,0 +1,29 @@
+.headingText {
+    font-weight: 500;
+    color: var(--gold-12);
+    color: var(--gold-12);
+}
+
+.diffStats {
+    text-align: right;
+    font-family: var(--mono-font-family);
+    font-size: 13px;
+    font-style: normal;
+    font-weight: 600;
+
+    .linesAdded {
+        color: var(--green-11);
+
+    }
+
+    .linesRemoved {
+        color: var(--red-11);
+    }
+
+}
+
+.noChanges {
+    border-radius: var(--radius-4, 8px);
+    border: 1px solid var(--artifact-border-color, var(--gold-4, #EAE6DB));
+    background: var(--artifact-darker-bg, var(--gold-3, #F2F0E7));
+}

@@ -1,0 +1,60 @@
+.groupHeader {
+  color: var(--gold-9);
+  font-size: var(--Typography-Font-size-1, 12px);
+  font-style: normal;
+  font-weight: 600;
+  line-height: var(--Typography-Line-height-1, 16px);
+  letter-spacing: 1px;
+}
+
+.selectContent {
+  overflow: hidden !important;
+  max-height: none !important;
+  padding: 0 !important;
+}
+
+.searchContainer {
+  border-bottom: 1px solid var(--gray-6);
+  background: var(--color-background);
+}
+
+.searchInputWrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--gray-7);
+  border-radius: var(--radius-2);
+  background: var(--color-background);
+  transition: border-color 0.2s;
+
+  &:focus-within {
+    border-color: var(--accent-8);
+    outline: 2px solid var(--accent-a4);
+  }
+}
+
+.searchInputField {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: var(--gray-12);
+  font-family: inherit;
+
+  &::placeholder {
+    color: var(--gray-9);
+  }
+}
+
+.searchIcon {
+  width: 16px;
+  height: 16px;
+  color: var(--gray-9);
+  flex-shrink: 0;
+}
+
+.branchesHeader {
+  background: var(--color-background);
+}

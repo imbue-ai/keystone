@@ -1,0 +1,106 @@
+.modalContainer {
+  position: fixed;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(600px, 90vw);
+  max-height: 85vh;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.08);
+  background: var(--gold-1);
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel {
+  position: relative;
+  border: 1px solid var(--gold-5);
+  border-radius: 12px 12px 0 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.panelBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.footer {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--gold-5);
+  background: var(--gold-2);
+}
+
+.title {
+  color: var(--gold-12);
+}
+
+.text {
+  color: var(--gold-11);
+}
+
+.folderIcon {
+  color: var(--gold-10);
+}
+
+.pathBox {
+  padding: 12px;
+  background: var(--gold-3);
+  border: 1px solid var(--gold-5);
+  border-radius: 8px;
+  color: var(--gold-12);
+}
+
+.infoBox {
+  padding: 12px;
+  background: var(--gold-2);
+  border: 1px solid var(--gold-4);
+  border-radius: 8px;
+}
+
+.helpBox {
+  padding: 12px;
+  background: var(--gold-2);
+  border: 1px solid var(--gold-6);
+  border-left-width: 3px;
+  border-radius: 4px;
+  color: var(--gold-11);
+}
+
+.futureNote {
+  color: var(--gold-10);
+  font-style: italic;
+  text-align: center;
+}
+
+.closeButton {
+  background: var(--gold-9);
+  color: var(--gold-1);
+  border-radius: var(--radius-2);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  cursor: pointer;
+  border: none;
+
+  &:hover {
+    background: var(--gold-10);
+  }
+
+  &:active {
+    background: var(--gold-11);
+  }
+}

@@ -1,0 +1,70 @@
+.markdownContainer {
+  .reactMarkdown {
+  }
+
+  .inlineCode {
+    display: inline;
+    font-size: 0.85em !important;
+    padding: 0.2em 0.4em;
+    background-color: var(--gold-4);
+    border-radius: 3px;
+  }
+
+  .codeBlock {
+    font-family: "JetBrains Mono";
+    font-size: 0.85em !important;
+    border-radius: 6px;
+    background-color: var(--gold-3);
+    padding: 1.2em;
+    border: 1px solid var(--gold-4);
+    margin: 1em 0;
+    max-width: 100%;
+    width: auto;
+  }
+
+  table {
+    border-collapse: collapse;
+    min-width: 100%;
+  }
+
+  th,
+  td {
+    border: 1px solid var(--gold-6);
+    padding: 0.5em 0.75em;
+    text-align: left;
+    min-width: 50px;
+  }
+
+  th {
+    background-color: var(--gold-3);
+    font-weight: 600;
+  }
+
+  tr:nth-child(even) {
+    background-color: var(--gold-2);
+  }
+
+  hr {
+    border-top: 1px solid var(--gold-5); // gold line
+    margin: 1.5em 0;
+  }
+
+  blockquote {
+    margin: 1em 0;
+    padding: 0.5em 1em;
+    border-left: 4px solid var(--gold-9);
+    background-color: var(--gold-2);
+    border-radius: 0 4px 4px 0;
+    color: var(--slate-12);
+    font-style: italic;
+
+    p {
+      margin: 0.5em 0;
+    }
+
+    > blockquote {
+      border-left-color: var(--gold-11);
+      background-color: var(--gold-3);
+    }
+  }
+}

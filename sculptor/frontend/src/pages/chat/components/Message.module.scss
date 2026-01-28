@@ -1,0 +1,34 @@
+.userMessage {
+  background-color: var(--gold-1);
+  border-radius: var(--radius-2);
+  border: 1px solid var(--gold-5);
+  color: var(--gold-12, #3B352B);
+
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 400;
+
+  .userMessageCopyButton {
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out;
+    color: var(--gold-9);
+  }
+
+  &:hover .userMessageCopyButton {
+    opacity: 1;
+  }
+}
+
+.assistantMessage {
+  // Add spacing to the assistant message content container
+  .assistantMessageContent {
+    // When the first child is NOT a MarkdownBlock (i.e., it's a CollapsibleToolSection)
+    > div:first-child:not([class*="markdownContainer"]) {
+      // Add top margin to CollapsibleToolSection when it's first
+      margin-top: 14px
+    }
+  }
+
+  // When MarkdownBlock is the first child, it already has proper spacing
+  // due to its internal margins, so we don't need to add any additional margin
+}

@@ -1,0 +1,9 @@
+{
+    "name": "Invalid Dockerfile Syntax Test",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": "."
+    },
+    "workspaceFolder": "/workspace",
+    "remoteUser": "root"
+}

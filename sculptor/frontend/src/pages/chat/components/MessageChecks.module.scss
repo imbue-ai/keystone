@@ -1,0 +1,92 @@
+.checksContainer {
+  padding: 0;
+  margin: 0;
+  max-width: fit-content;
+}
+
+.checkItem {
+  transition: all 0.2s ease;
+  position: relative;
+  padding: 2px;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+.statusIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+}
+
+.clickableStatusIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+
+  &:hover {
+    opacity: 0.7;
+  }
+}
+
+.checkIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.checkCircle {
+  width: 12px;
+  height: 12px;
+  background: var(--green-3);
+  border: 1px solid var(--green-9);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.checkMark {
+  color: var(--green-9);
+  width: 8px;
+  height: 8px;
+}
+
+.failedIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.failedCircle {
+  width: 12px;
+  height: 12px;
+  background: var(--red-3);
+  border: 1px solid var(--red-9);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.failedMark {
+  color: var(--red-9);
+  font-size: 8px;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.idleIcon {
+  width: 12px;
+  height: 12px;
+  background: var(--gold-4);
+  border: 1px solid var(--gray-8);
+  border-radius: 50%;
+}

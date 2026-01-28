@@ -1,0 +1,14 @@
+.logo {
+  width: 37px;
+  height: 32px;
+}
+
+.container {
+  overflow: hidden;
+  background: var(--gold-3);
+}
+
+
+.nonDraggable {
+  app-region: no-drag;
+}

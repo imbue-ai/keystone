@@ -1,0 +1,36 @@
+.queuedMessageCard {
+  background-color: var(--gold-1);
+  border-radius: var(--radius-3);
+  border: 1px solid var(--gold-5);
+  color: var(--gold-12, #3B352B);
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 400;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  max-width: calc(min(80%, var(--main-content-width)));
+
+  .copyButton {
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out;
+    color: var(--gold-9);
+  }
+
+  &:hover .copyButton {
+    opacity: 1;
+  }
+}
+
+.queuedLabel {
+  color: var(--gold-11);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.queuedMessageContent {
+  max-height: 6em; // 4 lines with 1.5em line-height
+  line-height: 1.5em;
+  overflow: hidden;
+  position: relative;
+}

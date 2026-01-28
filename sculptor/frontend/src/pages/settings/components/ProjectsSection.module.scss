@@ -1,0 +1,30 @@
+.projectsSection {
+  width: 100%;
+}
+
+.projectsList {
+  margin-bottom: 0;
+}
+
+.separator {
+  margin: var(--space-4) 0;
+  background-color: var(--gold-4);
+}
+
+.emptyState {
+  padding: var(--space-8);
+  text-align: center;
+  color: var(--gray-11);
+}
+
+.openNewButton {
+  width: fit-content !important;
+  display: inline-flex !important;
+}
+
+.loadingState {
+  padding: var(--space-8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

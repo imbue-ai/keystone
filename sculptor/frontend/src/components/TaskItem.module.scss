@@ -1,0 +1,91 @@
+.task {
+  border-radius: var(--radius-2);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid var(--gold-8);
+    outline-offset: -2px;
+    border-color: var(--gold-5);
+  }
+
+  &:active:not(:has(button:active)) {
+    background: var(--gold-4);
+    border-color: var(--gold-5);
+  }
+
+  &:hover {
+    background: var(--gold-3);
+  }
+
+  &[data-selected="true"] {
+    background: var(--gold-3);
+  }
+
+  &[data-menu-open="true"] {
+    background: var(--gold-3);
+  }
+}
+
+.primaryText {
+  color: var(--gold-12);
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.secondaryText {
+  color: var(--gold-10);
+  font-weight: 400;
+  font-size: 13px;
+}
+
+.statusIndicatorWrapper {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  // Ensure the SVG and inner circles align properly
+  span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 0;
+  }
+
+  svg {
+    display: block;
+  }
+}
+
+.readyStatusIcon {
+  border-radius: 50%;
+  height: 10px;
+  width: 10px;
+  background: var(--green-8, #5BB98B);
+}
+
+.errorStatusIcon {
+  border-radius: 50%;
+  height: 10px;
+  width: 10px;
+  background: var(--red-8, #5BB98B);
+}
+
+.titleTextBuilding {
+  font-weight: 400;
+  color: var(--gold-8);
+}
+
+.branchBadgeBuilding {
+  font-family: var(--mono-font-family);
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+  font-size: 13px;
+  color: var(--gold-8);
+
+  &:hover {
+    background: var(--gold-5);
+  }
+}

@@ -1,0 +1,8 @@
+{
+    "name": "Alpine with test_user",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": "."
+    },
+    "workspaceFolder": "/workspace"
+}

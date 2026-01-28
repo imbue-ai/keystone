@@ -1,0 +1,11 @@
+{
+    "name": "Default devcontainer for testing lifecycle commands",
+    // TODO: Would be nice to use DEFAULT_DEVCONTAINER here, but it requires some pre-processing of this file to make it work.
+    "image": "ubuntu:24.04@sha256:7c06e91f61fa88c08cc74f7e1b7c69ae24910d745357e0dfe1d2c0322aaf20f9",
+    "workspaceFolder": "/code"
+    // TODO: Enable these.
+    // "initializeCommand": "(ls /; ls /code || echo 'ERROR: ls / or ls /code failed') >> /devcontainer_lifecycle_initialize_command.txt",
+    // "onCreateCommand": "(ls /; ls /code || echo 'ERROR: ls / or ls /code failed') >> /devcontainer_lifecycle_on_create_command.txt",
+    // "updateContentCommand": "(ls /; ls /code || echo 'ERROR: ls / or ls /code failed') >> /devcontainer_lifecycle_update_content_command.txt",
+    // "postCreateCommand": "(ls /; ls /code || echo 'ERROR: ls / or ls /code failed') >> /devcontainer_lifecycle_post_create_command.txt"
+}

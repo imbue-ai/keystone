@@ -1,0 +1,93 @@
+.panel {
+  width: 400px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.panel[data-disabled="true"] > *:not(.panelOverlay) {
+  opacity: 0.5;
+  filter: saturate(0.9);
+}
+
+.panelOverlay {
+  position: absolute;
+  inset: 0;
+
+  pointer-events: auto;
+  cursor: not-allowed;
+  z-index: 1;
+  backdrop-filter: blur(1px);
+}
+
+
+.panelTitle {
+  color: var(--accent-12);
+}
+
+.panelText {
+  color: var(--accent-11);
+}
+
+.panelNotice {
+  color: var(--accent-10);
+}
+
+.agentBranchName {
+  color: var(--accent-11);
+  font-family: var(--mono-font-family), monospace;
+  font-size: calc(var(--font-size-2) - 1px);
+}
+
+.separator {
+  color: var(--accent-4);
+}
+
+.localBranchNameSelector {
+  color: var(--accent-11);
+  font-family: var(--mono-font-family), monospace;
+  font-size: calc(var(--font-size-2) - 1px);
+
+  white-space: nowrap;
+  overflow: hidden;
+
+  width: 265px;
+}
+
+.footerNoticeSection {
+  background-color: var(--accent-a2);
+}
+
+.footerNotice {
+  // NOTE: do not set hue here, it gets specified separately
+  color: var(--accent-10);
+}
+
+.textViewContainer {
+  // applies to the ScrollArea viewport
+  > div {
+    max-height: 400px;
+    max-width: 515px;
+  }
+
+  button {
+    position: absolute;
+    z-index: 1;
+    top: 10px;
+    right: 10px;
+    color: var(--accent-9);
+  }
+
+  pre {
+    // need room for the the copy button on the right
+    // don't know why but it doesn't apply when the area
+    // becomes scrollable
+    padding: 1em 32px 1em 1em;
+    margin: 0;
+
+    word-break: initial;
+
+    color: var(--accent-11);
+    font-family: var(--mono-font-family), monospace;
+    font-size: calc(var(--font-size-2) - 1px);
+  }
+}

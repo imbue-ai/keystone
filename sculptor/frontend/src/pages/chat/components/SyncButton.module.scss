@@ -1,0 +1,87 @@
+@use "sass:map";
+
+.syncActiveSyncingIcon {
+  animation: rotate 2s linear infinite;
+}
+
+.syncPausedIcon {
+  animation: 1s stuck cubic-bezier(0.68, -0.55, 0.265, 1.55) infinite;
+}
+
+@keyframes stuck {
+  0% {
+    transform: rotate(0deg);
+  }
+  40% { transform: rotate(0deg); }
+  80% { transform: rotate(15deg); }
+  85% { transform: rotate(-10deg); }
+  90% { transform: rotate(7.5deg); }
+  95% { transform: rotate(0deg); }
+  100% { transform: rotate(0deg); }
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+$state-colors: (
+  INACTIVE: var(--accent-12),
+  STARTING: var(--gold-6), // Colors/Neutral/Neutral/9
+  ACTIVE_SYNCING: var(--green-8), // Colors/Semantic/Success/8
+  ACTIVE: var(--green-9), // Colors/Semantic/Success/9
+  PAUSED: var(--amber-8),
+
+  STOP_SYNCING: var(--red-9), // Colors/Semantic/Error/9
+  ERROR: var(--red-9),
+);
+
+$state-text-colors: (
+  INACTIVE: var(--amber-1),
+  STARTING: var(--gold-9),
+  PAUSED: #121211, // Colors/Neutral/Neutral/1 from light mode
+);
+
+// special handling for INACTIVE on the task item list, which relies on "soft" variant
+.syncButtonContainer button[data-visual-state=INACTIVE][data-variant=soft] {
+  background-color: var(--focus-a0);
+  &:hover:not([data-disabled=true]) {
+    background-color: var(--accent-7);
+  }
+}
+
+@each $key, $value in $state-colors {
+  @if $key != "INACTIVE" {
+    .syncButtonContainer button[data-visual-state=#{$key}]:not([data-disabled=true]) {
+      background-color: $value;
+      color: map.get($state-text-colors, $key);
+    }
+  } @else {
+    // define only the non-soft variant
+    .syncButtonContainer button[data-visual-state=INACTIVE]:not([data-disabled=true]):not([data-variant=soft]) {
+      background-color: $value;
+      color: map.get($state-text-colors, $key);
+    }
+  }
+}
+
+.syncButtonContainer button[data-visual-state=PAUSED]:not([data-disabled=true]) {
+  animation: 1s flashing linear infinite alternate;
+}
+
+@keyframes flashing {
+  to {
+    background-color: var(--amber-10);
+  }
+}
+
+.mainButton {
+  justify-content: "flex-start";
+  &.disabledByStash {
+    opacity: 0.4;
+  }
+}

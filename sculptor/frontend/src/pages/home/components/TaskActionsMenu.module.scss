@@ -1,0 +1,23 @@
+.dropdownMenu {
+  background: rgba(255, 255, 255, 0.00);
+  color: var(--gold-9);
+
+  &:hover {
+    border-radius: var(--radius-3, 6px);
+    background: var(--gold-4, #FAF9F2);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--gold-8);
+    outline-offset: -2px;
+    border-radius: var(--radius-3, 6px);
+  }
+  &:active {
+    background: var(--gold-5);
+  }
+}
+
+/* Fixes an issue with focus on dropdown menu exit persisting onto the button in firefox osx */
+.menuTriggerWrapper {
+  display: inline-flex;
+  align-items: center;
+}

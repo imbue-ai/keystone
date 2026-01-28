@@ -1,0 +1,55 @@
+.container {
+  background: var(--gold-2)
+}
+
+.newAgentButton {
+  width: 100%;
+  color: var(--gold-9);
+  font-weight: 500;
+
+  &:hover {
+    background: var(--gold-3);
+  }
+}
+
+
+.draggable {
+  app-region: drag;
+}
+
+.nonDraggable {
+  app-region: no-drag;
+}
+
+.homeButton {
+ margin-right: 6px;
+}
+
+.searchBar {
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 400;
+  border-radius: var(--radius-2);
+  background: var(--gold-2);
+  border: none;
+  box-shadow: none;
+}
+
+
+.archiveButtonArchived {
+  background: var(--gold-4)
+}
+
+.scrollArea [data-radix-scroll-area-viewport] > * {
+  width: auto;
+}
+
+.backButton {
+  width: 100%
+}
+
+.noTasks {
+  border-radius: var(--radius-4, 8px);
+  border: 1px solid var(--gold-4, #EAE6DB);
+  background: var(--gold-3, #F2F0E7);
+}

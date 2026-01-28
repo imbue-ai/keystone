@@ -1,0 +1,67 @@
+@import "./artifacts/shared-suggestion-styles.module.scss";
+
+.wrapper {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.container {
+  padding: 0;
+  margin-bottom: 0;
+  border-radius: var(--radius-3) var(--radius-3) 0 0;
+  border-top: 1px solid var(--gold-6);
+  border-left: 1px solid var(--gold-6);
+  border-right: 1px solid var(--gold-6);
+  border-bottom: none;
+  width: calc(min(82%, var(--main-content-width)));
+  overflow: hidden;
+  background: var(--color-background);
+  pointer-events: auto;
+  font-family: 'Inter', sans-serif;
+}
+
+.header {
+  background: var(--color-background);
+  border-radius: var(--radius-3) var(--radius-3) 0 0;
+  min-height: 40px;
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.titleText {
+  color: var(--gold-12);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.statusText {
+  color: var(--gold-11);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.scoreBadge {
+  color: white;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 4px 8px;
+}
+
+.actionButton {
+  color: var(--gold-9);
+  cursor: pointer;
+}
+
+.actionButtonDisabled {
+  color: var(--gray-6);
+  cursor: not-allowed;
+}
+
+.chevronIcon {
+  margin-left: 2px;
+}

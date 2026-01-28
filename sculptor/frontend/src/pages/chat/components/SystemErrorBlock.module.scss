@@ -1,0 +1,52 @@
+.container {
+  border-radius: var(--radius-2);
+  overflow: hidden;
+  margin: var(--space-3) 0;
+}
+
+.header {
+  background: var(--red-3);
+  border: 1px solid var(--red-5);
+  border-radius: var(--radius-2) var(--radius-2) 0 0;
+  cursor: pointer;
+  border-bottom: none;
+}
+
+.headerCollapsed {
+  border-radius: var(--radius-2);
+  border-bottom: 1px solid var(--red-5);
+}
+
+.chevronIcon {
+  color: var(--gold-10);
+
+  &:hover {
+    background: none;
+  }
+}
+
+.errorBadge {
+  background: var(--red-5);
+  color: var(--red-11);
+}
+
+.body {
+  background: var(--red-2);
+  border: 1px solid var(--gold-5);
+  border-radius: 0 0 var(--radius-2) var(--radius-2);
+}
+
+.scrollArea {
+  max-height: 400px;
+  min-height: 0;
+}
+
+.traceback {
+  margin: 0;
+  font-family: var(--mono-font-family);
+  font-size: 12px;
+  line-height: 20px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--gold-12);
+}

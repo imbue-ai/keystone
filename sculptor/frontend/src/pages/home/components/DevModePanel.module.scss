@@ -1,0 +1,29 @@
+.container {
+  padding: 1rem;
+  height: 100%;
+  min-height: 400px;
+}
+
+.banner {
+  background: linear-gradient(135deg, #ff6b6b, #4ecdc4);
+  padding: 0.75rem 1.5rem;
+  margin: 0 0 1rem 0;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.bannerText {
+  color: white;
+  font-weight: bold;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.controlPanel {
+  flex: 1;
+  justify-content: flex-start;
+  align-items: flex-start;
+}
+
+.testSentryButton {
+  align-self: flex-start;
+}

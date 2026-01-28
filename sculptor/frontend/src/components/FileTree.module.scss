@@ -1,0 +1,35 @@
+.fileTreePane {
+  border-radius: var(--radius-2, 4px);
+  height: 100%;
+  min-width: 200px;
+  width: 300px;
+  color: var(--gold-11, #60646c);
+}
+
+.folderText {
+  color: var(--gray-11);
+  font-family: var(--default-font-family);
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 400;
+  max-width: 80%;
+}
+
+.fileText {
+  color: var(--gold-12);
+  font-family: var(--default-font-family);
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 500;
+  max-width: 80%;
+}
+
+.treeRow {
+  height: 29px;
+  max-width: 375px;
+  border-radius: var(--radius-1);
+}
+
+.selectedTreeRow {
+  background: var(--gold-3, #f0f0f3);
+}

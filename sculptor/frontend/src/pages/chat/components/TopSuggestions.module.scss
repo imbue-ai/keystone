@@ -1,0 +1,102 @@
+@import "./artifacts/shared-suggestion-styles.module.scss";
+
+.wrapper {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.container {
+  padding: 0;
+  margin-bottom: 0;
+  border-radius: var(--radius-3) var(--radius-3) 0 0;
+  border-top: 1px solid var(--gold-6);
+  border-left: 1px solid var(--gold-6);
+  border-right: 1px solid var(--gold-6);
+  border-bottom: none;
+  width: calc(min(82%, var(--main-content-width)));
+  overflow: hidden;
+  background: var(--color-background);
+  pointer-events: auto;
+  font-family: 'Inter', sans-serif;
+}
+
+.header {
+  background: var(--color-background);
+  border-radius: var(--radius-3) var(--radius-3) 0 0;
+  min-height: 32px;
+  align-items: center;
+}
+
+.chevron {
+  width: 16px;
+  height: 16px;
+  color: var(--gray-11);
+}
+
+.scrollContainer {
+  background: var(--color-background);
+  border-radius: 0 0 var(--radius-3) var(--radius-3);
+  height: 0;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+
+.scrollContainerExpanded {
+  height: 72px;
+  max-height: 72px;
+  opacity: 1;
+}
+
+.itemsList {
+  gap: 0;
+  padding-bottom: 4px;
+}
+
+.itemWrapper {
+}
+
+:global(.rt-TooltipContent:has([data-suggestion-tooltip="true"])) {
+  background: var(--color-background) !important;
+  border: 1px solid var(--gold-6) !important;
+  color: var(--gray-12) !important;
+  border-radius: var(--radius-3) !important;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+  animation: none !important;
+  transition: none !important;
+  pointer-events: auto !important;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    bottom: -8px;
+    left: -8px;
+    pointer-events: none;
+    z-index: -1;
+  }
+}
+
+:global(.rt-TooltipContent:has([data-suggestion-tooltip="true"]) ~ .rt-TooltipArrow),
+:global(.rt-TooltipContent:has([data-suggestion-tooltip="true"]) .rt-TooltipArrow) {
+  display: none !important;
+}
+
+.itemWrapper:has(.suggestionItem:hover) {
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    right: -60px;
+    top: -25px;
+    width: 60px;
+    height: calc(100% + 50px);
+    background: transparent;
+    pointer-events: auto;
+    z-index: 9999;
+  }
+}

@@ -1,0 +1,9 @@
+{
+    "name": "Dockerfile Build Failure Test",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": "."
+    },
+    "workspaceFolder": "/workspace",
+    "remoteUser": "root"
+}

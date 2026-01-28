@@ -1,0 +1,97 @@
+.container {
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+.navigationControls {
+  flex-shrink: 0;
+}
+
+.formSection {
+  border: 1px solid var(--gray-6);
+  border-radius: 8px;
+  padding: 16px;
+  background-color: var(--gray-2);
+}
+
+.scoutOutputsListContainer {
+  max-height: 100%;
+  overflow-y: auto;
+  border: 1px solid var(--gray-6);
+  border-radius: 4px;
+  padding: 8px;
+  background-color: var(--gray-1);
+}
+
+.scoutOutputListItem {
+  border: 1px solid var(--gray-5);
+  border-radius: 4px;
+  background-color: var(--gray-2);
+  transition: background-color 0.2s;
+  cursor: pointer;
+
+  &:hover {
+    background-color: var(--gray-3);
+  }
+}
+
+.scoutOutputTitle {
+  flex: 1;
+  color: var(--gray-12);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// Tooltip styling for scout output JSON
+:global(.rt-TooltipContent:has([data-scout-json-tooltip="true"])) {
+  background: var(--color-background) !important;
+  border: 2px solid var(--gold-6) !important;
+  color: var(--gold-12) !important;
+  border-radius: var(--radius-3) !important;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+  animation: none !important;
+  transition: none !important;
+  pointer-events: auto !important;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    bottom: -8px;
+    left: -8px;
+    pointer-events: none;
+    z-index: -1;
+  }
+}
+
+:global(.rt-TooltipContent:has([data-scout-json-tooltip="true"]) ~ .rt-TooltipArrow),
+:global(.rt-TooltipContent:has([data-scout-json-tooltip="true"]) .rt-TooltipArrow) {
+  display: none !important;
+}
+
+.tooltipContent {
+  max-width: 600px;
+  max-height: 400px;
+  overflow: auto;
+  padding: 8px;
+  user-select: text;
+}
+
+.tooltipTitle {
+  margin-bottom: 8px;
+  cursor: text;
+  color: var(--gold-12);
+}
+
+.tooltipCode {
+  margin: 0;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  cursor: text;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--gold-11);
+}

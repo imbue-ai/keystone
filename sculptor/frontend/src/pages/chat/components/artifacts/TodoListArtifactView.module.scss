@@ -1,0 +1,75 @@
+.todoListContainer {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.todoList {
+  flex: 1;
+}
+
+.todoItem {
+
+  &.inProgress {
+    position: relative;
+
+    &::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background-color: var(--gold-9);
+    }
+  }
+}
+
+.statusIndicator {
+  min-width: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.checkIcon {
+  color: var(--green-10);
+  stroke-width: 2px;
+}
+
+.todoText {
+  flex: 1;
+  line-height: 1.5;
+
+  &.completed {
+    text-decoration: line-through;
+    color: var(--gold-8);
+  }
+}
+
+.priorityBadge {
+  flex-shrink: 0;
+}
+
+.progressIndicator {
+  border: 1px solid var(--gold-3);
+  background: var(--gold-1);
+  flex-shrink: 0;
+  border-radius: var(--radius-2);
+}
+
+.progressIcon {
+  color: var(--green-10);
+}
+
+.ghostText {
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.noTodoList {
+    border-radius: var(--radius-4, 8px);
+    border: 1px solid var(--artifact-border-color, var(--gold-4, #EAE6DB));
+    background: var(--artifact-darker-bg, var(--gold-3, #F2F0E7));
+}

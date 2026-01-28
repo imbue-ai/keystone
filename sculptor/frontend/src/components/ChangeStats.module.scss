@@ -1,0 +1,23 @@
+.linesAdded {
+  color: var(--green-11, #218358);
+  font-family: var(--mono-font-family, "JetBrains Mono"), monospace;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.linesRemoved {
+  color: var(--red-11, #ce2c31);
+  font-family: var(--mono-font-family, "JetBrains Mono"), monospace;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.empty {
+  color: var(--gray-9);
+}
+
+.stats {
+  line-height: 1;
+}

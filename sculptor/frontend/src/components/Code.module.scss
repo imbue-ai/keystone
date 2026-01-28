@@ -1,0 +1,35 @@
+.code {
+  color: var(--gold-12);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 500;
+  line-height: 16px;
+  letter-spacing: 0.04px;
+}
+
+.clickable {
+  padding: 5px 5px;
+  margin: 0px -5px;
+  border-radius: var(--radius-1);
+
+  &:hover {
+    transition: all 0.2s;
+    cursor: pointer;
+    background-color: var(--gold-3);
+  }
+}
+
+.underlined {
+  cursor: pointer;
+  text-decoration-line: underline;
+  text-decoration-style: solid;
+  text-decoration-skip-ink: none;
+  text-decoration-thickness: auto;
+  text-underline-offset: auto;
+  text-underline-position: from-font;
+
+  &:hover {
+    color: var(--gold-10);
+  }
+}

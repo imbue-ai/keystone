@@ -1,0 +1,12 @@
+.settingRow {
+  border-bottom: 1px solid var(--gold-4);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.descriptionText {
+  color: var(--gold-11);
+  flex: 1;
+}

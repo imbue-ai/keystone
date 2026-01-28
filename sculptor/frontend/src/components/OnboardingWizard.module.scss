@@ -1,0 +1,166 @@
+.container {
+  min-height: 100vh;
+  background-color: var(--gold-3);
+}
+
+.logo {
+  width: 30px;
+  height: 25px;
+}
+
+.titleText {
+  color: var(--gold-11);
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.primaryText {
+  color: var(--gold-11);
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.secondaryText {
+  color: var(--gold-10);
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 400;
+}
+
+.circleIcon {
+  color: var(--gold-11);
+  width: 24px;
+  height: 24px;
+}
+
+.welcomeDialog {
+    max-width: 600px;
+    min-width: 580px;
+    min-height: 530px;
+    height: 530px;
+    border-radius: var(--radius-5);
+    background-color: var(--gold-2);
+    box-shadow: var(--shadow-6);
+
+
+    // Align the dialog to the Center of the screen
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10;
+
+    display: flex;
+    flex-direction: column;
+}
+
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(63, 63, 63, 0.5);
+    z-index: 5;
+    // Add a blur effect to the background
+    backdrop-filter: blur(1px);
+}
+
+.termsText {
+  color: var(--gold-11);
+  font-size: 16px;
+  font-weight: 600;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.linkText {
+  color: var(--gold-10);
+  font-size: 16px;
+  font-weight: 400;
+  text-decoration: underline;
+}
+
+.tosAndPrivacy {
+    padding: 20px 20px;
+}
+
+.researchPreviewClassic {
+    bottom: 40px;
+}
+
+.imbueLogo {
+
+}
+
+.emailInput {
+  font-family: system-ui;
+}
+
+.primaryButton {
+  color: white;
+  border-radius: var(--radius-3);
+  background: var(--gold-9);
+
+  &:hover:not(:disabled) {
+    background-color: var(--gold-10);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    position: relative;
+  }
+}
+
+.buttonInner {
+  position: relative;
+  width: 100%;
+}
+
+.spinnerOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.labelHidden {
+  visibility: hidden; /* keep layout width, hide text when loading */
+}
+
+.error {
+  margin-top: 4px;
+}
+
+.dependencyCard {
+  border-radius: var(--radius-5);
+  border: 1px solid var(--gold-6);
+  background-color: var(--gold-4);
+}
+
+.completeDependencyCard {
+  border-radius: var(--radius-5);
+  border: 1px solid var(--green-6);
+  background-color: var(--green-4);
+}
+
+
+.telemetryCheck {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.telemetrySettings {
+  > * {
+    min-width: 280px;
+    font-size: var(--font-size-3);
+  }
+}

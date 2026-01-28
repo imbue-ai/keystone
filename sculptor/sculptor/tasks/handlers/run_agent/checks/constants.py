@@ -1,0 +1,12 @@
+CHECK_STATE_FILE_NAME = "check.json"
+ALL_CHECKS_FILE_NAME = "checks.json"
+CONVERSATION_FILE_NAME = "conversation.jsonl"
+RUN_CHECKS_ON_RESTART_FILE = "run.txt"
+SNAPSHOT_FILE_NAME = "snapshot.json"
+OUTPUTS_FILE_NAME = "outputs.jsonl"
+# within your code directory
+CHECK_CONFIG_PATH = ".sculptor/checks.toml"
+SCULPTOR_SYSTEM_CHECK_NAME = "sculptor_system"
+IMBUE_VERIFY_CHECK_NAME = "Verifier"
+IMBUE_SCOUT_CHECK_NAME = "Scout"
+SCULPTOR_CHECKS_DOCS_URL = "https://github.com/imbue-ai/sculptor"

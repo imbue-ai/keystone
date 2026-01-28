@@ -1,0 +1,11 @@
+
+.container {
+  border-radius: var(--radius-4);
+  border: 1px solid var(--gold-6);
+  background: var(--gold-2);
+  max-width: 378px;
+;
+
+  /* Shadows/shadow-4 */
+  box-shadow: 0 12px 32px -16px var(--neutral-a-3, rgba(117, 96, 0, 0.09)), 0 8px 40px 0 var(--Overlays-Black-Alpha-1, rgba(0, 0, 0, 0.05));
+}

@@ -1,0 +1,55 @@
+.auViewport {
+  position: absolute;
+  bottom: var(--space-6, 24px);
+  right: var(--space-5, 20px);
+  z-index: 1000;
+}
+
+.title {
+color: var(--gold-12);
+}
+
+.updateVersion {
+  color: var(--gold-8);
+}
+
+.auCard {
+	border-radius: 4;
+	will-change: transform, opacity;
+	background: var(--color-panel-solid);
+}
+
+.progress :global(.rt-ProgressIndicator) {
+  transition: transform 0.5s ease, width 0.5s ease;
+}
+
+.fadeIn {
+  animation: au-slide-in 500ms ease-out;
+}
+
+.fadeOut {
+  animation: au-fade-out 500ms ease-in forwards;
+}
+
+.auCard:not(.fadeIn):not(.fadeOut) {
+	animation: au-slide-in 300ms ease-out;
+}
+
+
+@keyframes au-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes au-fade-out {
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+}

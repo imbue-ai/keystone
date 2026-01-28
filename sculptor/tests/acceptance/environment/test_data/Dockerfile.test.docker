@@ -1,0 +1,15 @@
+# start with base image
+# Keep this in sync with Dockerfile.unbaked.
+FROM ubuntu:24.04@sha256:7c06e91f61fa88c08cc74f7e1b7c69ae24910d745357e0dfe1d2c0322aaf20f9
+
+# install system dependencies
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends apt-utils curl bash-completion git less nano vim wget tmux jq htop rsync ca-certificates
+
+# Update CA certificates to fix SSL verification issues
+RUN update-ca-certificates
+
+RUN mkdir -p /root/.tmux/plugins
+RUN git clone https://github.com/tmux-plugins/tmux-resurrect /root/.tmux/plugins/tmux-resurrect/
+
+WORKDIR /code

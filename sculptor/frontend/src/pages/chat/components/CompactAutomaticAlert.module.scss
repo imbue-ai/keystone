@@ -1,0 +1,53 @@
+
+.overlay {
+  background: var(--gold-a3);
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.alertDialog {
+  border-radius: var(--radius-4);
+  background: white;
+  border: 1px solid var(--gold-a3);
+  padding: 16px;
+  gap: 16px;
+  box-shadow:
+    0 16px 36px -20px var(--gold-a7),
+    0 16px 64px 0 var(--gold-a2),
+    0 23px 60px 0 var(--black-a3);
+}
+
+.textGroup {
+  gap: 8px;
+}
+
+.headerText {
+  color: var(--gold-12);
+  font-family: var(--Typography-Font-family-text, Inter);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 28px;
+  letter-spacing: -0.08px;
+}
+
+.warningText {
+  color: var(--gold-12);
+  font-family: var(--Typography-Font-family-text, Inter);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+}
+
+.tokenInfoText {
+  color: var(--gold-8);
+  font-family: "JetBrains Mono";
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+}
+
+.buttonRow {
+  gap: 8px;
+}

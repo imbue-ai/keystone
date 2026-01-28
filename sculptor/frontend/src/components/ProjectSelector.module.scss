@@ -1,0 +1,37 @@
+.projectSelector {
+  width: 100%;
+
+  &:hover {
+    background: var(--gold-4);
+  }
+
+}
+
+.selectContent {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.newRepoSeparator {
+  margin-left: calc(-1 * var(--select-content-padding));
+  margin-right: calc(-1 * var(--select-content-padding));
+}
+
+.projectItem {
+  padding-top: var(--space-5);
+  padding-bottom: var(--space-5);
+}
+
+.projectItem :global(.rt-SelectItemIndicator) {
+  margin-top: calc(-1 * var(--space-4));
+}
+
+.projectName {
+  color: var(--gray-12);
+}
+
+.projectPath {
+  color: var(--gray-10);
+  word-break: break-all;
+  font-family: var(--code-font-family);
+}

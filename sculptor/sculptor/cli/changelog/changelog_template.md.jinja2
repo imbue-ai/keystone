@@ -1,0 +1,38 @@
+{%- macro render_commit(commit) -%}
+{% if commit.linear_title %}
+**[{{ commit.linear_ticket }}]({{ commit.linear_url }}): {{ commit.linear_title }}**
+{% if commit.linear_assignee %}<br>*Assignee: {{ commit.linear_assignee }}*{% endif %}
+{% if commit.linear_description %}
+{{ strip_headings(commit.linear_description) }}
+{% endif %}
+{%- endif %}
+{% if commit.mr_title -%}
+**[MR{{ commit.mr_number }}]({{ commit.gitlab_url }}): {{ commit.mr_title }}**
+{% if commit.mr_author and not commit.linear_title %}<br>*Author: {{ commit.mr_author }}*{% endif %}
+{% if commit.mr_description %}
+{{ strip_headings(commit.mr_description) }}
+{% endif %}
+{%- endif %}
+{%- endmacro -%}
+
+{%- macro render_section(title, commits, description=None) -%}
+{% if commits %}
+## {{ title }}
+{% if description %}{{ description }}
+
+{% endif %}
+{% for commit in commits %}
+{{ render_commit(commit) }}
+{%- endfor %}
+{%- endif %}
+{%- endmacro -%}
+
+# Changelog from {{ start_version }} to {{ end_version }}
+
+{% if cut_time %}**Cut time**: {{ cut_time }}{% endif %}
+
+{{ render_section("Features", features) }}
+{{ render_section("Improvements", improvements) }}
+{{ render_section("Bugs", bugs) }}
+{{ render_section("No Label", no_label, "Linear tickets without a recognized label (Feature, Improvement, or Bug).") }}
+{{ render_section("No Linear Ticket", no_linear_ticket, "Anything without a linear ticket is listed below.") }}

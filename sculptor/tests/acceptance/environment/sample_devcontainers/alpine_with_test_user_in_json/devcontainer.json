@@ -1,0 +1,9 @@
+{
+    "name": "Alpine with test_user in JSON",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": "."
+    },
+    "workspaceFolder": "/workspace",
+    "containerUser": "test_user"
+}

@@ -1,0 +1,38 @@
+.settingRow {
+  border-bottom: 1px solid var(--gold-4);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.descriptionText {
+  color: var(--gold-11);
+  flex: 1;
+}
+
+.hotkeyRecording {
+  background: var(--green-4);
+  border-radius: 6px;
+  text-align: center;
+  height: 32px;
+  color: var(--green-11);
+}
+
+.hotkeySet {
+  background: var(--gold-4);
+  border-radius: 6px;
+  min-width: 100px;
+  height: 32px;
+  color: var(--gold-12);
+}
+
+.hotkeyClear {
+  padding: 4px;
+  color: var(--gold-10);
+
+  &:hover {
+    color: var(--gold-12);
+    background: var(--gold-5);
+  }
+}

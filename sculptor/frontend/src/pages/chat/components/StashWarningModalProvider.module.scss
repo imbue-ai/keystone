@@ -1,0 +1,25 @@
+.repoStatus {
+  background-color: var(--gold-3);
+  border-radius: var(--radius-2);
+}
+
+.inlineCode {
+  display: inline;
+  font-size: 0.85em !important;
+  padding: 0.2em 0.4em;
+  background-color: var(--gold-4);
+  border-radius: 3px;
+}
+
+.proceedButton {
+  background-color: var(--accent-12);
+  color: var(--amber-1);
+  &.willStash {
+    background-color: var(--red-9);
+    &:disabled {
+      background-color: var(--red-8);
+      color: var(--gray-3);
+    }
+  }
+
+}

@@ -1,0 +1,78 @@
+
+.modalContainer {
+  position: fixed;
+  top: 38%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(var(--main-content-width), 90vw);
+  max-height: min(70vh, 350px);
+  border-radius: var(--radius-5) !important;
+  box-shadow: 0 10px 30px rgba(0,0,0,.15), 0 2px 8px rgba(0,0,0,.08);
+  background: var(--gold-1);
+  z-index: 1001;
+  overflow: hidden;
+
+  display: flex;
+  flex-direction: column;
+}
+
+.panel {
+  position: relative;
+  border: 1px solid var(--gold-5);
+  border-radius: var(--radius-5);
+  cursor: text;
+
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.panelBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  border-bottom: 1px solid var(--gold-5);
+}
+
+.searchField {
+  box-shadow: none !important;
+  outline: none !important;
+  border-radius: 0;
+  font-size: 16px;
+  background: transparent;
+
+  input {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+}
+
+
+.branchBadge {
+  font-family: "JetBrains Mono"
+}
+
+.taskTitle {
+  color: var(--neutral-12, #3B352B);
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.selectedTask {
+  background: var(--gold-3);
+}
+
+.footer {
+  border-top: 1px solid var(--gold-5);
+  color: var(--gold-10);
+  font-weight: 500;
+}
+
+.taskItem {
+  border-radius: var(--radius-3);
+  cursor: pointer;
+}
+
+.noTasksFound {
+  color: var(--gold-10);
+}

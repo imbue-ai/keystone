@@ -1,0 +1,127 @@
+.container {
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+.title {
+  color: var(--gray-12);
+}
+
+.navigationControls {
+  flex-shrink: 0;
+}
+
+.formSection {
+  border: 1px solid var(--gray-6);
+  border-radius: 8px;
+  padding: 16px;
+  background-color: var(--gray-2);
+}
+
+.suggestionsListContainer {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--gray-6);
+  border-radius: 4px;
+  padding: 8px;
+  background-color: var(--gray-1);
+}
+
+.suggestionListItem {
+  border: 1px solid var(--gray-5);
+  border-radius: 4px;
+  background-color: var(--gray-2);
+  transition: background-color 0.2s;
+  cursor: pointer;
+
+  &:hover {
+    background-color: var(--gray-3);
+  }
+}
+
+.suggestionTitle {
+  flex: 1;
+  color: var(--gray-12);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copyButton {
+  flex-shrink: 0;
+  cursor: pointer;
+  opacity: 0.7;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+.jsonSection {
+  border: 1px solid var(--gray-6);
+  border-radius: 8px;
+  padding: 16px;
+  background-color: var(--gray-2);
+}
+
+.jsonDisplay {
+  max-height: 400px;
+  overflow: auto;
+  border: 1px solid var(--gray-6);
+  border-radius: 4px;
+  background-color: var(--gray-1);
+}
+
+.jsonPre {
+  margin: 0;
+  padding: 12px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--gray-12);
+}
+
+// Copy exact tooltip styling from Suggestions panel
+:global(.rt-TooltipContent:has([data-suggestion-json-tooltip="true"])) {
+  background: var(--color-background) !important;
+  border: 2px solid var(--gold-6) !important;
+  color: var(--gold-12) !important;
+  border-radius: var(--radius-3) !important;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+  animation: none !important;
+  transition: none !important;
+  pointer-events: auto !important;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    bottom: -8px;
+    left: -8px;
+    pointer-events: none;
+    z-index: -1;
+  }
+}
+
+:global(.rt-TooltipContent:has([data-suggestion-json-tooltip="true"]) ~ .rt-TooltipArrow),
+:global(.rt-TooltipContent:has([data-suggestion-json-tooltip="true"]) .rt-TooltipArrow) {
+  display: none !important;
+}
+
+.tagBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 2px;
+}
+
+.tagRemoveButton {
+  cursor: pointer;
+  opacity: 0.6;
+  padding: 2px;
+
+  &:hover {
+    opacity: 1;
+  }
+}

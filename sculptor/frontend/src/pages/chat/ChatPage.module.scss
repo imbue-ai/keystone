@@ -1,0 +1,75 @@
+.container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+
+  // Default artifact background context (gold-2 base)
+  --artifact-base-bg: var(--gold-2);
+  --artifact-darker-bg: var(--gold-3);
+  --artifact-lighter-bg: var(--gold-1);
+  --artifact-border-color: var(--gold-4);
+}
+
+.panelGroup {
+  flex-grow: 1;
+  min-height: 0;
+  height: 0;
+}
+
+.resizeHandle {
+  width: 1px;
+  background-color: var(--gold-5);
+  transition: background-color 0.2s;
+  cursor: col-resize;
+
+  &:hover {
+    background-color: var(--gold-6);
+  }
+
+  &:active {
+    background-color: var(--gold-7);
+  }
+}
+
+.narrowLayoutContent {
+  flex-grow: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--gold-3);
+  display: flex;
+  flex-direction: column;
+  height: 0;
+
+  // Override artifact background context for narrow layout
+  --artifact-base-bg: var(--gold-3);
+  --artifact-darker-bg: var(--gold-4);
+  --artifact-lighter-bg: var(--gold-2);
+  --artifact-border-color: var(--gold-5);
+}
+
+.narrowTabsList {
+  flex-shrink: 0;
+  justify-content: center;
+  padding: 0 var(--space-3);
+  overflow-x: auto;
+  background: var(--gold-3);
+}
+
+.narrowTabContent {
+  flex-grow: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.innerBox {
+  justify-self: center;
+}
+
+.scrollArea {
+  height: 100%;
+  width: 100%;
+
+  > div > div {
+    width: initial
+  }
+}

@@ -1,0 +1,215 @@
+.checksContainer {
+  background: var(--gold-2);
+  padding: 0 4px 8px 4px;
+  border-radius: var(--radius-2);
+  position: relative;
+}
+
+.checksHeader {
+  padding: 0 0 4px 0;
+  margin-top: -4px;
+  position: relative;
+  z-index: 10;
+}
+
+.navigationControls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 8px;
+}
+
+.navButton {
+  height: 25px !important;
+  min-height: 25px !important;
+  max-height: 25px !important;
+  line-height: 25px !important;
+  padding: 0 4px !important;
+  color: var(--gray-11);
+  background: var(--use-button-bg);
+
+  &:hover {
+    background: var(--gold-5);
+    color: var(--gray-12);
+  }
+}
+
+.navDropdownButton {
+  height: 25px !important;
+  min-height: 25px !important;
+  max-height: 25px !important;
+  line-height: 25px !important;
+  padding: 0 8px !important;
+  color: var(--gray-11);
+  min-width: 40px;
+  background: var(--use-button-bg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  &:hover {
+    background: var(--gold-5);
+    color: var(--gray-12);
+  }
+}
+
+.dropdownIcon {
+  width: 12px;
+  height: 12px;
+  color: var(--gray-11);
+}
+
+.dropdownSpacer {
+  width: 6px;
+  height: 24px;
+}
+
+.checkItem {
+  border-radius: var(--radius-2);
+  background: var(--gold-2);
+  position: relative;
+}
+
+.statusIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+}
+
+.checkIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.checkCircle {
+  width: 12px;
+  height: 12px;
+  background: var(--green-3);
+  border: 1px solid var(--green-9);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.checkMark {
+  color: var(--green-9);
+  width: 8px;
+  height: 8px;
+}
+
+.failedIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.failedCircle {
+  width: 12px;
+  height: 12px;
+  background: var(--red-3);
+  border: 1px solid var(--red-9);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.failedMark {
+  color: var(--red-9);
+  font-size: 8px;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.outputBox {
+  background: var(--gray-2);
+  border: 1px solid var(--gray-4);
+  border-radius: var(--radius-2);
+  max-height: 400px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.idleIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.idleCircle {
+  width: 12px;
+  height: 12px;
+  background: var(--gold-4);
+  border: 1px solid var(--gray-8);
+  border-radius: 50%;
+}
+
+.checkTitle {
+  color: var(--gray-12);
+  line-height: 1.4;
+  font-size: 12px;
+}
+
+.commandText {
+  color: var(--gray-9);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.noChecks {
+  min-height: 200px;
+}
+
+.checksBadge {
+  font-weight: 600;
+}
+
+.actionButton {
+  background: transparent;
+  color: var(--gold-9);
+  border: none;
+  padding: 4px;
+  min-width: 24px;
+  height: 24px;
+
+  &:hover {
+    background: transparent;
+    color: var(--gold-12);
+  }
+
+  &:disabled {
+    color: var(--gray-6);
+    cursor: not-allowed;
+  }
+}
+
+.tabCheckIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tabCheckCircle {
+  width: 14px;
+  height: 14px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tabCheckMark {
+  width: 8px;
+  height: 8px;
+  color: currentColor;
+}

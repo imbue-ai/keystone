@@ -1,0 +1,16 @@
+.background {
+  background: var(--gold-3);
+}
+
+.betaLabel {
+  padding-left: var(--space-2);
+  font-size: var(--font-size-2);
+  font-weight: 700;
+  color: var(--gold-7);
+  align-self: flex-start;
+  margin-top: 0px;
+}
+
+.shutdownLabel {
+  color: var(--gold-7);
+}

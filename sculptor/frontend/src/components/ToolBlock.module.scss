@@ -1,0 +1,75 @@
+
+.header {
+  border-radius: var(--radius-2, 4px) var(--radius-2, 4px) 0 0;
+  border: 1px solid var(--gold-4, #EAE6DB);
+  background: var(--gold-2, #FAF9F2);
+  font-family: var(--mono-font-family);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.body {
+  border-radius: 0px 0px var(--radius-2, 4px) var(--radius-2, 4px);
+  border: 1px solid var(--gold-4, #EAE6DB);
+  background: var(--gold-4, #EAE6DB);
+  color: var(--gold-12, #3B352B);
+  font-family: var(--mono-font-family);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 500;
+  white-space: pre-wrap;
+  overflow: hidden;
+}
+
+.error {
+  border-radius: 0px 0px var(--radius-2, 4px) var(--radius-2, 4px);
+  border: 1px solid var(--gold-4, #EAE6DB);
+  background: var(--gold-4, #EAE6DB);
+  color: var(--gold-12, #3B352B);
+  font-family: var(--mono-font-family);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 500;
+}
+
+.scrollArea {
+  max-height: 200px;
+  min-height: 0;
+}
+
+.htmlContentModal {
+  height: 90vh;
+  width: 90vw;
+  max-height: none;
+  max-width: none;
+  gap: var(--space-4);
+}
+
+.dialogContent {
+  gap: 18px;
+}
+
+.contentScrollArea {
+  height: 100%;
+  width: 100%;
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 0;
+}
+
+.iframeContainer {
+  @extend .body;
+  height: 100%;
+  width: 100%;
+}
+
+.htmlContentIframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  display: block;
+  overflow: auto;
+  max-height: 100%;
+  min-height: 0;
+}

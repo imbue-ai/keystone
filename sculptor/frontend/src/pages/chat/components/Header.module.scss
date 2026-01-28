@@ -1,0 +1,182 @@
+.headerContainer {
+  border-bottom: 1px solid var(--gold-5, #E1DCCF);
+  background: var(--gold-3, #F2F0E7);
+  app-region: drag;
+  overflow: hidden;
+
+  button {
+    app-region: no-drag;
+  }
+}
+
+.mergeButton {
+  background: var(--gold-9, #F2F0E7);
+  border: none;
+  box-shadow: none;
+
+  &:hover {
+    background: var(--gold-8, #E1DCCF);
+  }
+
+}
+
+.nonDraggable {
+  app-region: no-drag;
+}
+
+.titleText {
+  font-weight: 500;
+}
+
+.forkIcon {
+  stroke-width: 1.2px;
+  stroke: var(--gold-9);
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+.branchBadge {
+  font-family: var(--mono-font-family);
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+  font-size: 13px;
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &:hover {
+    background: var(--gold-5);
+  }
+}
+
+.copyIcon {
+  width: 12px;
+  height: 12px;
+}
+
+.copiedTooltip {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 4px;
+  background: var(--gold-9);
+  color: var(--gold-1);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  animation: fadeIn 0.2s ease;
+  z-index: 10;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: 4px solid var(--gold-9);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+
+.reviewTabBar {
+  width: 280px;
+  flex-shrink: 0;
+  align-items: center;
+  background-image: linear-gradient(90deg, var(--gold-a3) 0%, var(--gold-a3) 100%);
+  border-radius: var(--Radius-2-max, 4px);
+
+  > div::before {
+    background-color: var(--gold-1);
+    box-shadow: 0 0 0 1px var(--gold-a4);
+  }
+
+}
+
+
+.diffReviewModal {
+  height: 90vh;
+  width: 90vw;
+  max-height: none;
+  max-width: none;
+  overflow: hidden;
+  gap: var(--space-4);
+}
+
+
+.dialogContent {
+  gap: 18px;
+}
+
+.titleTextBuilding {
+  font-weight: 400;
+  color: var(--gold-8);
+}
+
+.left {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.fixed {
+  flex: 0 0 auto;
+}
+
+.shrinkP1, .shrinkP2 {
+  flex: 0 1 max-content;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.shrinkP1 {
+  flex-shrink: 10000;
+}
+
+.shrinkP2 {
+  flex-shrink: 1;
+}
+
+.branchBadgeDiv {
+  position: relative;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.branchBadgeBuilding {
+  font-family: var(--mono-font-family);
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+  font-size: 13px;
+  color: var(--gold-8);
+
+  &:hover {
+    background: var(--gold-5);
+  }
+}

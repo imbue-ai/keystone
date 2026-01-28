@@ -1,0 +1,9 @@
+{
+    "name": "Missing Dockerfile Test",
+    "build": {
+        "dockerfile": "NonExistentDockerfile",
+        "context": "."
+    },
+    "workspaceFolder": "/workspace",
+    "remoteUser": "root"
+}

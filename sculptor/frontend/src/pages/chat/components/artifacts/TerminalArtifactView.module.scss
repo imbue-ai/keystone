@@ -1,0 +1,64 @@
+.terminalContainer {
+  height: calc(100% + 2 * var(--space-4));
+  display: flex;
+  flex-direction: column;
+  // Compensate for parent padding
+  margin: calc(-1 * var(--space-4));
+  max-width: 100vw;
+  box-sizing: border-box;
+}
+
+ // TODO: update this color to
+.iframeWrapper {
+  flex: 1;
+  padding: 0 calc(var(--space-4) - 4px);
+  display: flex;
+
+  .lightMode {
+    background-color: #FDFDFC;
+  }
+  .darkMode {
+    background-color: #1A1814;
+  }
+}
+
+
+.terminalIframe {
+  flex: 1;
+  width: 100%;
+  border: none;
+  --right-clip-margin: 15px;
+  width: calc(100% + var(--right-clip-margin));
+  clip-path: inset(0 var(--right-clip-margin) 0 0);
+}
+
+.infoBarWrapper {
+  padding: 12px var(--space-4);
+  padding-right: calc(var(--space-4) + 20px);
+  box-sizing: border-box;
+  max-width: 100%;
+
+  .lightMode {
+    background-color: #FDFDFC;
+  }
+  .darkMode {
+    background-color: #1A1814;
+  }
+}
+
+.infoBar {
+  background-color: var(--artifact-base-bg, var(--gold-2));
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--artifact-border-color, var(--gold-5));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+  color: var(--gold-11);
+
+  button {
+    background-color: var(--artifact-darker-bg, var(--gold-4));
+    color: var(--gold-11);
+  }
+}

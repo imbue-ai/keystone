@@ -1,0 +1,47 @@
+// https://app.eraser.io/workspace/WCyr09pLvuGTsP898rPj?origin=share
+
+// Define groups and nodes
+User [icon: person]
+
+
+sculptor server {
+  web module {
+    create task [icon: route]
+    stream route [icon: route]
+  }
+
+  DB [icon: database]
+
+  task_service [color: red] {
+    task spawner [icon: aws-auto-scaling]
+    Worker1 [icon: aws-ec2]
+    Worker2 [icon: aws-ec2]
+    Worker3 [icon: aws-ec2]
+  }
+}
+
+environment {
+  Agent {
+    tmux {
+      claude code {
+        imbue_mcp {
+          verify [icon: magnifying-glass]
+          pytest [icon: test-tube]
+        }
+        other_mcp {
+
+        }
+      }
+    }
+  }
+}
+
+
+// Define connections
+User > create task
+create task > DB > task spawner
+task spawner > Worker1, Worker2, Worker3
+User < stream route
+Worker3 <> environment
+Worker3 <> Agent
+Worker3 > stream route

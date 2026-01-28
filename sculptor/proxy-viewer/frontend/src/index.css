@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Remove all animations for a snappy, responsive feel */
+
+@layer base {
+  body {
+    @apply bg-white text-gray-900 antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  }
+
+  /* Clean minimal scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-gray-300 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-400;
+  }
+}
+
+/* JSON viewer styles */
+.w-json-view {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace !important;
+  font-size: 0.75rem !important;
+  line-height: 1.4 !important;
+}
+
+/* Subtle animations for new content */
+@keyframes subtle-pulse {
+  0% {
+    background-color: rgba(59, 130, 246, 0.1);
+    border-color: rgba(59, 130, 246, 0.7);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+  }
+  50% {
+    background-color: rgba(59, 130, 246, 0.06);
+    border-color: rgba(59, 130, 246, 0.45);
+    box-shadow: 0 0 0 1.5px rgba(59, 130, 246, 0.15);
+  }
+  100% {
+    background-color: transparent;
+    border-color: rgb(209, 213, 219);
+    box-shadow: none;
+  }
+}
+
+@keyframes gentle-fade {
+  0% {
+    opacity: 0.65;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.animate-new-trace {
+  animation: gentle-fade 0.5s ease-out;
+}
+
+.animate-new-turn {
+  animation: subtle-pulse 2s ease-out;
+}

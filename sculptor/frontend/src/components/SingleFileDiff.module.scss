@@ -1,0 +1,124 @@
+.singleFileDiffHeader {
+  border: 1px solid var(--artifact-border-color, var(--gold-4, #e8e8ec));
+  border-top-right-radius: var(--radius-2);
+
+  border-top-left-radius: var(--radius-2);
+  background: var(--artifact-base-bg, var(--gold-2, #f9f9fb));
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  color: var(--gray-12, #1c2024);
+  width: 100%;
+
+  font-family: var(--mono-font-family);
+  font-size: var(--Typography-Font-size-2, 14px);
+  font-style: normal;
+  font-weight: 500;
+  line-height: var(--Typography-Line-height-2, 20px);
+
+  &:hover {
+    background: var(--artifact-darker-bg, var(--gold-3, #f2f2f5));
+  }
+}
+
+.chevronBox {
+  display: flex;
+  align-items: center;
+}
+
+.copyButton {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+.singleFileDiffHeader:hover .copyButton {
+  opacity: 1;
+}
+
+.diffContent {
+  border-left: 1px solid var(--gold-4, #e8e8ec);
+  border-right: 1px solid var(--gold-4, #e8e8ec);
+  border-bottom: 1px solid var(--gold-4, #e8e8ec);
+  font-family: "JetBrains Mono";
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
+  border-bottom-right-radius: var(--radius-2);
+  border-bottom-left-radius: var(--radius-2);
+}
+
+.collapsed {
+  border-bottom-right-radius: var(--radius-3);
+  border-bottom-left-radius: var(--radius-3);
+}
+
+.gapHeader {
+  background: var(--artifact-darker-bg, var(--gold-3, #f2f2f5));
+  height: 20px;
+  overflow: hidden;
+}
+
+.expandButton {
+  background: var(--gold-5, #e0e1e6);
+  // TODO: figure out how to set the width without hard coding it
+  width: 60px;
+  border-radius: 0;
+}
+
+.darkGreen {
+  color: var(--green-11, #218358);
+}
+
+.darkRed {
+  color: var(--red-11, #ce2c31);
+}
+
+.diffIcon {
+  margin-top: 3px;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.diffLineAdded {
+  background: var(--green-3, #e6f6eb);
+}
+
+.diffLineContext {
+  background: var(--gold-1)
+}
+
+.diffLineRemoved {
+  background: var(--red-3, #feebec);
+}
+
+.diffLineGutter {
+  user-select: none;
+}
+
+.diffLineGutterAdded {
+  background: var(--green-5, #c4e8d1);
+}
+
+.diffLineGutterRemoved {
+  background: var(--red-5, #ffcdce);
+}
+
+.diffLineContent {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.dropdownMenu {
+  position: relative;
+  left: -65px;
+  top: 20px;
+}
+
+.filenameAnnotation {
+  color: var(--gold-9);
+}

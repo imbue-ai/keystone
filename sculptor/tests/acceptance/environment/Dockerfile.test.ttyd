@@ -1,0 +1,23 @@
+# start with base image
+FROM ubuntu:20.04
+
+# install system dependencies
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends apt-utils build-essential cmake git libjson-c-dev libwebsockets-dev curl bash-completion less nano vim wget tmux jq htop rsync ca-certificates
+
+# Update CA certificates to fix SSL verification issues
+RUN update-ca-certificates
+
+# RUN mkdir -p /root/.tmux/plugins
+# RUN git clone https://github.com/tmux-plugins/tmux-resurrect /root/.tmux/plugins/tmux-resurrect/
+
+# Install Node.js
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && apt-get install -y nodejs
+
+# Install Claude
+RUN npm install -g @anthropic-ai/claude-code
+
+RUN git clone https://github.com/tsl0922/ttyd.git && cd ttyd && mkdir build && cd build && cmake .. && make && make install
+
+
+WORKDIR /code

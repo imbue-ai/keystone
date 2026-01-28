@@ -1,0 +1,286 @@
+# Builds an image with Imbue's Linux control plane installed via Nix into /imbue/nix/store, and Imbue's python tools in /imbue.
+# This is useful as a place from which to `COPY --from /imbue` into another image or volume.
+
+# Sets up:
+#  /imbue/: Imbue's control plane (Read Only, volume mounted)
+#    /imbue/nix/store: The entire Nix store that we depend on.
+#    /imbue/nix_bin: Symlinks to binaries in /nix/store, all in one place, ready for $PATH.  Get claude, git, bash, ncdu, less, strace, etc.
+#    /imbue/bin: Imbue's extra things we want on our $PATH.
+#    /imbue/imbue_env.sh: Environment variables required to make things work.
+#    /imbue/.venv: A Python environment where Imbue's CLIs are installed.
+#  /nix: A symlink pointing at /imbue/nix
+
+# It's expected to have PATH="/imbue/bin:/imbue/nix_bin" when running the Imbue control plane.
+
+# Tips for debugging:
+# * Build just the first stage: `docker build --target nix_fetcher -f Dockerfile.base_nix .`
+
+ARG _IMBUE_BUILT_FROM_GIT_HASH=unknown
+ARG _IMBUE_BUILT_FROM_GIT_BRANCH=unknown
+ARG _IMBUE_BUILT_BY_USER=unknown
+ARG _IMBUE_BUILT_AT_TIMESTAMP=unknown
+ARG _IMBUE_BUILT_AT_LAST_COMMIT_DATE=unknown
+ARG _IMBUE_BUILT_AT_LAST_COMMIT_TIMESTAMP=unknown
+ARG _IMBUE_BUILT_ON_HOSTNAME=unknown
+
+# Keep this in sync with Dockerfile.unbaked.
+FROM ubuntu:24.04@sha256:7c06e91f61fa88c08cc74f7e1b7c69ae24910d745357e0dfe1d2c0322aaf20f9 AS nix_fetcher
+# Nix prerequisites.
+RUN apt-get update && apt-get install -y curl sudo xz-utils
+
+RUN useradd -m imbue_nix_user
+RUN sudo mkdir -m 0755 /nix && chown imbue_nix_user /nix
+
+USER imbue_nix_user
+WORKDIR /home/imbue_nix_user
+
+# Pin a specific Nixpkgs version of nixpkgs-unstable, to get a recent Claude Code.
+# See: https://github.com/NixOS/nixpkgs/tags
+ARG NIXPKGS_VERSION=97eb7ee0da337d385ab015a23e15022c865be75c?narHash=sha256-5hYhxIpco8xR%2BIpP3uU56%2B4%2BBw7mf7EMyxS/HqUYHQY%3D
+ENV NIXPKGS=github:NixOS/nixpkgs/${NIXPKGS_VERSION}
+
+# Useful:
+# $ nix --extra-experimental-features nix-command --extra-experimental-features flakes flake metadata nixpkgs
+# Resolved URL:  github:NixOS/nixpkgs/nixpkgs-unstable
+# Locked URL:    github:NixOS/nixpkgs/97eb7ee0da337d385ab015a23e15022c865be75c?narHash=sha256-5hYhxIpco8xR%2BIpP3uU56%2B4%2BBw7mf7EMyxS/HqUYHQY%3D
+# Description:   A collection of packages for the Nix package manager
+# Path:          /nix/store/0nhqsm3lzxj71a9asqy05l1v9y7pqfc1-source
+# Revision:      97eb7ee0da337d385ab015a23e15022c865be75c
+# Last modified: 2025-08-19 04:17:39
+# Fingerprint:   91bc76537a5f3907d05e516ed017a99a108ac48458400e59ac58c56c552cfae6
+
+# Configure Nix.
+#
+# Without filter-syscalls = false, if you try to build with --platform=linux/amd64 on macos, you'll get:
+# ERROR: unable to load seccomp BPF program: Invalid argument
+# See: https://github.com/NixOS/nix/issues/5258
+RUN mkdir -p ~/.config/nix && \
+    echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf && \
+    echo "filter-syscalls = false" >> ~/.config/nix/nix.conf
+
+# Install Nix.
+RUN curl -L https://nixos.org/nix/install | sh -s -- --no-daemon
+ENV PATH="/home/imbue_nix_user/.nix-profile/bin:$PATH"
+
+# Load our tools into /nix/store.
+
+# List below is sorted by likelihood of removal (lowest to highest).
+# Useful to search for packages: https://search.nixos.org/packages?channel=25.05
+RUN nix build ${NIXPKGS}#coreutils --out-link ~/nix_symlinks/coreutils
+RUN nix build ${NIXPKGS}#getent --out-link ~/nix_symlinks/getent
+RUN nix build ${NIXPKGS}#which --out-link ~/nix_symlinks/which
+RUN nix build ${NIXPKGS}#git --out-link ~/nix_symlinks/git
+# When we force this version of python3, we end up with two different Nix pythons.
+# imbue-verify does not currently work with python313:
+# https://imbue-ai.slack.com/archives/C0799HVGR7W/p1755563509655489?thread_ts=1755558207.830149&cid=C0799HVGR7W
+RUN nix build ${NIXPKGS}#python311 --out-link ~/nix_symlinks/python311
+RUN nix build ${NIXPKGS}#uv --out-link ~/nix_symlinks/uv
+RUN nix build ${NIXPKGS}#tmux --out-link ~/nix_symlinks/tmux
+RUN nix build ${NIXPKGS}#openssh --out-link ~/nix_symlinks/openssh
+RUN nix build ${NIXPKGS}#mutagen --out-link ~/nix_symlinks/mutagen
+RUN nix build ${NIXPKGS}#python3Packages.watchdog --out-link ~/nix_symlinks/watchdog
+# TODO: Are we actually invoking delta?
+# delta: https://github.com/dandavison/delta
+RUN nix build ${NIXPKGS}#delta --out-link ~/nix_symlinks/delta
+RUN nix build ${NIXPKGS}#ttyd --out-link ~/nix_symlinks/ttyd
+RUN nix build ${NIXPKGS}#nginx --out-link ~/nix_symlinks/nginx
+# shadow provides groupadd
+RUN nix build ${NIXPKGS}#shadow --out-link ~/nix_symlinks/shadow
+RUN nix build ${NIXPKGS}#bash --out-link ~/nix_symlinks/bash
+# Ubuntu Docker images don't include certs by default, and without them, Claude Code can't talk to the Anthropic API endpoint.
+RUN nix build ${NIXPKGS}#cacert --out-link ~/nix_symlinks/cacert
+
+# Useful for debugging inside the image.
+RUN nix build ${NIXPKGS}#ncdu --out-link ~/nix_symlinks/ncdu
+RUN nix build ${NIXPKGS}#less --out-link ~/nix_symlinks/less
+RUN nix build ${NIXPKGS}#strace --out-link ~/nix_symlinks/strace
+# TODO: Document why we need libwebsockets or remove.
+RUN nix build ${NIXPKGS}#libwebsockets --out-link ~/nix_symlinks/libwebsockets
+RUN nix build ${NIXPKGS}#curl --out-link ~/nix_symlinks/curl
+
+# These are here to aid copying the control plane from the image into a volume.
+RUN nix build ${NIXPKGS}#rsync --out-link ~/nix_symlinks/rsync
+RUN nix build ${NIXPKGS}#gnutar --out-link ~/nix_symlinks/gnutar
+
+# Unzip because we copy in the source code as a git archive.
+RUN nix build ${NIXPKGS}#unzip --out-link ~/nix_symlinks/unzip
+
+# Installing Claude Code last because it's a big layer and it sometimes seems to break Docker's caching.
+# Without NIXPKGS_ALLOW_UNFREE and --impure (which allows environment variables to influence the build), you'll get something like:
+# error: Package ‘claude-code-1.0.62’ in /nix/store/agbbjxvdcp9dydmrn2hf3s652k547rbc-source/pkgs/by-name/cl/claude-code/package.nix:41 has an unfree license (‘unfree’), refusing to evaluate.
+#
+# At the moment, we use a more recent version of nixpkgs to bundle a more recent version of claude-code without modifying the versions of the rest of the packages.
+ENV CLAUDE_NIXPKGS=github:NixOS/nixpkgs/c38131dc4c2888cab5f38b4862aa330cc53cd306?narHash=sha256-mpLXduSmMGEB%2BnJKSKRezOK2sv%2B2ob8Y6RUaseL2lK0%3D
+RUN NIXPKGS_ALLOW_UNFREE=1 nix build --impure ${CLAUDE_NIXPKGS}#claude-code --out-link ~/nix_symlinks/claude-code
+
+ENV CODEX_NIXPKGS=github:NixOS/nixpkgs/8deb8ae4be11f639f47968d33353d553de08486e?narHash=sha256-1WxGeUxvY4AlsD7yeSrfWiON2RzocatRtdYczqrAkt0%3D
+RUN NIXPKGS_ALLOW_UNFREE=1 nix build --impure ${CODEX_NIXPKGS}#codex --out-link ~/nix_symlinks/codex
+
+# See: https://imbue-ai.slack.com/archives/CSXUS5D8R/p1757097782045809
+RUN nix build ${NIXPKGS}#git-lfs --out-link ~/nix_symlinks/git-lfs
+# findutils supplies xargs, see: https://imbue-ai.slack.com/archives/D07J83PJQMN/p1757366074993889?thread_ts=1757362570.914599&cid=D07J83PJQMN
+RUN nix build ${NIXPKGS}#findutils --out-link ~/nix_symlinks/findutils
+
+RUN nix build ${NIXPKGS}#jq --out-link ~/nix_symlinks/jq
+RUN nix build ${NIXPKGS}#ps --out-link ~/nix_symlinks/ps
+RUN nix build ${NIXPKGS}#gnugrep --out-link ~/nix_symlinks/gnugrep
+# codex's preferred tools
+RUN nix build ${NIXPKGS}#gnused --out-link ~/nix_symlinks/gnused
+RUN nix build ${NIXPKGS}#ripgrep --out-link ~/nix_symlinks/ripgrep
+
+# Note on above:
+# --out-link gives structure with links into the Nix store put into a known place, like:
+# $ ls -l ~/tmux
+#    lrwxrwxrwx 1 imbue_nix_user imbue_nix_user 53 Jul 31 21:06 /home/imbue_nix_user/tmux -> /nix/store/ywcdgf3a2c87am9zw7spnsfrjjc72p08-tmux-3.5a
+# $ ls -l ~/tmux/bin/
+#    -r-xr-xr-x 1 imbue_nix_user imbue_nix_user 1193408 Jan  1  1970 tmux
+
+# ---------------------------------------------------------------------------------
+
+# Copy only the closure needed to run our tools, rather than everything that was used to "nix build" them.
+RUN mkdir -p /tmp/imbue_nix_closure
+RUN cp -r `nix-store --query --requisites ~/nix_symlinks/*` /tmp/imbue_nix_closure/
+
+# Set up a bit of /imbue.
+WORKDIR /imbue
+# Create a common place to put the symlinks.
+RUN mv ~/nix_symlinks /imbue/nix_symlinks
+RUN mkdir /imbue/nix_bin
+
+# /imbue/nix_bin provides a place from which all Nix things can be put on the PATH to expose them.
+WORKDIR /imbue/nix_bin
+RUN for link in /imbue/nix_symlinks/*/bin/*; do ln -s "${link}" .; done
+
+# Copy wheels and set up Python environment (done last to optimize cache)
+WORKDIR /imbue
+USER root
+ENV PATH=/imbue/nix_bin:$PATH
+
+COPY imbue_version.json pyproject.toml uv.lock proxy/claude_code_proxy.py proxy/codex_proxy.py proxy/proxy_utils.py ./
+
+# pyproject.toml is actually a pretty small environment; most of the dependencies come in from the wheels.
+RUN python3 -m venv .venv && \
+    . .venv/bin/activate && \
+    uv sync
+
+# Instead of pushing wheels, we will copy the source files directly.
+# First, copy in the pyproject.toml and uv.lock that define the environment so we can install and cache dependencies.
+COPY build/project-files/ /imbue/workspace/
+
+RUN . .venv/bin/activate && cd workspace && uv sync --only-group control-plane --active --frozen
+
+# TODO: Delete this once nothing depends on it anymore.
+# Set some environment variables that we're going to need.
+# *** PATH ***
+# Put the Imbue tools onto the PATH, before anything that might exist in the user's toolchain.
+# The \$PATH above is so that we don't expand the variable at this point.
+# *** SSL_CERT_FILE ***
+# Without setting SSL_CERT_FILE, if you copy these layers into a vanilla Ubuntu, claude will just hang as it enters an exponential backoff loop trying to connect to Anthropic.
+# It works on alpine, though, which already has the certificates baked in.
+# LD_LIBRARY_PATH:
+# Ughhhh, environment/dependency hell.
+# When we use the /imbue/nix_bin/uv to pip install our Imbue wheels, the numpy that gets pulled in at that point doesn't know how to find Nix's libstdc++.
+# Figuring out this incantation was hard, and it feels brittle!
+# See also this thing that I don't think we want to use: https://github.com/pyproject-nix/uv2nix
+# Without this environment variable, you'll see:
+# ImportError: libstdc++.so.6: cannot open shared object file: No such file or directory
+# TODO: Make the PATH more precise for specific tasks.  For example, we don't want all of /imbue/nix_bin on the PATH when claude runs.
+RUN \
+    echo "export SSL_CERT_FILE=/imbue/nix_symlinks/cacert/etc/ssl/certs/ca-bundle.crt" >> /imbue/imbue_env.sh && \
+    echo "export LD_LIBRARY_PATH=$(nix-store --query --requisites /imbue/nix_symlinks/python311 | grep '[-]gcc-14.3.0-lib$')/lib" >> /imbue/imbue_env.sh && \
+    echo "Environment configured".
+
+
+# The new way.  Keep every variable in its own file so that each can be loaded separately.
+# New code won't depend on this until we've had it in circulation for a while, though.
+# imbue-cli.sh needs SSL_CERT_FILE because it runs claude.
+WORKDIR /imbue/env
+RUN echo "export PATH=/imbue/bin:/imbue/nix_bin" > /imbue/env/PATH_for_control_plane.sh
+RUN echo "export SSL_CERT_FILE=/imbue/nix_symlinks/cacert/etc/ssl/certs/ca-bundle.crt" > /imbue/env/SSL_CERT_FILE.sh
+RUN echo "export LD_LIBRARY_PATH=$(nix-store --query --requisites /imbue/nix_symlinks/python311 | grep '[-]gcc-14.3.0-lib$')/lib" > /imbue/env/LD_LIBRARY_PATH.sh
+RUN echo "source /imbue/env/SSL_CERT_FILE.sh" > /imbue/env/env_for_claude.sh
+RUN echo "source /imbue/env/LD_LIBRARY_PATH.sh" > /imbue/env/env_for_imbue_cli.sh && \
+    echo "source /imbue/env/SSL_CERT_FILE.sh" >> /imbue/env/env_for_imbue_cli.sh
+
+
+##########################################################################################
+# Stage 2: Copy only the useful things from /imbue/nix/store and /imbue into a new image.
+# Doing this takes the image from 11GB to 1.5 GB.
+# https://hub.docker.com/_/alpine
+FROM alpine:3.22.1@sha256:4bcff63911fcb4448bd4fdacec207030997caf25e9bea4045fa6c8c44de311d1 AS alpine_stage
+
+# This base image above doesn't really matter -- we're only using this image as a container to hold these files and copy them out from.
+# But using alpine helps us check that things work in a very bare-bones image.
+USER root
+# Put the useful things from /imbue/nix/store into a new image.
+COPY --from=nix_fetcher /imbue /imbue
+COPY --from=nix_fetcher /tmp/imbue_nix_closure /imbue/nix/store
+
+# Create symlink from /nix to /imbue/nix
+RUN ln -sf /imbue/nix /nix
+ENV _IMBUE_ORIGINAL_PATH=$PATH
+# All we're allowed to depend on.
+ENV PATH=/imbue/bin:/imbue/nix_bin
+
+# The file control-plane-src.zip will have been created in build-image.sh with something like: `git archive --format=zip -o control-plane-src.zip HEAD imbue imbue_core imbue_cli imbue_tools imbue_verify imbue_retrieve`
+COPY build/control-plane-src.zip /imbue/workspace/control-plane-src.zip
+RUN cd /imbue/workspace && unzip -o control-plane-src.zip && rm control-plane-src.zip
+
+# Re-run to pick up the source code. This will e.g. make /imbue/.venv/bin/imbue-cli work.
+RUN . /imbue/.venv/bin/activate && cd /imbue/workspace && uv sync --only-group control-plane --active --frozen
+
+COPY imbue-cli.sh /imbue/bin/
+RUN chmod +x /imbue/bin/imbue-cli.sh
+
+COPY check_tool_readiness.sh /imbue/bin/check_tool_readiness.sh
+RUN chmod +x /imbue/bin/check_tool_readiness.sh
+
+# Helps ensure that this will actually run correctly, even in an otherwise empty alpine.
+# If this fails, you might not have LD_LIBRARY_PATH set correctly, see above.
+# This string might not be right anymore: "gcc-14.3.0-lib"
+# One way to figure out the right version is to go into the nix_fetcher stage and run:
+#
+RUN imbue-cli.sh --help
+RUN /imbue/nix_bin/claude --version
+RUN /imbue/nix_bin/codex --version
+
+ARG _IMBUE_BUILT_FROM_GIT_HASH
+ARG _IMBUE_BUILT_FROM_GIT_BRANCH
+ARG _IMBUE_BUILT_BY_USER
+ARG _IMBUE_BUILT_AT_LAST_COMMIT_DATE
+ARG _IMBUE_BUILT_AT_TIMESTAMP
+ARG _IMBUE_BUILT_AT_LAST_COMMIT_TIMESTAMP
+ARG _IMBUE_BUILT_ON_HOSTNAME
+
+# Fail if "dirty" is in GIT_HASH.
+# RUN if echo "$_IMBUE_BUILT_FROM_GIT_HASH" | /bin/grep -q "dirty"; then echo "Git tree is dirty: $_IMBUE_BUILT_FROM_GIT_HASH"; exit 1; fi
+
+# Echo the build info into a JSON file at /imbue/version.json.
+RUN cat > /imbue/version.json <<EOF
+{
+  "_IMBUE_BUILT_FROM_GIT_HASH": "${_IMBUE_BUILT_FROM_GIT_HASH}",
+  "_IMBUE_BUILT_FROM_GIT_BRANCH": "${_IMBUE_BUILT_FROM_GIT_BRANCH}",
+  "_IMBUE_BUILT_AT_TIMESTAMP": "${_IMBUE_BUILT_AT_TIMESTAMP}",
+  "_IMBUE_BUILT_AT_LAST_COMMIT_DATE": "${_IMBUE_BUILT_AT_LAST_COMMIT_DATE}",
+  "_IMBUE_BUILT_AT_LAST_COMMIT_TIMESTAMP": "${_IMBUE_BUILT_AT_LAST_COMMIT_TIMESTAMP}",
+  "_IMBUE_BUILT_BY_USER": "${_IMBUE_BUILT_BY_USER}",
+  "_IMBUE_BUILT_ON_HOSTNAME": "${_IMBUE_BUILT_ON_HOSTNAME}"
+}
+EOF
+
+# Set environment variable for git hash that can be used by downstream images.
+ENV _IMBUE_BUILT_FROM_GIT_HASH=${_IMBUE_BUILT_FROM_GIT_HASH}
+ENV _IMBUE_BUILT_FROM_GIT_BRANCH=${_IMBUE_BUILT_FROM_GIT_BRANCH}
+ENV _IMBUE_BUILT_AT_TIMESTAMP=${_IMBUE_BUILT_AT_TIMESTAMP}
+ENV _IMBUE_BUILT_AT_LAST_COMMIT_DATE=${_IMBUE_BUILT_AT_LAST_COMMIT_DATE}
+ENV _IMBUE_BUILT_AT_LAST_COMMIT_TIMESTAMP=${_IMBUE_BUILT_AT_LAST_COMMIT_TIMESTAMP}
+ENV _IMBUE_BUILT_BY_USER=${_IMBUE_BUILT_BY_USER}
+ENV _IMBUE_BUILT_ON_HOSTNAME=${_IMBUE_BUILT_ON_HOSTNAME}
+
+# Assert that the file parses and "unknown" is not in the version.json.
+RUN jq < /imbue/version.json
+
+# Make sure that we don't have "unknown" in the version.json.
+RUN ! grep -q "unknown" /imbue/version.json
+
+CMD ["bash", "--rcfile", "/imbue/imbue_env.sh", "-i"]

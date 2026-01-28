@@ -1,0 +1,2 @@
+# Never commit wheels inside the .devcontainer
+*.whl

@@ -1,0 +1,50 @@
+.tooltipContent {
+  max-width: 300px;
+  padding: 8px;
+  user-select: text;
+}
+
+.tooltipHeader {
+  display: block;
+  color: var(--gold-12);
+  cursor: text;
+}
+
+.copyButton {
+  cursor: pointer;
+  color: var(--gold-9);
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+
+.tooltipDescription {
+  color: var(--gold-11);
+  cursor: text;
+}
+
+.suggestionItemWrapper {
+  cursor: pointer;
+}
+
+.suggestionTitle {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+  color: var(--gold-11);
+  font-weight: 400;
+
+  &.hovered {
+    color: var(--gold-12);
+  }
+}
+
+.clickToUseText {
+  margin-left: 8px;
+  flex-shrink: 0;
+  color: var(--gray-11);
+}

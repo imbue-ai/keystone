@@ -1,0 +1,20 @@
+.dropdownButton {
+  border-radius: var(--radius-2, 4px);
+  box-shadow: none;
+  color: var(--gold-11);
+
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 500;
+
+  overflow: hidden;
+  width: 220px; // Fixed width to prevent resizing
+}
+
+.infoIcon {
+  color: var(--gold-11);
+}
+
+.branchName {
+  width: 180px;
+}

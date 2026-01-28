@@ -1,0 +1,25 @@
+.modalContainer {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 80vw;
+  aspect-ratio: 3200 / 2160;
+  border-radius: var(--radius-5) !important;
+  box-shadow: 0 10px 30px rgba(0,0,0,.15), 0 2px 8px rgba(0,0,0,.08);
+  background: var(--gold-1);
+  z-index: 1001;
+  overflow: hidden;
+
+  display: flex;
+  flex-direction: column;
+}
+
+.overlay {
+  background: rgba(0, 0, 0, 0.5);
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+}

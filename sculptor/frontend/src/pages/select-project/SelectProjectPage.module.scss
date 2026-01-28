@@ -1,0 +1,37 @@
+.container {
+  min-height: 100vh;
+  background-color: var(--gold-3);
+}
+
+.draggable {
+  app-region: drag;
+}
+
+.pathInput {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.selectButton {
+  color: white;
+  border-radius: var(--radius-3);
+  background: var(--gold-9);
+
+  &:hover:not(:disabled) {
+    background-color: var(--gold-10);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+  }
+}
+
+.error {
+  margin-top: 4px;
+}
+
+.primaryText {
+  color: var(--gold-11);
+  font-size: 20px;
+  font-style: normal;
+  font-weight: 500;
+}

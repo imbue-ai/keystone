@@ -1,0 +1,163 @@
+.container {
+  position: relative;
+  width: calc(min(86%, calc(var(--main-content-width) * 86 / 80)));
+  overflow: visible; // Allow system prompt to be visible when expanded
+  margin: 0 auto;
+}
+
+.systemPromptCard {
+  position: absolute;
+  bottom: calc(100% - 12px); // Create overlap with chat input
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  width: 85%;
+  //max-width: 600px;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 6;
+
+  &.visible {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+}
+
+.systemPromptHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px 8px;
+  background: var(--color-background-subtle);
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 12px 12px 0 0;
+
+  button {
+    margin: -4px;
+  }
+}
+
+.systemPromptLabel {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+}
+
+.readOnlyLabel {
+  color: var(--gold-11);
+}
+
+.systemPromptTextarea {
+  width: 95%;
+  resize: none;
+  padding: 16px;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text);
+  min-height: 120px;
+
+  &:focus {
+    outline: none;
+  }
+
+  &::placeholder {
+    color: var(--color-text-tertiary);
+  }
+}
+
+.chatInputCard {
+  position: relative;
+  border-radius: 12px;
+  background: var(--color-background);
+  border: 1px solid var(--gold-6);
+  transition: all 0.3s ease;
+  z-index: 2;
+
+  &:focus-within {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 1px var(--color-primary-alpha);
+  }
+}
+
+.messageInput {
+  flex: 1;
+  border: none;
+  z-index: 0;
+
+  &:focus {
+    outline: none;
+  }
+
+  textarea {
+    min-height: 60px;
+    max-height: 200px;
+  }
+}
+
+.sendButton {
+  background: #3e63dd;
+
+  &:hover {
+    background: #3358d4;
+  }
+
+  &:disabled {
+    background: var(--gold-5);
+    cursor: not-allowed;
+  }
+}
+
+.systemPromptIcon {
+  color: var(--gold-10);
+  border-radius: var(--radius-2);
+}
+
+.enabled {
+  background: var(--gold-5);
+
+  &:hover {
+    background: var(--gold-6);
+  }
+}
+
+.textarea {
+  resize: none;
+  padding: var(--space-3);
+  min-height: 120px;
+  border-radius: var(--radius-4, 8px);
+  border: 2px solid var(--gold-6);
+  background: var(--gold-1, #fff);
+  font-family: var(--default-font-family);
+  font-style: normal;
+  font-weight: 400;
+  font-size: 14px;
+  color: var(--gold-12);
+  z-index: 7;
+
+  &:focus {
+    outline: none;
+    border-color: var(--gold-8);
+  }
+}
+
+.modelSelector {
+  border-radius: var(--radius-2, 4px);
+  color: var(--gold-11, #71624b);
+  box-shadow: none;
+
+  margin-left: 7px;
+
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 500;
+}

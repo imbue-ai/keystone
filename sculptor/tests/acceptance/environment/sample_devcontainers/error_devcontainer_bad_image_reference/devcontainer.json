@@ -1,0 +1,6 @@
+{
+    "name": "Bad Image Reference Test",
+    "image": "this-image-does-not-exist:nonexistent-tag",
+    "workspaceFolder": "/workspace",
+    "remoteUser": "root"
+}

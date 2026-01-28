@@ -1,0 +1,65 @@
+
+.header {
+  background: var(--artifact-base-bg, var(--gold-2, #FAF9F2));
+  border-bottom: 1px solid var(--artifact-border-color, var(--gold-4, #EAE6DB));
+  font-family: var(--mono-font-family);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 600;
+
+  &:hover {
+    background: var(--artifact-darker-bg, var(--gold-3, #F5F2E9));
+  }
+}
+
+.issueTitle {
+  background: none;
+  font-family: var(--default-font-family);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 400;
+}
+
+.body {
+  //border-radius: 0px 0px var(--radius-2, 4px) var(--radius-2, 4px);
+  border: 1px solid var(--artifact-border-color, var(--gold-4, #EAE6DB));
+  background: var(--gold-4, #EAE6DB);
+  color: var(--gold-12, #3B352B);
+  font-family: var(--mono-font-family);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 500;
+  white-space: pre-wrap;
+  overflow: hidden;
+}
+
+.fixLink {
+  color: var(--gold-11, rgba(54, 33, 0, 0.71));
+  font-size: 12px;
+  font-family: var(--default-font-family);
+  font-style: normal;
+  font-weight: 500;
+  text-decoration-line: underline;
+  text-decoration-style: solid;
+  text-decoration-skip-ink: auto;
+  text-decoration-thickness: auto;
+  text-underline-offset: auto;
+  text-underline-position: from-font;
+}
+
+.scrollArea {
+  max-height: 200px;
+  min-height: 0;
+}
+.allIssuesContainer {
+  border-radius: var(--radius-2);
+  border-left: 1px solid var(--artifact-border-color, var(--gold-4, #EAE6DB));
+  overflow: hidden;
+}
+
+.retrieveHighlight {
+  background: rgba(255, 255, 0, 0.1);
+  border: 2px solid #ffd700;
+  padding: 8px;
+  border-radius: var(--radius-2);
+}

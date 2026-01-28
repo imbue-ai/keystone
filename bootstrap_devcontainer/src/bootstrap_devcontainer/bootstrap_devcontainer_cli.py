@@ -1,7 +1,6 @@
 import hashlib
 import json
 import logging
-import shlex
 import subprocess
 import sys
 import time
@@ -174,8 +173,8 @@ def bootstrap(
     project_root: Path | None = typer.Option(
         ..., "--project_root", help="Path to the source project"
     ),
-    test_artifacts_dir: Path | None = typer.Option(
-        None, "--test_artifacts_dir", help="Directory for test artifacts (optional)"
+    test_artifacts_dir: Path = typer.Option(
+        ..., "--test_artifacts_dir", help="Directory for test artifacts"
     ),
     agent_cmd: str | None = typer.Option("claude", "--agent_cmd", help="Agent command to run"),
     max_budget_usd: float | None = typer.Option(
@@ -204,16 +203,20 @@ def bootstrap(
 
     start_time = time.time()
 
-    # Set up cache if requested
-    cache: AgentCache | None = None
-    cache_key: str | None = None
-    if sqlite_cache_dir is not None:
-        cache = AgentCache(sqlite_cache_dir)
-        cache_key = compute_cache_key(prompt, project_root)
+    # Set up runner based on --agent_in_modal flag
+    if agent_in_modal:
+        from bootstrap_devcontainer.modal.modal_runner import ModalAgentRunner
+
+        runner = ModalAgentRunner()
+    else:
+        runner = LocalAgentRunner()
 
     token_spending = {"input": 0, "cached": 0, "output": 0, "cache_creation": 0}
     total_cost_usd = 0.0
     model_name = ""
+    exit_code = 1
+    verification_success = False
+    verification_seconds = 0.0
 
     def check_and_print_status(text: str) -> bool:
         """Check for status/summary markers in text and print in blue if found.
@@ -226,6 +229,7 @@ def bootstrap(
                 # Extract the status message after the marker
                 idx = line.find(STATUS_MARKER)
                 status_msg = line[idx:].strip()
+                logging.debug(f"Found status marker, printing: {status_msg}")
                 print(status_msg, flush=True)
                 found = True
             elif SUMMARY_MARKER in line:
@@ -278,160 +282,114 @@ def bootstrap(
         """Forward agent stderr to our stderr."""
         print(f"Agent stderr: {line}", file=sys.stderr, flush=True)
 
-    # Check cache first
-    cached_value: CacheValue | None = None
-    if cache is not None and cache_key is not None:
-        # Print cache key components
-        dir_hash = compute_directory_hash(project_root)
-        prompt_hash = hashlib.md5(prompt.encode("utf-8")).hexdigest()
-        print(
-            f"Cache lookup - filesystem MD5: {dir_hash}, prompt MD5: {prompt_hash}", file=sys.stderr
-        )
-        cached_value = cache.get(cache_key)
+    try:
+        # Set up cache if requested
+        cache: AgentCache | None = None
+        cache_key: str | None = None
+        if sqlite_cache_dir is not None:
+            cache = AgentCache(sqlite_cache_dir)
+            cache_key = compute_cache_key(prompt, project_root)
 
-    if cached_value is not None:
-        # Cache hit - replay events and restore .devcontainer
-        print(f"CACHE HIT: Replaying cached agent output from {sqlite_cache_dir}", file=sys.stderr)
-        for event in cached_value.events:
-            if event.stream == "stdout":
-                process_stdout_line(event.line)
-            else:
-                process_stderr_line(event.line)
-        extract_devcontainer_tarball(cached_value.devcontainer_tarball, project_root)
-        exit_code = cached_value.return_code
-    else:
-        # Cache miss - run agent
-        if cache is not None:
-            print(f"CACHE MISS: Running agent (cache: {sqlite_cache_dir})", file=sys.stderr)
-        else:
-            print(f"Starting agent with command: {agent_cmd}", file=sys.stderr)
+        # Check cache first
+        cached_value: CacheValue | None = None
+        if cache is not None and cache_key is not None:
+            # Print cache key components
+            dir_hash = compute_directory_hash(project_root)
+            prompt_hash = hashlib.md5(prompt.encode("utf-8")).hexdigest()
+            print(
+                f"Cache lookup - filesystem MD5: {dir_hash}, prompt MD5: {prompt_hash}",
+                file=sys.stderr,
+            )
+            cached_value = cache.get(cache_key)
 
-        event_collector: EventCollector | None = None
-        if cache is not None:
-            event_collector = EventCollector()
-
-        # Select runner based on --agent_in_modal flag
-        if agent_in_modal:
-            from bootstrap_devcontainer.modal.modal_runner import ModalAgentRunner
-
-            runner = ModalAgentRunner()
-        else:
-            runner = LocalAgentRunner()
-
-        try:
-            assert agent_cmd is not None
-            assert max_budget_usd is not None
-
-            for event in runner.run(prompt, project_root, max_budget_usd, agent_cmd):
-                if event_collector is not None:
-                    event_collector.add(event.stream, event.line)
+        if cached_value is not None:
+            # Cache hit - replay events and restore .devcontainer
+            print(
+                f"CACHE HIT: Replaying cached agent output from {sqlite_cache_dir}", file=sys.stderr
+            )
+            for event in cached_value.events:
                 if event.stream == "stdout":
                     process_stdout_line(event.line)
                 else:
                     process_stderr_line(event.line)
+            extract_devcontainer_tarball(cached_value.devcontainer_tarball, project_root)
+            exit_code = cached_value.return_code
+        else:
+            # Cache miss - run agent
+            if cache is not None:
+                print(f"CACHE MISS: Running agent (cache: {sqlite_cache_dir})", file=sys.stderr)
+            else:
+                print(f"Starting agent with command: {agent_cmd}", file=sys.stderr)
 
-            exit_code = runner.exit_code
-        except Exception as e:
-            print(f"Error running agent: {e}", file=sys.stderr)
-            exit_code = 1
+            event_collector: EventCollector | None = None
+            if cache is not None:
+                event_collector = EventCollector()
 
-        # Store in cache if caching is enabled
-        if cache is not None and cache_key is not None and event_collector is not None:
-            tarball = runner.get_devcontainer_tarball()
-            cache_value = CacheValue(
-                events=event_collector.get_events(),
-                devcontainer_tarball=tarball,
-                return_code=exit_code,
-            )
-            cache.set(cache_key, cache_value)
-            cache.close()
+            try:
+                assert agent_cmd is not None
+                assert max_budget_usd is not None
 
-    agent_work_seconds = time.time() - start_time
+                for event in runner.run(prompt, project_root, max_budget_usd, agent_cmd):
+                    if event_collector is not None:
+                        event_collector.add(event.stream, event.line)
+                    if event.stream == "stdout":
+                        process_stdout_line(event.line)
+                    else:
+                        process_stderr_line(event.line)
 
-    # Verification step
-    if not check_docker_available():
-        print(
-            "Skipping local verification because Docker is not available.",
-            file=sys.stderr,
-        )
-        # Initialize verification_start_time so verification_seconds calculation works
-        verification_start_time = time.time()
-        verification_success = False
-    else:
+                exit_code = runner.exit_code
+
+                # If the agent succeeded (or at least finished), extract the .devcontainer
+                # so it's available for local use and for the next verification step
+                try:
+                    tarball = runner.get_devcontainer_tarball()
+                    extract_devcontainer_tarball(tarball, project_root)
+
+                    # Store in cache if caching is enabled
+                    if cache is not None and cache_key is not None and event_collector is not None:
+                        cache_value = CacheValue(
+                            events=event_collector.get_events(),
+                            devcontainer_tarball=tarball,
+                            return_code=exit_code,
+                        )
+                        cache.set(cache_key, cache_value)
+                        cache.close()
+                except Exception as e:
+                    print(f"Warning: could not extract/cache .devcontainer: {e}", file=sys.stderr)
+            except Exception as e:
+                print(f"Error running agent: {e}", file=sys.stderr)
+                exit_code = 1
+
+        agent_work_seconds = time.time() - start_time
+
+        # Verification step
         print("Verifying agent's work...", file=sys.stderr)
-        verification_success = False
         verification_start_time = time.time()
         try:
-            image_name = f"bootstrap-test-{project_root.name.lower()}"
-
-            # 1. Build the image
-            build_cmd = [
-                "devcontainer",
-                "build",
-                "--workspace-folder",
-                str(project_root),
-                "--image-name",
-                image_name,
-            ]
-            print(f"Building image: {shlex.join(build_cmd)}", file=sys.stderr)
-            build_proc = subprocess.run(build_cmd, capture_output=True, text=True)
-
-            if build_proc.returncode == 0:
-                # 2. Run tests (no --rm so we can extract artifacts)
-                container_name = f"bootstrap-test-{project_root.name.lower()}-container"
-                test_cmd = [
-                    "docker",
-                    "run",
-                    "--name",
-                    container_name,
-                    image_name,
-                    "./.devcontainer/run_all_tests.sh",
-                ]
-                print(f"Running tests: {shlex.join(test_cmd)}", file=sys.stderr)
-                test_run = subprocess.run(test_cmd, capture_output=True, text=True)
-
-                # 3. Extract artifacts from container if test_artifacts_dir is provided
-                if test_artifacts_dir is not None:
-                    cp_cmd = [
-                        "docker",
-                        "cp",
-                        f"{container_name}:/test_artifacts/.",
-                        str(test_artifacts_dir),
-                    ]
-                    print(f"Extracting artifacts: {shlex.join(cp_cmd)}", file=sys.stderr)
-                    cp_result = subprocess.run(cp_cmd, capture_output=True, text=True)
-                    if cp_result.returncode != 0:
-                        print(
-                            f"Warning: artifact extraction failed: {cp_result.stderr}",
-                            file=sys.stderr,
-                        )
-
-                # 4. Clean up container
-                subprocess.run(["docker", "rm", container_name], capture_output=True)
-
-                if test_run.returncode == 0:
-                    print("Verification successful!", file=sys.stderr)
-                    verification_success = True
+            # Success is determined by the runner.verify() call
+            # We assume success unless an error occurs or the test script fails
+            # The runner's verify method should yield events we can display
+            verification_failed = False
+            for event in runner.verify(project_root, test_artifacts_dir):
+                if event.stream == "stdout":
+                    print(f"Verification: {event.line}", file=sys.stderr)
                 else:
-                    print(
-                        f"Test run failed with return code {test_run.returncode}",
-                        file=sys.stderr,
-                    )
-                    print(f"STDOUT: {test_run.stdout}", file=sys.stderr)
-                    print(f"STDERR: {test_run.stderr}", file=sys.stderr)
-            else:
-                print("Build failed", file=sys.stderr)
-                print(f"STDOUT: {build_proc.stdout}", file=sys.stderr)
-                print(f"STDERR: {build_proc.stderr}", file=sys.stderr)
+                    print(f"Verification stderr: {event.line}", file=sys.stderr, flush=True)
+                    if "Test run failed" in event.line or "Build failed" in event.line:
+                        verification_failed = True
+
+            verification_success = not verification_failed
         except Exception as e:
             print(f"Verification error: {e}", file=sys.stderr)
+            verification_success = False
 
-    verification_seconds = time.time() - verification_start_time
+        verification_seconds = time.time() - verification_start_time
+
+    finally:
+        runner.cleanup()
 
     # Parse test reports from various formats
-    test_reports = TestReports()
-    if test_artifacts_dir is not None:
-        test_reports = parse_test_reports(test_artifacts_dir)
+    test_reports = parse_test_reports(test_artifacts_dir)
 
     output = BootstrapResult(
         success=verification_success and exit_code == 0,

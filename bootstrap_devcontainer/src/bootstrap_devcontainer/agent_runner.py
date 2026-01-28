@@ -73,6 +73,28 @@ class AgentRunner(ABC):
         """Get tarball of .devcontainer/ directory for caching."""
         ...
 
+    @abstractmethod
+    def verify(
+        self,
+        project_root: Path,
+        test_artifacts_dir: Path,
+    ) -> Iterator[StreamEvent]:
+        """Run verification tests and yield output events.
+
+        Args:
+            project_root: Path to the project.
+            test_artifacts_dir: Directory to store test artifacts.
+
+        Yields:
+            StreamEvent for each line of stdout/stderr.
+        """
+        ...
+
+    @abstractmethod
+    def cleanup(self) -> None:
+        """Perform any necessary cleanup (e.g. terminating sandboxes)."""
+        ...
+
 
 class LocalAgentRunner(AgentRunner):
     """Run agent locally using subprocess."""
@@ -146,3 +168,91 @@ class LocalAgentRunner(AgentRunner):
         if self._project_root is None:
             raise RuntimeError("run() must be called before get_devcontainer_tarball()")
         return create_devcontainer_tarball(self._project_root)
+
+    def verify(
+        self,
+        project_root: Path,
+        test_artifacts_dir: Path,
+    ) -> Iterator[StreamEvent]:
+        """Run verification tests locally using Docker."""
+        import shlex
+
+        if not self._check_docker_available():
+            yield StreamEvent(
+                stream="stderr",
+                line="Error: Docker is required for local verification but not available.",
+            )
+            return
+
+        image_name = f"bootstrap-test-{project_root.name.lower()}"
+        container_name = f"bootstrap-test-{project_root.name.lower()}-container"
+
+        # 1. Build the image
+        build_cmd = [
+            "devcontainer",
+            "build",
+            "--workspace-folder",
+            str(project_root),
+            "--image-name",
+            image_name,
+        ]
+        yield StreamEvent(stream="stderr", line=f"Building image: {shlex.join(build_cmd)}")
+
+        def build_stdout(line: str) -> None:
+            pass  # We could yield these if we want more verbose output
+
+        def build_stderr(line: str) -> None:
+            pass
+
+        # For now, let's just use subprocess directly or run_process
+        build_proc = subprocess.run(build_cmd, capture_output=True, text=True)
+        if build_proc.returncode != 0:
+            yield StreamEvent(stream="stderr", line=f"Build failed:\n{build_proc.stderr}")
+            return
+
+        # 2. Run tests (no --rm so we can extract artifacts)
+        test_cmd = [
+            "docker",
+            "run",
+            "--name",
+            container_name,
+            image_name,
+            "./.devcontainer/run_all_tests.sh",
+        ]
+        yield StreamEvent(stream="stderr", line=f"Running tests: {shlex.join(test_cmd)}")
+
+        test_run = subprocess.run(test_cmd, capture_output=True, text=True)
+        if test_run.stdout:
+            for line in test_run.stdout.splitlines():
+                yield StreamEvent(stream="stdout", line=line)
+        if test_run.stderr:
+            for line in test_run.stderr.splitlines():
+                yield StreamEvent(stream="stderr", line=line)
+
+        # 3. Extract artifacts
+        cp_cmd = [
+            "docker",
+            "cp",
+            f"{container_name}:/test_artifacts/.",
+            str(test_artifacts_dir),
+        ]
+        yield StreamEvent(stream="stderr", line=f"Extracting artifacts: {shlex.join(cp_cmd)}")
+        cp_result = subprocess.run(cp_cmd, capture_output=True, text=True)
+        if cp_result.returncode != 0:
+            yield StreamEvent(
+                stream="stderr", line=f"Warning: artifact extraction failed: {cp_result.stderr}"
+            )
+
+        # 4. Clean up container
+        subprocess.run(["docker", "rm", container_name], capture_output=True)
+
+        if test_run.returncode == 0:
+            yield StreamEvent(stream="stderr", line="Verification successful!")
+        else:
+            yield StreamEvent(
+                stream="stderr", line=f"Test run failed with return code {test_run.returncode}"
+            )
+
+    def cleanup(self) -> None:
+        """Nothing to clean up for local runner."""
+        pass

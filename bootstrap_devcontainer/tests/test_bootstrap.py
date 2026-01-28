@@ -70,6 +70,9 @@ def test_e2e_with_fake_agent(tmp_path: Path) -> None:
     assert "CACHE MISS" in result.stderr, "Expected cache miss on first run"
 
     # Check that status lines were emitted to stdout (rich prints in blue)
+    if "BOOTSTRAP_DEVCONTAINER_STATUS:" not in result.stdout:
+        print(f"STDOUT: {result.stdout}")
+        print(f"STDERR: {result.stderr}")
     assert "BOOTSTRAP_DEVCONTAINER_STATUS:" in result.stdout, "Expected status lines in stdout"
 
     # Parse the JSON output (last line after status messages)

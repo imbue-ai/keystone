@@ -181,10 +181,11 @@ class ModalAgentRunner(AgentRunner):
 
         try:
             yield from self._run_in_sandbox(prompt, project_root, max_budget_usd, agent_cmd)
-        finally:
+        except Exception:
             if self._sandbox:
                 self._sandbox.terminate()
                 self._sandbox = None
+            raise
 
     def _run_in_sandbox(
         self,
@@ -308,3 +309,147 @@ exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
 
     def get_devcontainer_tarball(self) -> bytes:
         return self._devcontainer_tarball
+
+    def _ensure_sandbox(self) -> Iterator[StreamEvent]:
+        """Ensure the sandbox and Docker are running."""
+        if self._sandbox is not None:
+            return
+
+        yield StreamEvent(stream="stderr", line="Initializing Modal sandbox for verification...")
+        app = modal.App.lookup("bootstrap-devcontainer-sandbox", create_if_missing=True)
+        image = create_modal_image()
+        self._sandbox = modal.Sandbox.create(
+            app=app,
+            image=image,
+            timeout=self._timeout_seconds,
+            region="us-west-2",
+            experimental_options={"enable_docker": True},
+        )
+        sb = self._sandbox
+
+        # Start Docker daemon
+        run_modal_command(sb, "/start-dockerd.sh", prefix="dockerd: ")
+
+        # Wait for Docker to be ready
+        yield StreamEvent(stream="stderr", line="Waiting for Docker daemon to be ready...")
+        run_modal_command(sb, "/wait_for_docker.sh", prefix="docker-wait: ").wait()
+
+    def verify(
+        self,
+        project_root: Path,
+        test_artifacts_dir: Path,
+    ) -> Iterator[StreamEvent]:
+        """Run verification tests in the Modal sandbox."""
+        yield from self._ensure_sandbox()
+        assert self._sandbox is not None
+        sb = self._sandbox
+
+        # 1. Obliterate old code tree and write the new one
+        yield StreamEvent(stream="stderr", line="Updating project tree in sandbox...")
+        run_modal_command(sb, "rm", "-rf", "/project").wait()
+        run_modal_command(sb, "mkdir", "-p", "/project").wait()
+
+        project_tarball = _create_project_tarball(project_root)
+        tarball_b64 = base64.b64encode(project_tarball).decode("ascii")
+
+        run_modal_command(
+            sb, "sh", "-c", f"echo '{tarball_b64}' | base64 -d | tar -xzf - -C /project"
+        ).wait()
+        run_modal_command(sb, "chown", "-R", "agent:agent", "/project").wait()
+
+        # 2. Build the devcontainer image
+        yield StreamEvent(stream="stderr", line="Building devcontainer image in sandbox...")
+        image_name = f"bootstrap-test-{project_root.name.lower()}"
+        # container_name is defined later, moved it to where it's first used.
+        # container_name = f"bootstrap-test-{project_root.name.lower()}-container"
+
+        build_cmd = [
+            "devcontainer",
+            "build",
+            "--workspace-folder",
+            "/project",
+            "--image-name",
+            image_name,
+        ]
+        build_proc = run_modal_command(sb, *build_cmd, prefix="build: ", capture=True)
+        yield from build_proc.stream()
+        build_exit_code = build_proc.wait()
+
+        if build_exit_code != 0:
+            yield StreamEvent(stream="stderr", line="Build failed")
+            return
+
+        # 3. Run tests
+        container_name = f"bootstrap-test-{project_root.name.lower()}-container"
+        test_cmd = [
+            "docker",
+            "run",
+            "--name",
+            container_name,
+            "--network=host",
+            image_name,
+            "./.devcontainer/run_all_tests.sh",
+        ]
+        yield StreamEvent(stream="stderr", line="Running tests in sandbox...")
+        test_proc = run_modal_command(sb, *test_cmd, prefix="test: ", capture=True)
+        yield from test_proc.stream()
+        test_exit_code = test_proc.wait()
+
+        # 4. Extract artifacts
+        yield StreamEvent(stream="stderr", line="Extracting test artifacts from sandbox...")
+        # Copy from container to sandbox host first
+        run_modal_command(sb, "mkdir", "-p", "/tmp/test_artifacts_extraction").wait()
+        run_modal_command(
+            sb,
+            "docker",
+            "cp",
+            f"{container_name}:/test_artifacts/.",
+            "/tmp/test_artifacts_extraction",
+        ).wait()
+
+        # Use tar | base64 to download artifacts from sandbox host to local machine
+        cp_proc = run_modal_command(
+            sb,
+            "sh",
+            "-c",
+            "tar -czf - -C /tmp/test_artifacts_extraction . | base64",
+            prefix="cp: ",
+            capture=True,
+        )
+
+        cp_lines = []
+        for event in cp_proc.stream():
+            if event.stream == "stdout":
+                cp_lines.append(event.line)
+
+        cp_proc.wait()
+
+        if cp_lines:
+            try:
+                tarball_b64 = "".join(cp_lines)
+                tarball = base64.b64decode(tarball_b64)
+                test_artifacts_dir.mkdir(parents=True, exist_ok=True)
+                with tarfile.open(fileobj=io.BytesIO(tarball), mode="r:gz") as tar:
+                    tar.extractall(test_artifacts_dir)
+                yield StreamEvent(stream="stderr", line="Test artifacts extracted.")
+            except Exception as e:
+                yield StreamEvent(stream="stderr", line=f"Error extracting artifacts locally: {e}")
+        else:
+            yield StreamEvent(stream="stderr", line="No artifacts found to extract.")
+
+        # 5. Clean up container
+        run_modal_command(sb, "docker", "rm", container_name).wait()
+
+        if test_exit_code == 0:
+            yield StreamEvent(stream="stderr", line="Verification successful!")
+        else:
+            yield StreamEvent(
+                stream="stderr", line=f"Test run failed with return code {test_exit_code}"
+            )
+
+    def cleanup(self) -> None:
+        """Terminate the Modal sandbox."""
+        if self._sandbox:
+            print("Terminating Modal sandbox...", file=sys.stderr)
+            self._sandbox.terminate()
+            self._sandbox = None

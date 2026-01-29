@@ -1,6 +1,5 @@
 """Modal-based agent runner for running bootstrap agent in cloud sandbox."""
 
-import base64
 import io
 import logging
 import os
@@ -212,13 +211,16 @@ class ModalAgentRunner(AgentRunner):
         project_tarball = create_git_archive_bytes(project_root)
         run_modal_command(sb, "mkdir", "-p", "/project", name="upload").wait()
 
-        # Write tarball via base64 encoding (Modal stdin API uses bytes differently)
-        tarball_b64 = base64.b64encode(project_tarball).decode("ascii")
+        # Write tarball using Modal's native filesystem API
+        with sb.open("/tmp/project.tar.gz", "wb") as f:
+            f.write(project_tarball)
         run_modal_command(
             sb,
-            "sh",
-            "-c",
-            f"echo '{tarball_b64}' | base64 -d | tar -xzf - -C /project",
+            "tar",
+            "-xzf",
+            "/tmp/project.tar.gz",
+            "-C",
+            "/project",
             name="upload",
         ).wait()
         run_modal_command(sb, "chown", "-R", "agent:agent", "/project", name="upload").wait()
@@ -252,12 +254,9 @@ cd /project
 {f"export ANTHROPIC_API_KEY={shlex.quote(env_vars['ANTHROPIC_API_KEY'])}" if "ANTHROPIC_API_KEY" in env_vars else ""}
 exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
 """
-        # Upload script
-        # encode to base64 to avoid heredoc issues
-        script_b64 = base64.b64encode(agent_script_content.encode()).decode()
-        run_modal_command(
-            sb, "sh", "-c", f"echo '{script_b64}' | base64 -d > /run_agent.sh", name="setup"
-        ).wait()
+        # Upload script using Modal's native filesystem API
+        with sb.open("/run_agent.sh", "w") as f:
+            f.write(agent_script_content)
         run_modal_command(sb, "chmod", "+x", "/run_agent.sh", name="setup").wait()
         run_modal_command(sb, "chown", "agent:agent", "/run_agent.sh", name="setup").wait()
 
@@ -281,20 +280,19 @@ exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
 
         # 5. Extract .devcontainer directory
         yield StreamEvent(stream="stderr", line="Extracting .devcontainer from sandbox...")
-        # Use base64 to handle binary data through text streams
-        tar_proc = run_modal_command(
+        # Create tarball in sandbox, then read it using Modal's native filesystem API
+        run_modal_command(
             sb,
-            "sh",
-            "-c",
-            "tar -czf - -C /project .devcontainer | base64",
+            "tar",
+            "-czf",
+            "/tmp/devcontainer.tar.gz",
+            "-C",
+            "/project",
+            ".devcontainer",
             name="extract",
-            capture=True,
-        )
-        tar_lines = []
-        for event in tar_proc.stream():
-            if event.stream == "stdout":
-                tar_lines.append(event.line)
-        self._devcontainer_tarball = base64.b64decode("".join(tar_lines))
+        ).wait()
+        with sb.open("/tmp/devcontainer.tar.gz", "rb") as f:
+            self._devcontainer_tarball = f.read()
 
     @property
     def exit_code(self) -> int:
@@ -345,29 +343,22 @@ exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
             proc.wait()
             test_exit_code = proc.returncode
 
-            # Extract test artifacts
+            # Extract test artifacts using Modal's native filesystem API
             yield StreamEvent(stream="stderr", line="Extracting test artifacts...")
             tar_proc = sandbox.exec(
-                "sh", "-c", "tar -czf - -C /test_artifacts . 2>/dev/null | base64"
+                "tar", "-czf", "/tmp/test_artifacts.tar.gz", "-C", "/test_artifacts", "."
             )
-
-            tar_lines = []
-            for line in tar_proc.stdout:
-                tar_lines.append(line.rstrip("\n"))
             tar_proc.wait()
 
-            if tar_lines:
-                try:
-                    tarball_b64 = "".join(tar_lines)
-                    tarball = base64.b64decode(tarball_b64)
-                    test_artifacts_dir.mkdir(parents=True, exist_ok=True)
-                    with tarfile.open(fileobj=io.BytesIO(tarball), mode="r:gz") as tar:
-                        tar.extractall(test_artifacts_dir)
-                    yield StreamEvent(stream="stderr", line="Test artifacts extracted.")
-                except Exception as e:
-                    yield StreamEvent(stream="stderr", line=f"Error extracting artifacts: {e}")
-            else:
-                yield StreamEvent(stream="stderr", line="No artifacts found to extract.")
+            try:
+                with sandbox.open("/tmp/test_artifacts.tar.gz", "rb") as f:
+                    tarball = f.read()
+                test_artifacts_dir.mkdir(parents=True, exist_ok=True)
+                with tarfile.open(fileobj=io.BytesIO(tarball), mode="r:gz") as tar:
+                    tar.extractall(test_artifacts_dir)
+                yield StreamEvent(stream="stderr", line="Test artifacts extracted.")
+            except Exception as e:
+                yield StreamEvent(stream="stderr", line=f"Error extracting artifacts: {e}")
 
             if test_exit_code == 0:
                 yield StreamEvent(stream="stderr", line="Verification successful!")

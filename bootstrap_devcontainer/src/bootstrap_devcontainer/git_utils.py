@@ -48,7 +48,11 @@ def create_git_archive(repo_path: Path, output_path: Path) -> None:
 
 
 def create_git_archive_bytes(repo_path: Path) -> bytes:
-    """Create a tarball of the repository and return as bytes."""
+    """Create a tarball of the repository and return as bytes.
+
+    TODO: Use `git archive --recurse-submodules` once available in mainline git
+    to include submodule contents. Currently submodules are not included.
+    """
     try:
         result = subprocess.run(
             ["git", "archive", "--format=tar.gz", "HEAD"],

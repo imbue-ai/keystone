@@ -9,8 +9,6 @@ You should only make changes in the .devcontainer/... subtree.
 You are currently at a clean copy of the root of the project's code tree,
 without any build artifacts or git history.
 This copy was created using `git archive`.
-# TODO: Use `git archive --recurse-submodules` once available in mainline git
-# to include submodule contents. Currently submodules are not included.
 
 Instructions:
 

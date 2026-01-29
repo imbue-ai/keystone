@@ -31,15 +31,37 @@ The Dockerfile MUST contain these lines, to create a writable test artifacts dir
 RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
 ```
 
+A nice trick that can dramatically speed up subsequent Dockerfile builds is to pre-warm package caches
+by fetching dependencies early in the Dockerfile, before copying the entire source tree into the image.
+This can help because if these packages are not present in the image, they will need to be fetched
+from the internet every time the image is used.
+If the project depends on TensorFlow or PyTorch, this can speed things up a lot.
+
+As an example of how to do this in Python and UV:
+```
+# Copy uv from official image.
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# ... other Dockerfile lines ...
+
+# Pre-create uv virtual environment and install dependencies.
+# Install dependencies first (without the project itself) to maximize layer caching.
+# See: https://docs.astral.sh/uv/guides/integration/docker/#caching
+COPY --chown=dev:dev pyproject.toml uv.lock /tmp/deps/
+ENV UV_PROJECT_ENVIRONMENT=/venv
+RUN cd /tmp/deps && \
+    uv sync --locked --no-install-project && \
+    echo "Python virtual environment created successfully at $UV_PROJECT_ENVIRONMENT"
+```
+
+A similar trick can be used with other languages and package managers, such as npm, yarn, pip, and Cargo.
+
 The Dockerfile MUST end with these lines, specifying where the input source tree should be copied into the image.
 You do not have to worry about .dockerignore files right now because your copy of the source tree is pristine.
 ```
 # Copy the entire source tree into the image.
 WORKDIR /project_src
 COPY . .
-
-# Make the test script executable.
-RUN chmod +x .devcontainer/run_all_tests.sh
 ```
 
 Optimize the Dockerfile layer ordering for faster rebuilds as you experiment,
@@ -67,6 +89,7 @@ so that the image can execute its own tests.
    d. run_all_tests.sh is allowed to fail early (before running all tests) if that helps complete the task faster.
    e. run_all_tests.sh should return 0 (success) IFF all tests pass,
       and should forward enough information to stdout/stderr to enable debugging failing tests.
+   f. Make it executable: `chmod +x .devcontainer/run_all_tests.sh`.
 
 Tips and Notes:
 

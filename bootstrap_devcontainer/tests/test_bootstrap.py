@@ -1,5 +1,6 @@
 import json
 import logging
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -48,7 +49,7 @@ def test_e2e_with_fake_agent(tmp_path: Path, project_root: Path) -> None:
         "--test_artifacts_dir",
         str(test_artifacts_dir),
         "--agent_cmd",
-        str(fake_agent),
+        shlex.quote(str(fake_agent)),
         "--sqlite_cache_dir",
         str(cache_file),
         "--agent_local",  # Use local runner for fake agent tests
@@ -135,7 +136,7 @@ def test_e2e_with_fake_agent(tmp_path: Path, project_root: Path) -> None:
         "--test_artifacts_dir",
         str(test_artifacts_dir2),
         "--agent_cmd",
-        str(fake_agent),
+        shlex.quote(str(fake_agent)),
         "--sqlite_cache_dir",
         str(cache_file),
         "--agent_local",  # Use local runner for fake agent tests
@@ -171,7 +172,7 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path, project_root: Path
         "--test_artifacts_dir",
         str(test_artifacts_dir),
         "--agent_cmd",
-        str(fake_agent),
+        shlex.quote(str(fake_agent)),
         "--agent_local",  # Use local runner for fake agent tests
     ]
 

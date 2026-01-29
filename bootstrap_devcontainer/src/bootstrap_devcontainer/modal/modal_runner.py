@@ -64,16 +64,20 @@ class ManagedProcess:
         self, stream: Iterable[str], stream_name: Literal["stdout", "stderr"]
     ) -> None:
         logger = logging.getLogger("bootstrap_devcontainer.modal")
-        for line in stream:
-            clean_line = line.rstrip("\n")
-            # Log immediately to Python's logging system
-            # Format: [prefix] stream: line (or just [prefix] line for stdout)
-            if stream_name == "stderr":
-                logger.info(f"[{self.prefix}] STDERR: {clean_line}")
-            else:
-                logger.info(f"[{self.prefix}] STDOUT: {clean_line}")
-            if self._queue is not None:
-                self._queue.put(StreamEvent(stream=stream_name, line=clean_line))
+        for chunk in stream:
+            # Modal may return multiple lines in a single chunk, so split them
+            for line in chunk.splitlines():
+                clean_line = line.rstrip()
+                if not clean_line:
+                    continue
+                # Log immediately to Python's logging system
+                # Format: [name] STDOUT/STDERR: line
+                if stream_name == "stderr":
+                    logger.info(f"[{self.prefix}] STDERR: {clean_line}")
+                else:
+                    logger.info(f"[{self.prefix}] STDOUT: {clean_line}")
+                if self._queue is not None:
+                    self._queue.put(StreamEvent(stream=stream_name, line=clean_line))
 
         if self._queue is not None:
             self._queue.put(None)  # Signal this stream is done

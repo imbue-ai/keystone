@@ -8,10 +8,11 @@ Instructions:
 1. Create a .devcontainer/devcontainer.json file at the project root.
    a. This file should include these lines, specifying where the Dockerfile should be and that the build context includes the entire source tree:
 ```
-  "build": {"dockerfile": "Dockerfile",
+  "build": {{
+    "dockerfile": "Dockerfile",
     "context": "..",
     // ...
-  }
+  }}
 ```
 2. Create a .devcontainer/Dockerfile alongside that.
 3. Create a .devcontainer/run_all_tests.sh script alongside the Dockerfile (don't forget to make it executable!)

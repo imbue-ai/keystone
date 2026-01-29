@@ -27,7 +27,7 @@ def test_cli_help() -> None:
     assert "--project_root" in result.stdout
 
 
-def test_e2e_with_fake_agent(tmp_path: Path, project_root: Path) -> None:
+def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
     """
     Test the full Docker mechanics using a deterministic fake agent.
     This tests the devcontainer build and test execution without LLM dependencies.
@@ -219,7 +219,7 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path, project_root: Path
     ],
     indirect=True,
 )
-def test_e2e_sample_project(
+def test_e2e_sample_projects(
     tmp_path: Path, project_root: Path, snapshot: SnapshotAssertion
 ) -> None:
     test_artifacts_dir = tmp_path / "test_artifacts"
@@ -299,12 +299,9 @@ def test_max_budget_zero_fails(tmp_path: Path, project_root: Path) -> None:
 
     cmd = [
         "bootstrap-devcontainer",
-        "--project_root",
-        str(project_root),
-        "--test_artifacts_dir",
-        str(test_artifacts_dir),
-        "--max_budget_usd",
-        "0",
+        *("--project_root", str(project_root)),
+        *("--test_artifacts_dir", str(test_artifacts_dir)),
+        *("--max_budget_usd", "0"),
         "--agent_local",  # Use local runner (budget test uses real claude locally)
     ]
 

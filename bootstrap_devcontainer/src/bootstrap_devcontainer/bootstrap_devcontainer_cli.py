@@ -307,6 +307,12 @@ def bootstrap(
             print(
                 f"CACHE HIT: Replaying cached agent output from {sqlite_cache_dir}", file=sys.stderr
             )
+            print(
+                f"  Cached return_code: {cached_value.return_code}, "
+                f"events: {len(cached_value.events)}, "
+                f"tarball size: {len(cached_value.devcontainer_tarball)} bytes",
+                file=sys.stderr,
+            )
             for event in cached_value.events:
                 if event.stream == "stdout":
                     process_stdout_line(event.line)
@@ -345,8 +351,13 @@ def bootstrap(
                     tarball = runner.get_devcontainer_tarball()
                     extract_devcontainer_tarball(tarball, project_root)
 
-                    # Store in cache if caching is enabled
-                    if cache is not None and cache_key is not None and event_collector is not None:
+                    # Store in cache if caching is enabled and agent succeeded
+                    if (
+                        cache is not None
+                        and cache_key is not None
+                        and event_collector is not None
+                        and exit_code == 0
+                    ):
                         cache_value = CacheValue(
                             events=event_collector.get_events(),
                             devcontainer_tarball=tarball,
@@ -354,6 +365,11 @@ def bootstrap(
                         )
                         cache.set(cache_key, cache_value)
                         cache.close()
+                    elif cache is not None and exit_code != 0:
+                        print(
+                            f"Skipping cache (agent failed with exit_code={exit_code})",
+                            file=sys.stderr,
+                        )
                 except Exception as e:
                     print(f"Warning: could not extract/cache .devcontainer: {e}", file=sys.stderr)
             except Exception as e:

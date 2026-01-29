@@ -89,6 +89,13 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
         f"Expected agent_summary to be captured, got: {output.agent_summary}"
     )
 
+    # Verify status_messages were captured in order
+    assert output.status_messages == [
+        "Exploring repository structure.",
+        "Creating devcontainer.json and Dockerfile.",
+        "Completed setup of devcontainer files.",
+    ], f"Expected status_messages to be captured, got: {output.status_messages}"
+
     # Verify pytest_summary contents
     assert output.pytest_summary is not None
     summary = output.pytest_summary

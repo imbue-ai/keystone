@@ -27,6 +27,7 @@ class BootstrapResult(BaseModel):
     agent_exit_code: int
     agent_work_seconds: float
     agent_summary: str | None = None
+    status_messages: list[str] = []
     cost_usd: float
     token_spending: TokenSpending
 

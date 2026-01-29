@@ -239,12 +239,14 @@ def bootstrap(
     exit_code = 1
     verification_success = False
     verification_seconds = 0.0
+    agent_summary: str | None = None
 
     def check_and_print_status(text: str) -> bool:
         """Check for status/summary markers in text and print in blue if found.
 
         Returns True if a marker was found.
         """
+        nonlocal agent_summary
         found = False
         for line in text.split("\n"):
             if STATUS_MARKER in line:
@@ -257,8 +259,10 @@ def bootstrap(
             elif SUMMARY_MARKER in line:
                 # Extract the summary message after the marker
                 idx = line.find(SUMMARY_MARKER)
-                summary_msg = line[idx:].strip()
-                print(summary_msg, flush=True)
+                full_marker = line[idx:].strip()
+                # Extract just the message part after the marker
+                agent_summary = full_marker[len(SUMMARY_MARKER) :].strip()
+                print(full_marker, flush=True)
                 found = True
         return found
 
@@ -443,6 +447,7 @@ def bootstrap(
     output = BootstrapResult(
         success=overall_success,
         error_message=error_message,
+        agent_summary=agent_summary,
         agent_work_seconds=agent_work_seconds,
         verification_seconds=verification_seconds,
         model=model_name,

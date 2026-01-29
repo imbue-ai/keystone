@@ -96,6 +96,7 @@ def main() -> None:
         "BOOTSTRAP_DEVCONTAINER_STATUS: Exploring repository structure.",
         "BOOTSTRAP_DEVCONTAINER_STATUS: Creating devcontainer.json and Dockerfile.",
         "BOOTSTRAP_DEVCONTAINER_STATUS: Completed setup of devcontainer files.",
+        "BOOTSTRAP_DEVCONTAINER_SUMMARY: Created Python devcontainer with pytest support.",
     ]
 
     for status in status_messages:

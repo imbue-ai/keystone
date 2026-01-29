@@ -56,6 +56,13 @@ RUN cd /tmp/deps && \
 
 A similar trick can be used with other languages and package managers, such as npm, yarn, pip, and Cargo.
 
+If you use this trick, please also add this environment variable to the Dockerfile so that this works correctly on Modal:
+```
+# Very important on Modal -- without this, there is a crazy bug that means that some files do not show up in snapshots!  This was a nightmare to debug.
+# This is because Modal's snapshotting mechanism does not work correctly with symlinks.
+ENV UV_LINK_MODE=copy
+```
+
 The Dockerfile MUST end with these lines, specifying where the input source tree should be copied into the image.
 You do not have to worry about .dockerignore files right now because your copy of the source tree is pristine.
 ```

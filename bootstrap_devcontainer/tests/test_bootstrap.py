@@ -12,6 +12,7 @@ from syrupy.assertion import SnapshotAssertion
 
 from bootstrap_devcontainer.constants import DEFAULT_CACHE_PATH
 from bootstrap_devcontainer.process_runner import run_process
+from bootstrap_devcontainer.schema import BootstrapResult
 
 logger = logging.getLogger(__name__)
 
@@ -80,20 +81,26 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
             break
     assert json_start is not None, "Could not find JSON output"
     json_str = "\n".join(stdout_lines[json_start:])
-    output = json.loads(json_str)
-    assert output["success"], f"Test failed: {output}"
+    output = BootstrapResult.model_validate_json(json_str)
+    assert output.success, f"Test failed: {output}"
+
+    # Verify agent_summary was captured
+    assert output.agent_summary == "Created Python devcontainer with pytest support.", (
+        f"Expected agent_summary to be captured, got: {output.agent_summary}"
+    )
 
     # Verify pytest_summary contents
-    summary = output["pytest_summary"]
-    assert summary["passed_count"] == 2, f"Expected 2 passed tests: {summary}"
-    assert summary["failed_count"] == 0, f"Expected 0 failed tests: {summary}"
-    assert summary["skipped_count"] == 0, f"Expected 0 skipped tests: {summary}"
-    assert summary["passed_tests"] == [
+    assert output.pytest_summary is not None
+    summary = output.pytest_summary
+    assert summary.passed_count == 2, f"Expected 2 passed tests: {summary}"
+    assert summary.failed_count == 0, f"Expected 0 failed tests: {summary}"
+    assert summary.skipped_count == 0, f"Expected 0 skipped tests: {summary}"
+    assert summary.passed_tests == [
         "tests/test_app.py::test_add",
         "tests/test_app.py::test_multiply",
     ], f"Expected sorted passed_tests list: {summary}"
-    assert summary["failed_tests"] == [], f"Expected no failed tests: {summary}"
-    assert summary["skipped_tests"] == [], f"Expected no skipped tests: {summary}"
+    assert summary.failed_tests == [], f"Expected no failed tests: {summary}"
+    assert summary.skipped_tests == [], f"Expected no skipped tests: {summary}"
 
     # Check devcontainer files were created
     assert (project_root / ".devcontainer" / "devcontainer.json").exists()
@@ -193,8 +200,8 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path, project_root: Path
             break
     if json_start is not None:
         json_str = "\n".join(stdout_lines[json_start:])
-        output = json.loads(json_str)
-        assert result.returncode != 0 or not output.get("success", True), (
+        output = BootstrapResult.model_validate_json(json_str)
+        assert result.returncode != 0 or not output.success, (
             "Expected failure: Python devcontainer cannot run Rust tests"
         )
     else:
@@ -257,11 +264,7 @@ def test_e2e_sample_projects(
             break
     assert json_start is not None, "Could not find JSON output"
     json_str = "\n".join(stdout_lines[json_start:])
-    output = json.loads(json_str)
-
-    assert "success" in output
-    assert "agent_work_seconds" in output
-    assert "token_spending" in output
+    output = BootstrapResult.model_validate_json(json_str)
 
     # Check if .devcontainer was created
     assert (project_root / ".devcontainer" / "devcontainer.json").exists()
@@ -273,9 +276,9 @@ def test_e2e_sample_projects(
     assert snapshot_data == snapshot
 
 
-def _strip_nondeterministic_fields(output: dict[str, Any]) -> dict[str, Any]:
+def _strip_nondeterministic_fields(output: BootstrapResult) -> dict[str, Any]:
     """Remove timing and cost fields that vary between runs."""
-    result = output.copy()
+    result = output.model_dump()
     # Remove timing fields
     result.pop("agent_work_seconds", None)
     result.pop("verification_seconds", None)
@@ -288,7 +291,8 @@ def _strip_nondeterministic_fields(output: dict[str, Any]) -> dict[str, Any]:
 def test_max_budget_zero_fails(tmp_path: Path, project_root: Path) -> None:
     """
     Test that setting --max_budget_usd 0 causes the claude agent to fail
-    immediately since it cannot make any API calls.
+    immediately since it cannot make any API calls. The CLI should return
+    a non-zero exit code and include an error_message in the JSON output.
     """
     test_artifacts_dir = tmp_path / "test_artifacts"
 
@@ -311,7 +315,10 @@ def test_max_budget_zero_fails(tmp_path: Path, project_root: Path) -> None:
 
     logger.info("Return code: %s", result.returncode)
 
-    # Parse JSON output if present
+    # CLI should return non-zero exit code on failure
+    assert result.returncode != 0, "Expected non-zero exit code with zero budget"
+
+    # Parse JSON output - should still be present even on failure
     stdout_lines = result.stdout.strip().split("\n")
     json_start = None
     for i, line in enumerate(stdout_lines):
@@ -319,10 +326,12 @@ def test_max_budget_zero_fails(tmp_path: Path, project_root: Path) -> None:
             json_start = i
             break
 
-    if json_start is not None:
-        json_str = "\n".join(stdout_lines[json_start:])
-        output = json.loads(json_str)
-        assert not output.get("success", True), "Expected failure with zero budget"
-    else:
-        # If no JSON output, process should have failed
-        assert result.returncode != 0, "Expected failure with zero budget"
+    assert json_start is not None, "Expected JSON output even on failure"
+    json_str = "\n".join(stdout_lines[json_start:])
+    output = BootstrapResult.model_validate_json(json_str)
+
+    assert not output.success, "Expected success=false with zero budget"
+    assert output.error_message, "Expected error_message in output"
+    assert (
+        "devcontainer" in output.error_message.lower() or "agent" in output.error_message.lower()
+    ), f"Expected error message about devcontainer or agent, got: {output.error_message}"

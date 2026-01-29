@@ -207,6 +207,16 @@ class LocalAgentRunner(AgentRunner):
         # Use work_dir if available (agent was run), otherwise fall back to project_root
         work_dir = self._work_dir if self._work_dir is not None else project_root
 
+        # Check if devcontainer.json exists before attempting build
+        devcontainer_json = work_dir / ".devcontainer" / "devcontainer.json"
+        if not devcontainer_json.exists():
+            yield StreamEvent(
+                stream="stderr",
+                line="Build failed: .devcontainer/devcontainer.json not found. "
+                "The agent did not create a valid devcontainer configuration.",
+            )
+            return
+
         image_name = f"bootstrap-test-{project_root.name.lower()}"
         container_name = f"bootstrap-test-{project_root.name.lower()}-container"
 

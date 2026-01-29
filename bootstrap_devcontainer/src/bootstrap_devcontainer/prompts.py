@@ -47,7 +47,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 # Pre-create uv virtual environment and install dependencies.
 # Install dependencies first (without the project itself) to maximize layer caching.
 # See: https://docs.astral.sh/uv/guides/integration/docker/#caching
-COPY --chown=dev:dev pyproject.toml uv.lock /tmp/deps/
+COPY pyproject.toml uv.lock /tmp/deps/
 ENV UV_PROJECT_ENVIRONMENT=/venv
 RUN cd /tmp/deps && \
     uv sync --locked --no-install-project && \
@@ -165,6 +165,13 @@ Bridge networking does not work in this environment due to gVisor/veth restricti
 When using `docker run`, you MUST use `--network host` for containers to have network access.
 When configuring the devcontainer, add "--network=host" to devcontainer.json build options.
 Example: `docker run --network host IMAGE CMD`
+
+IMPORTANT: Modal's image builder does not support --chown flags in COPY commands.
+Do NOT use `COPY --chown=user:group` syntax. Instead, use separate RUN commands to change ownership:
+```
+COPY file.txt /path/
+RUN chown user:group /path/file.txt
+```
 """
 
 

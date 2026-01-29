@@ -17,7 +17,7 @@ from bootstrap_devcontainer.agent_cache import (
     extract_devcontainer_tarball,
 )
 from bootstrap_devcontainer.agent_runner import LocalAgentRunner
-from bootstrap_devcontainer.constants import STATUS_MARKER, SUMMARY_MARKER
+from bootstrap_devcontainer.constants import ANSI_BLUE, ANSI_RESET, STATUS_MARKER, SUMMARY_MARKER
 from bootstrap_devcontainer.git_utils import get_git_tree_hash, is_git_dirty, is_git_repo
 from bootstrap_devcontainer.prompts import build_agent_prompt
 from bootstrap_devcontainer.schema import (
@@ -256,7 +256,7 @@ def bootstrap(
                 msg_content = status_msg[len(STATUS_MARKER) :].strip()
                 status_messages.append(msg_content)
                 logging.debug(f"Found status marker, printing: {status_msg}")
-                print(f"\033[34m{status_msg}\033[0m", flush=True)
+                print(f"{ANSI_BLUE}{status_msg}{ANSI_RESET}", flush=True)
                 found = True
             elif SUMMARY_MARKER in line:
                 # Extract the summary message after the marker
@@ -264,7 +264,7 @@ def bootstrap(
                 full_marker = line[idx:].strip()
                 # Extract just the message part after the marker
                 agent_summary = full_marker[len(SUMMARY_MARKER) :].strip()
-                print(f"\033[34m{full_marker}\033[0m", flush=True)
+                print(f"{ANSI_BLUE}{full_marker}{ANSI_RESET}", flush=True)
                 found = True
         return found
 

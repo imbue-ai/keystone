@@ -125,7 +125,7 @@
 # name: test_e2e_sample_projects[python_project]
   dict({
     'agent_exit_code': 0,
-    'agent_summary': "All tests pass successfully. The devcontainer uses UV for fast Python dependency management with optimized layer caching. Key detail: removed --no-cov flag since pytest-cov wasn't a dependency. The setup works correctly with Modal's network host requirement and uses UV_LINK_MODE=copy for snapshot compatibility.",
+    'agent_summary': "All tests pass successfully. The project uses Python with pytest and uv for fast dependency management. Key learnings: (1) Use `${PYTHONPATH:-}` instead of `$PYTHONPATH` with `set -u`, (2) Don't use `--no-cov` flag unless pytest-cov is installed, (3) UV's layer caching significantly speeds up rebuilds.",
     'cargo_test_summary': None,
     'error_message': None,
     'go_test_summary': None,
@@ -146,13 +146,14 @@
     }),
     'status_messages': list([
       'Exploring repository structure to identify file types and test locations.',
-      'Creating .devcontainer folder structure with devcontainer.json, Dockerfile, and run_all_tests.sh',
-      'Building devcontainer image with network host mode for Modal compatibility.',
-      'Running tests in the built container to verify everything works.',
-      'Fixing pytest arguments - removing --no-cov flag as pytest-cov is not installed.',
+      'Creating .devcontainer directory and configuration files for Python project with pytest.',
+      'Building dev container image.',
+      'Running tests in the built container.',
       'Rebuilding container with fixed test script.',
-      'Verifying test artifacts were created correctly.',
-      'Running final validation test to confirm successful build and test execution.',
+      'Running tests with fixed script.',
+      'Rebuilding container after removing --no-cov flag.',
+      'Verifying test artifacts structure.',
+      'Final verification of dev container and test runner.',
     ]),
     'success': True,
   })

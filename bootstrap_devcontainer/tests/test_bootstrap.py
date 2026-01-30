@@ -278,9 +278,37 @@ def test_e2e_sample_projects(
     assert (project_root / ".devcontainer" / "Dockerfile").exists()
     assert (project_root / ".devcontainer" / "run_all_tests.sh").exists()
 
+    # Validate that status messages have proper cumulative costs before stripping
+    _validate_status_messages(output)
+
     # Snapshot test - strip non-deterministic fields
     snapshot_data = _strip_nondeterministic_fields(output)
     assert snapshot_data == snapshot
+
+
+def _validate_status_messages(output: BootstrapResult) -> None:
+    """Validate that status messages have increasing timestamps and non-zero cumulative costs."""
+    if not output.status_messages:
+        return
+
+    # Verify timestamps are increasing
+    prev_ts = None
+    for msg in output.status_messages:
+        if prev_ts is not None:
+            assert msg.timestamp >= prev_ts, (
+                f"Timestamps should be non-decreasing: {prev_ts} -> {msg.timestamp}"
+            )
+        prev_ts = msg.timestamp
+
+    # Verify final status message has non-zero cost (agent did work)
+    final_msg = output.status_messages[-1]
+    if final_msg.cumulative_cost is not None:
+        assert final_msg.cumulative_cost.cost_usd > 0, (
+            f"Final status message should have non-zero cost: {final_msg.cumulative_cost}"
+        )
+        ts = final_msg.cumulative_cost.token_spending
+        assert ts.input > 0 or ts.cached > 0, f"Final status should have some input tokens: {ts}"
+        assert ts.output > 0, f"Final status should have output tokens: {ts}"
 
 
 def _strip_nondeterministic_fields(output: BootstrapResult) -> dict[str, Any]:
@@ -289,8 +317,17 @@ def _strip_nondeterministic_fields(output: BootstrapResult) -> dict[str, Any]:
     # Remove timing fields
     result.pop("agent_work_seconds", None)
     result.pop("verification_seconds", None)
+    result.pop("start_time", None)
+    result.pop("end_time", None)
     # Cost and token counts vary, but success/model/test results should be stable
     result.pop("cost", None)
+    # Status messages contain timestamps and cumulative costs that vary
+    # Extract just the message text for deterministic comparison
+    if "status_messages" in result:
+        result["status_messages"] = [msg["message"] for msg in result["status_messages"]]
+    # Same for agent_summary
+    if result.get("agent_summary") is not None:
+        result["agent_summary"] = result["agent_summary"]["message"]
     return result
 
 

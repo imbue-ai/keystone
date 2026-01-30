@@ -250,6 +250,7 @@ def bootstrap(
     prompt = build_agent_prompt(agent_in_modal)
 
     start_time = time.time()
+    start_datetime = datetime.now(UTC)
 
     # Set up runner based on --agent_in_modal flag
     if agent_in_modal:
@@ -328,13 +329,15 @@ def bootstrap(
                         logging.info(f"Tool Call: {name}({input_data})")
 
             elif msg_type == "result":
+                # total_cost_usd from API is already cumulative for the session
                 total_cost_usd = data.get("total_cost_usd", 0.0)
                 model_name = data.get("model", "")
+                # usage tokens are per-turn, so accumulate them
                 usage = data.get("usage", {})
-                token_spending["input"] = usage.get("input_tokens", 0)
-                token_spending["cached"] = usage.get("cache_read_input_tokens", 0)
-                token_spending["output"] = usage.get("output_tokens", 0)
-                token_spending["cache_creation"] = usage.get("cache_creation_input_tokens", 0)
+                token_spending["input"] += usage.get("input_tokens", 0)
+                token_spending["cached"] += usage.get("cache_read_input_tokens", 0)
+                token_spending["output"] += usage.get("output_tokens", 0)
+                token_spending["cache_creation"] += usage.get("cache_creation_input_tokens", 0)
 
             # Log other message types at debug level for visibility
             elif msg_type:
@@ -504,6 +507,8 @@ def bootstrap(
     output = BootstrapResult(
         success=overall_success,
         error_message=error_message,
+        start_time=start_datetime,
+        end_time=datetime.now(UTC),
         agent_summary=agent_summary,
         status_messages=status_messages,
         agent_work_seconds=agent_work_seconds,

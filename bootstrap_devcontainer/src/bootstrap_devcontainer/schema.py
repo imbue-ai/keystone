@@ -47,6 +47,8 @@ class BootstrapResult(BaseModel):
     success: bool
     error_message: str | None = None
 
+    start_time: datetime
+    end_time: datetime
     model: str = ""
     agent_exit_code: int
     agent_work_seconds: float

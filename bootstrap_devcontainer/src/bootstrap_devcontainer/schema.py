@@ -8,6 +8,8 @@ class VerifyResult(BaseModel):
 
     success: bool
     error_message: str | None = None
+    image_build_seconds: float | None = None
+    test_execution_seconds: float | None = None
 
 
 class TokenSpending(BaseModel):
@@ -42,6 +44,22 @@ class TestSummary(BaseModel):
     skipped_tests: list[str] = []
 
 
+class VerificationResult(BaseModel):
+    """Result of verification phase including image build and test execution."""
+
+    success: bool
+    error_message: str | None = None
+
+    image_build_seconds: float | None = None
+    test_execution_seconds: float | None = None
+
+    # Per-language test summaries - each is populated only if that report format was found
+    pytest_summary: TestSummary | None = None
+    go_test_summary: TestSummary | None = None
+    node_test_summary: TestSummary | None = None
+    cargo_test_summary: TestSummary | None = None
+
+
 class BootstrapResult(BaseModel):
     success: bool
     error_message: str | None = None
@@ -56,9 +74,4 @@ class BootstrapResult(BaseModel):
     status_messages: list[AgentStatusMessage] = []
     cost: InferenceCost
 
-    verification_seconds: float | None = None
-    # Per-language test summaries - each is populated only if that report format was found
-    pytest_summary: TestSummary | None = None
-    go_test_summary: TestSummary | None = None
-    node_test_summary: TestSummary | None = None
-    cargo_test_summary: TestSummary | None = None
+    verification: VerificationResult | None = None

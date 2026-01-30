@@ -40,6 +40,7 @@ from bootstrap_devcontainer.schema import (
     InferenceCost,
     TestSummary,
     TokenSpending,
+    VerificationResult,
 )
 
 
@@ -271,7 +272,6 @@ def bootstrap(
     exit_code = 1
     agent_timed_out = False
     verification_success = False
-    verification_seconds = 0.0
     agent_summary: AgentStatusMessage | None = None
     status_messages: list[AgentStatusMessage] = []
 
@@ -483,24 +483,37 @@ def bootstrap(
             print("=" * 60, file=sys.stderr)
             print(test_script_path.read_text(), file=sys.stderr)
 
-        verification_start_time = time.time()
         verification_error: str | None = None
+        image_build_seconds: float | None = None
+        test_execution_seconds: float | None = None
         try:
             verify_result = runner.verify(project_archive, devcontainer_tarball, test_artifacts_dir)
             verification_success = verify_result.success
             verification_error = verify_result.error_message
+            image_build_seconds = verify_result.image_build_seconds
+            test_execution_seconds = verify_result.test_execution_seconds
         except Exception as e:
             print(f"Verification error: {e}", file=sys.stderr)
             verification_success = False
             verification_error = str(e)
-
-        verification_seconds = time.time() - verification_start_time
 
     finally:
         runner.cleanup()
 
     # Parse test reports from various formats
     test_reports = parse_test_reports(test_artifacts_dir)
+
+    # Build verification result
+    verification = VerificationResult(
+        success=verification_success,
+        error_message=verification_error,
+        image_build_seconds=image_build_seconds,
+        test_execution_seconds=test_execution_seconds,
+        pytest_summary=test_reports.pytest_summary,
+        go_test_summary=test_reports.go_test_summary,
+        node_test_summary=test_reports.node_test_summary,
+        cargo_test_summary=test_reports.cargo_test_summary,
+    )
 
     overall_success = verification_success and exit_code == 0
     error_message: str | None = None
@@ -519,17 +532,13 @@ def bootstrap(
         agent_summary=agent_summary,
         status_messages=status_messages,
         agent_work_seconds=agent_work_seconds,
-        verification_seconds=verification_seconds,
         model=model_name,
         cost=InferenceCost(
             cost_usd=total_cost_usd,
             token_spending=TokenSpending(**token_spending),
         ),
         agent_exit_code=exit_code,
-        pytest_summary=test_reports.pytest_summary,
-        go_test_summary=test_reports.go_test_summary,
-        node_test_summary=test_reports.node_test_summary,
-        cargo_test_summary=test_reports.cargo_test_summary,
+        verification=verification,
     )
 
     if output_file:

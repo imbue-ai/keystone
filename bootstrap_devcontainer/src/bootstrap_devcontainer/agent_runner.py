@@ -232,10 +232,13 @@ class LocalAgentRunner(AgentRunner):
                     error_message="Build failed: .devcontainer/devcontainer.json not found.",
                 )
 
+            import time
+
             image_name = "bootstrap-verify-local"
             container_name = "bootstrap-verify-local-container"
 
             # 1. Build the image
+            build_start = time.time()
             build_cmd = [
                 "devcontainer",
                 "build",
@@ -245,12 +248,16 @@ class LocalAgentRunner(AgentRunner):
                 image_name,
             ]
             build_proc = subprocess.run(build_cmd, capture_output=True, text=True)
+            image_build_seconds = time.time() - build_start
             if build_proc.returncode != 0:
                 return VerifyResult(
-                    success=False, error_message=f"Build failed:\n{build_proc.stderr}"
+                    success=False,
+                    error_message=f"Build failed:\n{build_proc.stderr}",
+                    image_build_seconds=image_build_seconds,
                 )
 
             # 2. Run tests
+            test_start = time.time()
             # Remove any existing container
             subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
             test_cmd = [
@@ -262,6 +269,7 @@ class LocalAgentRunner(AgentRunner):
                 "./.devcontainer/run_all_tests.sh",
             ]
             test_run = subprocess.run(test_cmd, capture_output=True, text=True)
+            test_execution_seconds = time.time() - test_start
 
             # 3. Extract artifacts
             test_artifacts_dir.mkdir(parents=True, exist_ok=True)
@@ -274,11 +282,17 @@ class LocalAgentRunner(AgentRunner):
             subprocess.run(["docker", "rm", container_name], capture_output=True)
 
             if test_run.returncode == 0:
-                return VerifyResult(success=True)
+                return VerifyResult(
+                    success=True,
+                    image_build_seconds=image_build_seconds,
+                    test_execution_seconds=test_execution_seconds,
+                )
             else:
                 return VerifyResult(
                     success=False,
                     error_message=f"Test run failed with return code {test_run.returncode}",
+                    image_build_seconds=image_build_seconds,
+                    test_execution_seconds=test_execution_seconds,
                 )
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)

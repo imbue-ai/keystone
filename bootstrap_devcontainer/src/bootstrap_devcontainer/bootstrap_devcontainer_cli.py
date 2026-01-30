@@ -217,8 +217,8 @@ def bootstrap(
         "--agent_in_modal/--agent_local",
         help="Run agent in Modal sandbox (default) or locally",
     ),
-    agent_time_limit_secs: int | None = typer.Option(
-        None,
+    agent_time_limit_secs: int = typer.Option(
+        3600,
         "--agent_time_limit_secs",
         help="Maximum seconds for agent execution (uses timeout command)",
     ),

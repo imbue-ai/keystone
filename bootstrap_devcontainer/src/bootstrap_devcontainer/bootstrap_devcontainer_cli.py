@@ -18,7 +18,15 @@ from bootstrap_devcontainer.agent_cache import (
     extract_devcontainer_tarball,
 )
 from bootstrap_devcontainer.agent_runner import LocalAgentRunner
-from bootstrap_devcontainer.constants import ANSI_BLUE, ANSI_RESET, STATUS_MARKER, SUMMARY_MARKER
+from bootstrap_devcontainer.constants import (
+    ANSI_BLUE,
+    ANSI_CYAN,
+    ANSI_GREEN,
+    ANSI_MAGENTA,
+    ANSI_RESET,
+    STATUS_MARKER,
+    SUMMARY_MARKER,
+)
 from bootstrap_devcontainer.git_utils import (
     create_git_archive_bytes,
     get_git_tree_hash,
@@ -64,6 +72,7 @@ def check_docker_available() -> bool:
             ["docker", "ps"],
             capture_output=True,
             timeout=10,
+            check=False,
         )
         return result.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -368,7 +377,8 @@ def bootstrap(
         if cached_value is not None:
             # Cache hit - replay events and restore .devcontainer
             print(
-                f"CACHE HIT: Replaying cached agent output from {sqlite_cache_dir}", file=sys.stderr
+                f"{ANSI_GREEN}CACHE HIT: Replaying cached agent output from {sqlite_cache_dir}{ANSI_RESET}",
+                file=sys.stderr,
             )
             print(
                 f"  Cached return_code: {cached_value.return_code}, "
@@ -387,7 +397,10 @@ def bootstrap(
         else:
             # Cache miss - run agent
             if cache is not None:
-                print(f"CACHE MISS: Running agent (cache: {sqlite_cache_dir})", file=sys.stderr)
+                print(
+                    f"{ANSI_MAGENTA}CACHE MISS: Running agent (cache: {sqlite_cache_dir}){ANSI_RESET}",
+                    file=sys.stderr,
+                )
             else:
                 print(f"Starting agent with command: {agent_cmd}", file=sys.stderr)
 
@@ -443,7 +456,7 @@ def bootstrap(
         agent_work_seconds = time.time() - start_time
 
         # Verification step
-        print("Verifying agent's work...", file=sys.stderr)
+        logging.info(f"{ANSI_CYAN}Verifying agent's work...{ANSI_RESET}")
 
         # Print Dockerfile and test script for visibility
         dockerfile_path = project_root / ".devcontainer" / "Dockerfile"

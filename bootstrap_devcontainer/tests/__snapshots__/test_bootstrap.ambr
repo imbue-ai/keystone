@@ -124,23 +124,25 @@
 # ---
 # name: test_e2e_sample_projects[python_project]
   dict({
-    'agent_exit_code': 0,
-    'agent_summary': 'All tests pass successfully. The dev container uses uv for fast Python dependency management, includes --network=host for Modal compatibility, and uses UV_LINK_MODE=copy to avoid snapshot issues with symlinks.',
-    'agent_timed_out': False,
+    'agent': dict({
+      'exit_code': 0,
+      'model': '',
+      'status_messages': list([
+        'Exploring repository structure to identify file types and test locations.',
+        'Creating .devcontainer directory structure with devcontainer.json, Dockerfile, and run_all_tests.sh.',
+        'Building the dev container image to verify the setup.',
+        'Running tests in the container to verify the setup.',
+        'Fixing run_all_tests.sh to remove unnecessary --no-cov flag.',
+        'Rebuilding image with fixed test script.',
+        'Running tests with fixed script.',
+        'Verifying test artifacts in the container.',
+        'Final verification of .devcontainer structure.',
+        'Running complete end-to-end test from clean build.',
+      ]),
+      'summary': 'All tests pass successfully. The dev container uses uv for fast Python dependency management, includes --network=host for Modal compatibility, and uses UV_LINK_MODE=copy to avoid snapshot issues with symlinks.',
+      'timed_out': False,
+    }),
     'error_message': None,
-    'model': '',
-    'status_messages': list([
-      'Exploring repository structure to identify file types and test locations.',
-      'Creating .devcontainer directory structure with devcontainer.json, Dockerfile, and run_all_tests.sh.',
-      'Building the dev container image to verify the setup.',
-      'Running tests in the container to verify the setup.',
-      'Fixing run_all_tests.sh to remove unnecessary --no-cov flag.',
-      'Rebuilding image with fixed test script.',
-      'Running tests with fixed script.',
-      'Verifying test artifacts in the container.',
-      'Final verification of .devcontainer structure.',
-      'Running complete end-to-end test from clean build.',
-    ]),
     'success': True,
     'verification': dict({
       'cargo_test_summary': None,

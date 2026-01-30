@@ -63,6 +63,7 @@ class VerificationResult(BaseModel):
 class BootstrapResult(BaseModel):
     success: bool
     error_message: str | None = None
+    agent_timed_out: bool = False
 
     start_time: datetime
     end_time: datetime

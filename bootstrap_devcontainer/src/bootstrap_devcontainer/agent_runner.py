@@ -16,6 +16,7 @@ from bootstrap_devcontainer.process_runner import run_process
 from bootstrap_devcontainer.schema import VerifyResult
 
 DEFAULT_AGENT_TIMEOUT = 3600
+TIMEOUT_EXIT_CODE = 124  # Exit code used by GNU timeout command
 
 
 @dataclass
@@ -53,6 +54,7 @@ class AgentRunner(ABC):
         project_archive: bytes,
         max_budget_usd: float,
         agent_cmd: str,
+        time_limit_secs: int | None = None,
     ) -> Iterator[StreamEvent]:
         """Run the agent and yield output events.
 
@@ -61,6 +63,7 @@ class AgentRunner(ABC):
             project_archive: Git archive tarball of the project.
             max_budget_usd: Maximum budget for agent inference.
             agent_cmd: Base command to run the agent (e.g., "claude").
+            time_limit_secs: Maximum time in seconds for agent execution (optional).
 
         Yields:
             StreamEvent for each line of stdout/stderr.
@@ -132,6 +135,7 @@ class LocalAgentRunner(AgentRunner):
         project_archive: bytes,
         max_budget_usd: float,
         agent_cmd: str,
+        time_limit_secs: int | None = None,
     ) -> Iterator[StreamEvent]:
         if not self._check_docker_available():
             yield StreamEvent(
@@ -163,9 +167,10 @@ class LocalAgentRunner(AgentRunner):
         full_cmd = build_claude_command(prompt, max_budget_usd, agent_cmd)
 
         # Add timeout if available
+        timeout_secs = time_limit_secs if time_limit_secs is not None else DEFAULT_AGENT_TIMEOUT
         try:
             subprocess.run(["timeout", "--version"], capture_output=True)
-            full_cmd = ["timeout", str(DEFAULT_AGENT_TIMEOUT), *full_cmd]
+            full_cmd = ["timeout", str(timeout_secs), *full_cmd]
         except FileNotFoundError:
             pass
 

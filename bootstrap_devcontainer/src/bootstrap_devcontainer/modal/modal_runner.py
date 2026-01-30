@@ -324,7 +324,7 @@ exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
 
         app = modal.App.lookup("bootstrap-devcontainer-verify", create_if_missing=True)
 
-        logger.info("Creating sandbox...")
+        logger.info("Creating sandbox (this may take 20-30s for cold start)...")
 
         sandbox = modal.Sandbox.create(
             app=app,

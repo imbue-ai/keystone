@@ -1,6 +1,6 @@
 """Append-only log and cache for agent runs.
 
-This module provides a SQLite-based logging and caching layer for the bootstrap agent.
+This module provides a database-backed logging and caching layer for the bootstrap agent.
 The design philosophy is "log everything, cache selectively":
 
 Architecture
@@ -13,8 +13,14 @@ Two tables work together:
 
 2. `agent_run` - Records every actual agent execution (cache misses only)
    - Captures: UUID (links to cli_run), timestamp, cache key components,
-     agent output (events + devcontainer), return code, Claude JSONL log
+     agent output (events + devcontainer), return code, Claude state tarball
    - Purpose: Replay cache, analytics on agent behavior, debugging
+
+Database Support
+----------------
+Supports both SQLite and PostgreSQL via SQLAlchemy + pandas:
+- SQLite: Pass a file path (e.g., "./runs.db" or "~/.bootstrap_devcontainer/log.sqlite")
+- PostgreSQL: Pass a connect string (e.g., "postgresql://user:pass@host/db")
 
 Cache Behavior
 --------------
@@ -32,15 +38,18 @@ This means failed runs are logged for analytics but never replayed.
 
 CLI Flags
 ---------
-- --log_db: Path to SQLite database (default: ~/.bootstrap_devcontainer/log.sqlite)
+- --log_db: Database path or connect string (default: ~/.bootstrap_devcontainer/log.sqlite)
 - --require_cache_hit: Fail immediately if cache miss (useful for CI/testing)
 - --no_cache_replay: Skip cache lookup but still log the run (force fresh execution)
 - --cache_version: String appended to cache key to invalidate old entries
 
 Example Usage
 -------------
-    # Normal run with logging
+    # SQLite (default)
     bootstrap --project_root ./myproject --log_db ./runs.db
+
+    # PostgreSQL
+    bootstrap --project_root ./myproject --log_db postgresql://user:pass@localhost/mydb
 
     # Force fresh run, ignore cache
     bootstrap --project_root ./myproject --no_cache_replay
@@ -55,15 +64,18 @@ Example Usage
 import base64
 import hashlib
 import json
-import sqlite3
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
+import pandas as pd
 from pydantic import BaseModel, field_serializer, field_validator
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
 
 from bootstrap_devcontainer.git_utils import get_git_tree_hash
+from bootstrap_devcontainer.schema import AgentConfig
 
 
 class StreamEvent(BaseModel):
@@ -71,23 +83,6 @@ class StreamEvent(BaseModel):
 
     stream: Literal["stdout", "stderr"]
     line: str
-
-
-class AgentConfig(BaseModel):
-    """Configuration for how the agent is run.
-
-    This is part of the cache key - changing any field invalidates the cache.
-    """
-
-    agent_cmd: str
-    max_budget_usd: float
-    agent_time_limit_secs: int
-    agent_in_modal: bool
-
-    def to_cache_key_json(self) -> str:
-        """Stable JSON representation for cache key computation."""
-        # Sort keys for deterministic output
-        return self.model_dump_json(indent=None)
 
 
 class CacheKey(BaseModel):
@@ -117,15 +112,19 @@ class AgentRunRecord(BaseModel):
     events: list[StreamEvent]
     devcontainer_tarball: bytes
     return_code: int
-    claude_jsonl: str | None = None  # Only available from Modal runs
+    claude_dir_tarball: bytes | None = None  # Tarball of ~/.claude from Modal
 
-    @field_serializer("devcontainer_tarball")
-    def serialize_tarball(self, v: bytes) -> str:
+    @field_serializer("devcontainer_tarball", "claude_dir_tarball")
+    def serialize_tarball(self, v: bytes | None) -> str | None:
+        if v is None:
+            return None
         return base64.b64encode(v).decode("ascii")
 
-    @field_validator("devcontainer_tarball", mode="before")
+    @field_validator("devcontainer_tarball", "claude_dir_tarball", mode="before")
     @classmethod
-    def deserialize_tarball(cls, v: str | bytes) -> bytes:
+    def deserialize_tarball(cls, v: str | bytes | None) -> bytes | None:
+        if v is None:
+            return None
         if isinstance(v, str):
             return base64.b64decode(v)
         return v
@@ -139,42 +138,7 @@ class CLIRunRecord(BaseModel):
     cwd: str
     args: list[str]
     cache_hit: bool
-    # BootstrapResult is stored as JSON string since it may evolve
     bootstrap_result_json: str | None = None
-
-
-# SQL schema
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS cli_run (
-    id TEXT PRIMARY KEY,
-    timestamp TEXT NOT NULL,
-    cwd TEXT NOT NULL,
-    args_json TEXT NOT NULL,
-    cache_hit INTEGER NOT NULL,
-    bootstrap_result_json TEXT
-);
-
-CREATE TABLE IF NOT EXISTS agent_run (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    cli_run_id TEXT NOT NULL,
-    timestamp TEXT NOT NULL,
-    -- Cache key components (stored separately for analytics)
-    git_tree_hash TEXT NOT NULL,
-    prompt_hash TEXT NOT NULL,
-    agent_config_json TEXT NOT NULL,
-    cache_version TEXT NOT NULL,
-    cache_key_hash TEXT NOT NULL,
-    -- Cached data
-    events_json TEXT NOT NULL,
-    devcontainer_tarball_b64 TEXT NOT NULL,
-    return_code INTEGER NOT NULL,
-    claude_jsonl TEXT,
-    FOREIGN KEY (cli_run_id) REFERENCES cli_run(id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_agent_run_cache_key ON agent_run(cache_key_hash);
-CREATE INDEX IF NOT EXISTS idx_agent_run_timestamp ON agent_run(timestamp DESC);
-"""
 
 
 def compute_cache_key(
@@ -194,26 +158,43 @@ def compute_cache_key(
     )
 
 
+def _create_engine(db_url: str) -> Engine:
+    """Create SQLAlchemy engine from URL or path.
+
+    Args:
+        db_url: Either a SQLAlchemy URL (postgresql://...) or a file path for SQLite.
+    """
+    if db_url.startswith(("postgresql://", "postgres://", "sqlite://")):
+        return create_engine(db_url)
+    else:
+        # Treat as SQLite file path
+        path = Path(db_url).expanduser().resolve()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return create_engine(f"sqlite:///{path}")
+
+
 class AgentLog:
     """Append-only log and cache for agent runs.
+
+    Uses pandas + SQLAlchemy for database operations, supporting both
+    SQLite and PostgreSQL.
 
     Thread-safety: This class is NOT thread-safe. Use one instance per thread.
     """
 
-    def __init__(self, db_path: Path) -> None:
+    def __init__(self, db_url: str) -> None:
         """Open or create the log database.
 
         Args:
-            db_path: Path to SQLite database file. Parent directories created if needed.
+            db_url: Database URL or file path.
+                - File path: Creates/opens SQLite database
+                - postgresql://...: Connects to PostgreSQL
         """
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(db_path))
-        self._conn.executescript(_SCHEMA)
-        self._conn.commit()
+        self._engine = _create_engine(db_url)
 
     def close(self) -> None:
         """Close the database connection."""
-        self._conn.close()
+        self._engine.dispose()
 
     def generate_run_id(self) -> str:
         """Generate a unique ID for a CLI run."""
@@ -221,55 +202,46 @@ class AgentLog:
 
     def log_cli_run(self, record: CLIRunRecord) -> None:
         """Log a CLI invocation."""
-        self._conn.execute(
-            """
-            INSERT INTO cli_run (id, timestamp, cwd, args_json, cache_hit, bootstrap_result_json)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                record.id,
-                record.timestamp.isoformat(),
-                record.cwd,
-                json.dumps(record.args),
-                1 if record.cache_hit else 0,
-                record.bootstrap_result_json,
-            ),
+        df = pd.DataFrame(
+            [
+                {
+                    "id": record.id,
+                    "timestamp": record.timestamp.isoformat(),
+                    "cwd": record.cwd,
+                    "args_json": json.dumps(record.args),
+                    "cache_hit": record.cache_hit,
+                    "bootstrap_result_json": record.bootstrap_result_json,
+                }
+            ]
         )
-        self._conn.commit()
-
-    def update_cli_run_result(self, run_id: str, bootstrap_result_json: str) -> None:
-        """Update a CLI run with its final result."""
-        self._conn.execute(
-            "UPDATE cli_run SET bootstrap_result_json = ? WHERE id = ?",
-            (bootstrap_result_json, run_id),
-        )
-        self._conn.commit()
+        df.to_sql("cli_run", self._engine, if_exists="append", index=False)
 
     def log_agent_run(self, record: AgentRunRecord) -> None:
         """Log an agent execution."""
-        self._conn.execute(
-            """
-            INSERT INTO agent_run (
-                cli_run_id, timestamp,
-                git_tree_hash, prompt_hash, agent_config_json, cache_version, cache_key_hash,
-                events_json, devcontainer_tarball_b64, return_code, claude_jsonl
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                record.cli_run_id,
-                record.timestamp.isoformat(),
-                record.cache_key.git_tree_hash,
-                record.cache_key.prompt_hash,
-                record.cache_key.agent_config_json,
-                record.cache_key.cache_version,
-                record.cache_key.compute_hash(),
-                json.dumps([e.model_dump() for e in record.events]),
-                base64.b64encode(record.devcontainer_tarball).decode("ascii"),
-                record.return_code,
-                record.claude_jsonl,
-            ),
+        df = pd.DataFrame(
+            [
+                {
+                    "cli_run_id": record.cli_run_id,
+                    "timestamp": record.timestamp.isoformat(),
+                    "git_tree_hash": record.cache_key.git_tree_hash,
+                    "prompt_hash": record.cache_key.prompt_hash,
+                    "agent_config_json": record.cache_key.agent_config_json,
+                    "cache_version": record.cache_key.cache_version,
+                    "cache_key_hash": record.cache_key.compute_hash(),
+                    "events_json": json.dumps([e.model_dump() for e in record.events]),
+                    "devcontainer_tarball_b64": base64.b64encode(
+                        record.devcontainer_tarball
+                    ).decode("ascii"),
+                    "return_code": record.return_code,
+                    "claude_dir_tarball_b64": (
+                        base64.b64encode(record.claude_dir_tarball).decode("ascii")
+                        if record.claude_dir_tarball
+                        else None
+                    ),
+                }
+            ]
         )
-        self._conn.commit()
+        df.to_sql("agent_run", self._engine, if_exists="append", index=False)
 
     def lookup_cache(self, cache_key: CacheKey) -> AgentRunRecord | None:
         """Find most recent successful agent run matching the cache key.
@@ -277,19 +249,21 @@ class AgentLog:
         Returns None if no matching successful run exists.
         Only runs with return_code == 0 are considered for replay.
         """
-        cursor = self._conn.execute(
-            """
+        cache_hash = cache_key.compute_hash()
+        query = text("""
             SELECT cli_run_id, timestamp,
                    git_tree_hash, prompt_hash, agent_config_json, cache_version,
-                   events_json, devcontainer_tarball_b64, return_code, claude_jsonl
+                   events_json, devcontainer_tarball_b64, return_code, claude_dir_tarball_b64
             FROM agent_run
-            WHERE cache_key_hash = ? AND return_code = 0
+            WHERE cache_key_hash = :cache_hash AND return_code = 0
             ORDER BY timestamp DESC
             LIMIT 1
-            """,
-            (cache_key.compute_hash(),),
-        )
-        row = cursor.fetchone()
+        """)
+
+        with self._engine.connect() as conn:
+            result = conn.execute(query, {"cache_hash": cache_hash})
+            row = result.fetchone()
+
         if row is None:
             return None
 
@@ -306,12 +280,10 @@ class AgentLog:
             events=[StreamEvent(**e) for e in events_data],
             devcontainer_tarball=base64.b64decode(row[7]),
             return_code=row[8],
-            claude_jsonl=row[9],
+            claude_dir_tarball=base64.b64decode(row[9]) if row[9] else None,
         )
 
 
-# Legacy compatibility - re-export for existing code
-# TODO: Remove after migration
 def create_devcontainer_tarball(project_root: Path) -> bytes:
     """Create a gzipped tarball of the .devcontainer directory."""
     import io

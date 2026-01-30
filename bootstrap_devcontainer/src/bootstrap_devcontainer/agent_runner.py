@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from bootstrap_devcontainer.agent_cache import create_devcontainer_tarball
+from bootstrap_devcontainer.agent_log import create_devcontainer_tarball
 from bootstrap_devcontainer.process_runner import run_process
 from bootstrap_devcontainer.schema import VerifyResult
 
@@ -109,14 +109,14 @@ class AgentRunner(ABC):
         """Perform any necessary cleanup (e.g. terminating sandboxes)."""
         ...
 
-    def get_claude_jsonl(self) -> str | None:
-        """Get Claude's JSONL conversation log if available.
+    def get_claude_dir_tarball(self) -> bytes | None:
+        """Get tarball of ~/.claude directory if available.
 
         This is optional - only Modal runner implements it since it has access
         to the sandbox filesystem. Local runner returns None.
 
         Returns:
-            JSONL content as string, or None if not available.
+            Gzipped tarball of ~/.claude, or None if not available.
         """
         return None
 

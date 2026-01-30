@@ -7,13 +7,13 @@ from pathlib import Path
 import pytest
 
 from bootstrap_devcontainer.agent_log import (
-    AgentConfig,
     AgentLog,
     AgentRunRecord,
     CacheKey,
     CLIRunRecord,
     StreamEvent,
 )
+from bootstrap_devcontainer.schema import AgentConfig
 
 
 @pytest.fixture
@@ -25,14 +25,23 @@ def temp_db() -> Path:
 
 def test_agent_log_create_db(temp_db: Path) -> None:
     """Test creating a new database."""
-    agent_log = AgentLog(temp_db)
+    agent_log = AgentLog(str(temp_db))
+    # Write something to trigger db creation (SQLAlchemy is lazy)
+    record = CLIRunRecord(
+        id=agent_log.generate_run_id(),
+        timestamp=datetime.now(UTC),
+        cwd="/test",
+        args=["test"],
+        cache_hit=False,
+    )
+    agent_log.log_cli_run(record)
     assert temp_db.exists()
     agent_log.close()
 
 
 def test_cli_run_logging(temp_db: Path) -> None:
     """Test logging CLI runs."""
-    agent_log = AgentLog(temp_db)
+    agent_log = AgentLog(str(temp_db))
     run_id = agent_log.generate_run_id()
 
     record = CLIRunRecord(
@@ -49,7 +58,7 @@ def test_cli_run_logging(temp_db: Path) -> None:
 
 def test_agent_run_logging_and_cache_lookup(temp_db: Path) -> None:
     """Test logging agent runs and cache lookup."""
-    agent_log = AgentLog(temp_db)
+    agent_log = AgentLog(str(temp_db))
     cli_run_id = agent_log.generate_run_id()
 
     cache_key = CacheKey(
@@ -70,7 +79,7 @@ def test_agent_run_logging_and_cache_lookup(temp_db: Path) -> None:
         ],
         devcontainer_tarball=b"tarball data",
         return_code=0,
-        claude_jsonl=None,
+        claude_dir_tarball=None,
     )
     agent_log.log_agent_run(record)
 
@@ -86,7 +95,7 @@ def test_agent_run_logging_and_cache_lookup(temp_db: Path) -> None:
 
 def test_cache_only_returns_successful_runs(temp_db: Path) -> None:
     """Test that cache lookup only returns successful runs."""
-    agent_log = AgentLog(temp_db)
+    agent_log = AgentLog(str(temp_db))
 
     cache_key = CacheKey(
         git_tree_hash="abc123",
@@ -103,7 +112,7 @@ def test_cache_only_returns_successful_runs(temp_db: Path) -> None:
         events=[StreamEvent(stream="stderr", line="error")],
         devcontainer_tarball=b"",
         return_code=1,  # Failed
-        claude_jsonl=None,
+        claude_dir_tarball=None,
     )
     agent_log.log_agent_run(record)
 

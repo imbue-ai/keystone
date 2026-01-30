@@ -3,6 +3,22 @@ from datetime import datetime
 from pydantic import BaseModel
 
 
+class AgentConfig(BaseModel):
+    """Configuration for how the agent is run.
+
+    This is part of the cache key - changing any field invalidates the cache.
+    """
+
+    agent_cmd: str
+    max_budget_usd: float
+    agent_time_limit_secs: int
+    agent_in_modal: bool
+
+    def to_cache_key_json(self) -> str:
+        """Stable JSON representation for cache key computation."""
+        return self.model_dump_json(indent=None)
+
+
 class VerifyResult(BaseModel):
     """Result of running verification tests."""
 

@@ -10,7 +10,6 @@ import typer
 from rich.console import Console
 
 from bootstrap_devcontainer.agent_log import (
-    AgentConfig,
     AgentLog,
     AgentRunRecord,
     CLIRunRecord,
@@ -36,6 +35,7 @@ from bootstrap_devcontainer.git_utils import (
 )
 from bootstrap_devcontainer.prompts import build_agent_prompt
 from bootstrap_devcontainer.schema import (
+    AgentConfig,
     AgentStatusMessage,
     BootstrapResult,
     InferenceCost,
@@ -208,15 +208,10 @@ def bootstrap(
     max_budget_usd: float | None = typer.Option(
         1.0, "--max_budget_usd", help="Maximum dollar amount to spend on agent inference"
     ),
-    # Legacy option - will be removed in favor of log_db
-    sqlite_cache_dir: Path | None = typer.Option(
-        None, "--sqlite_cache_dir", help="[DEPRECATED] Use --log_db instead", hidden=True
-    ),
-    # New logging/caching options
-    log_db: Path | None = typer.Option(
+    log_db: str | None = typer.Option(
         None,
         "--log_db",
-        help="SQLite database for logging and caching (default: ~/.bootstrap_devcontainer/log.sqlite)",
+        help="Database for logging/caching. SQLite path or postgresql:// URL (default: ~/.bootstrap_devcontainer/log.sqlite)",
     ),
     require_cache_hit: bool = typer.Option(
         False,
@@ -389,18 +384,9 @@ def bootstrap(
         print(f"Agent stderr: {line}", file=sys.stderr, flush=True)
 
     try:
-        # Handle legacy --sqlite_cache_dir option
-        if sqlite_cache_dir is not None and log_db is None:
-            console.print(
-                "[yellow]Warning:[/yellow] --sqlite_cache_dir is deprecated, use --log_db instead"
-            )
-            # Note: old format is incompatible, so we just use log_db default behavior
-
         # Set up logging/caching
         # Default to ~/.bootstrap_devcontainer/log.sqlite if not specified
-        effective_log_db = log_db
-        if effective_log_db is None:
-            effective_log_db = Path.home() / ".bootstrap_devcontainer" / "log.sqlite"
+        effective_log_db = log_db or str(Path.home() / ".bootstrap_devcontainer" / "log.sqlite")
 
         agent_log = AgentLog(effective_log_db)
         cli_run_id = agent_log.generate_run_id()
@@ -499,8 +485,8 @@ def bootstrap(
                     devcontainer_tarball = runner.get_devcontainer_tarball()
                     extract_devcontainer_tarball(devcontainer_tarball, project_root)
 
-                    # Extract Claude JSONL if available (Modal only)
-                    claude_jsonl = runner.get_claude_jsonl()
+                    # Extract ~/.claude tarball if available (Modal only)
+                    claude_dir_tarball = runner.get_claude_dir_tarball()
 
                     # Log agent run (always, regardless of success - for analytics)
                     agent_run_record = AgentRunRecord(
@@ -510,7 +496,7 @@ def bootstrap(
                         events=collected_events,
                         devcontainer_tarball=devcontainer_tarball,
                         return_code=exit_code,
-                        claude_jsonl=claude_jsonl,
+                        claude_dir_tarball=claude_dir_tarball,
                     )
                     agent_log.log_agent_run(agent_run_record)
 

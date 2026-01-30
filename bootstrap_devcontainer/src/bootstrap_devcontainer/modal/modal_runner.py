@@ -473,54 +473,45 @@ exec timeout {time_limit_secs} {shlex.join(cmd_parts)}
                 test_execution_seconds=test_execution_seconds,
             )
 
-    def get_claude_jsonl(self) -> str | None:
-        """Extract Claude's JSONL log from the sandbox.
+    def get_claude_dir_tarball(self) -> bytes | None:
+        """Extract tarball of ~/.claude directory from the sandbox.
 
-        Claude Code stores conversation logs in ~/.claude/projects/*/.../*.jsonl
-        Since we only run the agent once, there should be exactly one JSONL file.
+        This captures Claude's full state including conversation logs,
+        settings, and any other data stored during the run.
 
         Returns:
-            The JSONL content as a string, or None if not found/multiple found.
+            Gzipped tarball of ~/.claude, or None if not available.
         """
         if self._sandbox is None:
             return None
 
         sb = self._sandbox
         try:
-            # Find JSONL files in Claude's project directory
-            find_proc = run_modal_command(
-                sb,
-                "find",
-                "/home/agent/.claude/projects",
-                "-name",
-                "*.jsonl",
-                "-type",
-                "f",
-                name="find-jsonl",
-                capture=True,
+            # Check if ~/.claude exists
+            check_proc = run_modal_command(
+                sb, "test", "-d", "/home/agent/.claude", name="check-claude-dir"
             )
-
-            # Collect output
-            jsonl_paths: list[str] = []
-            for event in find_proc.stream():
-                if event.stream == "stdout" and event.line.strip():
-                    jsonl_paths.append(event.line.strip())
-            find_proc.wait()
-
-            if len(jsonl_paths) == 0:
-                logger.warning("No Claude JSONL files found in sandbox")
-                return None
-            elif len(jsonl_paths) > 1:
-                logger.warning(f"Multiple Claude JSONL files found: {jsonl_paths}, expected 1")
+            if check_proc.wait() != 0:
+                logger.info("No ~/.claude directory found in sandbox")
                 return None
 
-            # Read the single JSONL file
-            jsonl_path = jsonl_paths[0]
-            logger.info(f"Reading Claude JSONL from: {jsonl_path}")
-            with sb.open(jsonl_path, "r") as f:
+            # Create tarball
+            run_modal_command(
+                sb,
+                "tar",
+                "-czf",
+                "/tmp/claude_dir.tar.gz",
+                "-C",
+                "/home/agent",
+                ".claude",
+                name="tar-claude-dir",
+            ).wait()
+
+            # Read tarball
+            with sb.open("/tmp/claude_dir.tar.gz", "rb") as f:
                 return f.read()
         except Exception as e:
-            logger.error(f"Error extracting Claude JSONL: {e}")
+            logger.error(f"Error extracting ~/.claude tarball: {e}")
             return None
 
     def cleanup(self) -> None:

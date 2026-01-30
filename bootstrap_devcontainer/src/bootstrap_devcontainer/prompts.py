@@ -88,7 +88,7 @@ so that the image can execute its own tests.
       ii. In that directory, put files called stdout.txt and stderr.txt, with timestamps.
       iii. Tee the outputs to stdout/stderr.
       iv. Create language-specific JSON test reports in /test_artifacts.
-          CRITICAL: Use the EXACT commands below to generate reports. Do NOT use TAP format. Do NOT write fake/placeholder JSON.
+          CRITICAL: Use the EXACT arguments below to generate reports. Do NOT use TAP format. Do NOT write fake/placeholder JSON -- only produce real JSON reports.
           - Python: /test_artifacts/pytest-json-report.json
             Command: `pytest --json-report --json-report-file=/test_artifacts/pytest-json-report.json`
             (requires pytest-json-report plugin - add to requirements or install via pip)
@@ -104,6 +104,7 @@ so that the image can execute its own tests.
    e. run_all_tests.sh is allowed to fail early (before running all tests) if that helps complete the task faster.
    f. If some of the test runs fail, run_all_tests.sh should fail as well (No need to explicitlyverify this behavior, though).
       You can use `set -euo pipefail` to exit the script if any test fails.
+   g. There's no need to branch in this file, because the code tree that you see now will always be the code tree that this script runs against.
    g. Make it executable: `chmod +x .devcontainer/run_all_tests.sh`.
 
 Tips and Notes:

@@ -154,13 +154,31 @@ Include anything you wish you had been told at the start. Examples:
 
 Please don't forget to emit the summary at the end.
 
-To verify your work, use something like this (adding arguments as appropriate for permissions, etc.)
-1. Build with `devcontainer build --workspace-folder .`
-2. To test your work, run this command and check the return code:
-   `docker run --rm IMAGE ./.devcontainer/run_all_tests.sh`
-   This command should work straight from the image, without any of the devcontainer lifecycle hooks.
-3. If needed, extract and examine the test artifacts from the image with:
-   `docker cp CONTAINER:/test_artifacts /tmp/test_artifacts_RUN_NAME`.
+Verify your work using commands like these:
+
+1. To build your image:
+```bash
+IMAGE_NAME="project_image-$(date +%Y%m%d-%H%M%S)"
+devcontainer build \
+  --image-name "$IMAGE_NAME" \
+  --workspace-folder .
+```
+
+2. To run your image:
+```
+CONTAINER_NAME="project_container-$(date +%Y%m%d-%H%M%S)"
+docker run --network host \
+  --name "$CONTAINER_NAME" \
+  "$IMAGE_NAME" \
+  ./.devcontainer/run_all_tests.sh
+
+# If you want access to the detailed test artifacts from a completed container, you can extract them with:
+docker cp "$CONTAINER_NAME:/test_artifacts" /tmp/test_artifacts.$CONTAINER_NAME"
+
+# Note: If you run a container in detached mode, make sure to `docker wait $CONTAINER_NAME` before trying to extract the test artifacts.
+
+# No need to clean up the container -- you're working in an ephemeral sandbox.
+```
 """
 
 MODAL_ADDENDUM = """

@@ -309,10 +309,28 @@ exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
     ) -> Iterator[StreamEvent]:
         """Run verification tests using Modal's from_dockerfile (cached image builds)."""
         dockerfile_path = project_root / ".devcontainer" / "Dockerfile"
+        test_script_path = project_root / ".devcontainer" / "run_all_tests.sh"
 
         if not dockerfile_path.exists():
             logger.error("Dockerfile not found at %s", dockerfile_path)
             return
+
+        # Print Dockerfile contents for visibility
+        yield StreamEvent(stream="stdout", line="=" * 60)
+        yield StreamEvent(stream="stdout", line=f"Dockerfile: {dockerfile_path}")
+        yield StreamEvent(stream="stdout", line="=" * 60)
+        for line in dockerfile_path.read_text().splitlines():
+            yield StreamEvent(stream="stdout", line=line)
+        yield StreamEvent(stream="stdout", line="")
+
+        # Print test script contents for visibility
+        if test_script_path.exists():
+            yield StreamEvent(stream="stdout", line="=" * 60)
+            yield StreamEvent(stream="stdout", line=f"Test script: {test_script_path}")
+            yield StreamEvent(stream="stdout", line="=" * 60)
+            for line in test_script_path.read_text().splitlines():
+                yield StreamEvent(stream="stdout", line=line)
+            yield StreamEvent(stream="stdout", line="")
 
         logger.info("Building devcontainer image...")
 
@@ -333,15 +351,13 @@ exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
         )
 
         try:
-            # Run the test script
+            # Run the test script using ManagedProcess for proper interleaved streaming
             proc = sandbox.exec("bash", "/project_src/.devcontainer/run_all_tests.sh")
+            managed = ManagedProcess(proc, prefix="verify", capture=True)
 
-            for line in proc.stdout:
-                yield StreamEvent(stream="stdout", line=line.rstrip("\n"))
-            for line in proc.stderr:
-                yield StreamEvent(stream="stderr", line=line.rstrip("\n"))
+            # Stream events as they come in (interleaved stdout/stderr)
+            yield from managed.stream()
 
-            proc.wait()
             test_exit_code = proc.returncode
 
             # Extract test artifacts using Modal's native filesystem API

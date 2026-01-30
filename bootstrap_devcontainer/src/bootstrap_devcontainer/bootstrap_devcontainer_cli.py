@@ -428,13 +428,12 @@ def bootstrap(
             # The runner's verify method should yield events we can display
             verification_failed = False
             for event in runner.verify(project_root, test_artifacts_dir):
-                if event.stream == "stdout":
-                    print(f"Verification: {event.line}", file=sys.stderr)
-                else:
-                    print(f"Verification stderr: {event.line}", file=sys.stderr, flush=True)
-                    if "Test run failed" in event.line or "Build failed" in event.line:
-                        verification_failed = True
-                        verification_error = event.line
+                timestamp = datetime.now(UTC).strftime("%H:%M:%S")
+                stream_label = "stdout" if event.stream == "stdout" else "stderr"
+                print(f"[{timestamp}] [{stream_label}] {event.line}", file=sys.stderr, flush=True)
+                if "Test run failed" in event.line or "Build failed" in event.line:
+                    verification_failed = True
+                    verification_error = event.line
 
             verification_success = not verification_failed
         except Exception as e:

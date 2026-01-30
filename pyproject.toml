@@ -31,6 +31,7 @@ select = [
 ignore = [
     "E501",   # line too long (handled by formatter)
     "B008",   # function call in default argument (standard typer pattern)
+    "G004",   # f-string in logging (cleaner than % formatting)
 ]
 
 [tool.ruff.lint.isort]

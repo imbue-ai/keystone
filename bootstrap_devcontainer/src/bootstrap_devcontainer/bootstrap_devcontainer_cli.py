@@ -420,6 +420,23 @@ def bootstrap(
 
         # Verification step
         print("Verifying agent's work...", file=sys.stderr)
+
+        # Print Dockerfile and test script for visibility
+        dockerfile_path = project_root / ".devcontainer" / "Dockerfile"
+        test_script_path = project_root / ".devcontainer" / "run_all_tests.sh"
+
+        if dockerfile_path.exists():
+            print("=" * 60, file=sys.stderr)
+            print(f"Dockerfile: {dockerfile_path}", file=sys.stderr)
+            print("=" * 60, file=sys.stderr)
+            print(dockerfile_path.read_text(), file=sys.stderr)
+
+        if test_script_path.exists():
+            print("=" * 60, file=sys.stderr)
+            print(f"Test script: {test_script_path}", file=sys.stderr)
+            print("=" * 60, file=sys.stderr)
+            print(test_script_path.read_text(), file=sys.stderr)
+
         verification_start_time = time.time()
         verification_error: str | None = None
         try:
@@ -428,13 +445,12 @@ def bootstrap(
             # The runner's verify method should yield events we can display
             verification_failed = False
             for event in runner.verify(project_root, test_artifacts_dir):
-                if event.stream == "stdout":
-                    print(f"Verification: {event.line}", file=sys.stderr)
-                else:
-                    print(f"Verification stderr: {event.line}", file=sys.stderr, flush=True)
-                    if "Test run failed" in event.line or "Build failed" in event.line:
-                        verification_failed = True
-                        verification_error = event.line
+                timestamp = datetime.now(UTC).strftime("%H:%M:%S")
+                stream_label = "stdout" if event.stream == "stdout" else "stderr"
+                print(f"[{timestamp}] [{stream_label}] {event.line}", file=sys.stderr, flush=True)
+                if "Test run failed" in event.line or "Build failed" in event.line:
+                    verification_failed = True
+                    verification_error = event.line
 
             verification_success = not verification_failed
         except Exception as e:

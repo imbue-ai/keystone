@@ -76,18 +76,24 @@ class VerificationResult(BaseModel):
     cargo_test_summary: TestSummary | None = None
 
 
-class BootstrapResult(BaseModel):
-    success: bool
-    error_message: str | None = None
-    agent_timed_out: bool = False
+class AgentExecution(BaseModel):
+    """Details about the agent's execution."""
 
     start_time: datetime
     end_time: datetime
+    duration_seconds: float
+    exit_code: int
+    timed_out: bool = False
     model: str = ""
-    agent_exit_code: int
-    agent_work_seconds: float
-    agent_summary: AgentStatusMessage | None = None
+    summary: AgentStatusMessage | None = None
     status_messages: list[AgentStatusMessage] = []
     cost: InferenceCost
+
+
+class BootstrapResult(BaseModel):
+    success: bool
+    error_message: str | None = None
+
+    agent: AgentExecution
 
     verification: VerificationResult | None = None

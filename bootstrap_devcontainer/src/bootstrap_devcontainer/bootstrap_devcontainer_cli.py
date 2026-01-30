@@ -36,6 +36,7 @@ from bootstrap_devcontainer.git_utils import (
 from bootstrap_devcontainer.prompts import build_agent_prompt
 from bootstrap_devcontainer.schema import (
     AgentConfig,
+    AgentExecution,
     AgentStatusMessage,
     BootstrapResult,
     InferenceCost,
@@ -581,18 +582,20 @@ def bootstrap(
     output = BootstrapResult(
         success=overall_success,
         error_message=error_message,
-        agent_timed_out=agent_timed_out,
-        start_time=start_datetime,
-        end_time=datetime.now(UTC),
-        agent_summary=agent_summary,
-        status_messages=status_messages,
-        agent_work_seconds=agent_work_seconds,
-        model=model_name,
-        cost=InferenceCost(
-            cost_usd=total_cost_usd,
-            token_spending=TokenSpending(**token_spending),
+        agent=AgentExecution(
+            start_time=start_datetime,
+            end_time=datetime.now(UTC),
+            duration_seconds=agent_work_seconds,
+            exit_code=exit_code,
+            timed_out=agent_timed_out,
+            model=model_name,
+            summary=agent_summary,
+            status_messages=status_messages,
+            cost=InferenceCost(
+                cost_usd=total_cost_usd,
+                token_spending=TokenSpending(**token_spending),
+            ),
         ),
-        agent_exit_code=exit_code,
         verification=verification,
     )
 

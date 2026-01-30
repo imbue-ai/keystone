@@ -33,6 +33,18 @@ class AgentConfig(BaseModel):
         description="SQLite cache directory (None to disable caching)",
     )
 
+    # Log database (for testing, use DEFAULT_TESTING_LOG_PATH)
+    log_db: str | None = Field(
+        default=None,
+        description="Database for logging/caching. SQLite path or postgresql:// URL",
+    )
+
+    # Modal execution
+    agent_in_modal: bool = Field(
+        default=True,
+        description="Run agent in Modal sandbox (default) or locally",
+    )
+
 
 class RepoEntry(BaseModel):
     """A single entry from the repo_list JSONL file."""

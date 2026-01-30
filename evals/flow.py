@@ -94,9 +94,13 @@ def process_repo_task(
     logger = get_run_logger()
     logger.info(f"Starting process_repo_task for {repo_source}")
 
-    # Configure worker and process_runner loggers to forward to Prefect
-    # This ensures logs from worker.py and process_runner.py appear in Prefect UI
-    for module_name in ["worker", "bootstrap_devcontainer.process_runner"]:
+    # Configure worker, process_runner, and modal loggers to forward to Prefect
+    # This ensures logs from worker.py, process_runner.py, and modal container appear in Prefect UI
+    for module_name in [
+        "worker",
+        "bootstrap_devcontainer.process_runner",
+        "bootstrap_devcontainer.modal",
+    ]:
         module_logger = logging.getLogger(module_name)
         module_logger.setLevel(logging.DEBUG)
         # Add a handler that forwards to Prefect's logger

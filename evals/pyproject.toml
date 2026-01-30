@@ -33,3 +33,7 @@ sources = { "." = "" }
 
 [tool.pytest.ini_options]
 testpaths = ["."]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "modal: marks tests that require Modal infrastructure",
+]

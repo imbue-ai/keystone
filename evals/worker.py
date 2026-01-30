@@ -178,7 +178,19 @@ def process_repo(
             str(agent_config.max_budget_usd),
             "--output_file",
             str(result_file),
+            "--agent_time_limit_secs",
+            str(agent_config.timeout_minutes * 60),
         ]
+
+        # Add modal flag
+        if agent_config.agent_in_modal:
+            cmd.append("--agent_in_modal")
+        else:
+            cmd.append("--agent_local")
+
+        # Add log_db if specified
+        if agent_config.log_db:
+            cmd.extend(["--log_db", str(Path(agent_config.log_db).expanduser())])
 
         # If API key provided, set up isolated fake home with Claude config
         # Otherwise, use real home so claude CLI uses its own auth

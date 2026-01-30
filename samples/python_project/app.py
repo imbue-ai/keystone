@@ -1,4 +1,4 @@
-"""Hi there 4."""
+"""Docstring."""
 
 def add(a: int, b: int) -> int:
     return a + b

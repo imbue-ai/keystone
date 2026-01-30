@@ -93,10 +93,11 @@ so that the image can execute its own tests.
           - Node.js: /test_artifacts/node-test-report.json (use `node --test --test-reporter=json`)
           - Rust: /test_artifacts/cargo-test-report.json (use `cargo test -- -Z unstable-options --format json` or parse output)
       v. A file called /test_artifacts/final_result.json stating success/failure.
-   d. run_all_tests.sh is allowed to fail early (before running all tests) if that helps complete the task faster.
-   e. run_all_tests.sh should return 0 (success) IFF all tests pass,
-      and should forward enough information to stdout/stderr to enable debugging failing tests.
-   f. Make it executable: `chmod +x .devcontainer/run_all_tests.sh`.
+   d. run_all_tests.sh should forward enough information to stdout/stderr to enable debugging failing tests.
+   e. run_all_tests.sh is allowed to fail early (before running all tests) if that helps complete the task faster.
+   f. If some of the test runs fail, run_all_tests.sh should fail as well (No need to explicitlyverify this behavior, though).
+      You can use `set -euo pipefail` to exit the script if any test fails.
+   g. Make it executable: `chmod +x .devcontainer/run_all_tests.sh`.
 
 Tips and Notes:
 
@@ -107,6 +108,9 @@ Tips and Notes:
 * Only make changes in the .devcontainer/... subtree.
 
 * Run parts of test suites in parallel if feasible, both inside run_all_tests.sh, and as you explore and debug portions of the test suite.
+
+* For Python projects with simple dependencies, using uv for package management speeds up builds significantly.
+  Remember to set PYTHONPATH in run_all_tests.sh if your tests import from the project root without an installed package.
 
 * If tests cannot be fixed by Dockerfile environment changes, disable them via command line args in run_all_tests.sh.
 

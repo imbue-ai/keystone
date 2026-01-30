@@ -122,3 +122,38 @@
     'success': False,
   })
 # ---
+# name: test_e2e_sample_projects[python_project]
+  dict({
+    'agent_exit_code': 0,
+    'agent_summary': "All tests pass successfully. The devcontainer uses UV for fast Python dependency management with optimized layer caching. Key detail: removed --no-cov flag since pytest-cov wasn't a dependency. The setup works correctly with Modal's network host requirement and uses UV_LINK_MODE=copy for snapshot compatibility.",
+    'cargo_test_summary': None,
+    'error_message': None,
+    'go_test_summary': None,
+    'model': '',
+    'node_test_summary': None,
+    'pytest_summary': dict({
+      'failed_count': 0,
+      'failed_tests': list([
+      ]),
+      'passed_count': 2,
+      'passed_tests': list([
+        'tests/test_app.py::test_add',
+        'tests/test_app.py::test_multiply',
+      ]),
+      'skipped_count': 0,
+      'skipped_tests': list([
+      ]),
+    }),
+    'status_messages': list([
+      'Exploring repository structure to identify file types and test locations.',
+      'Creating .devcontainer folder structure with devcontainer.json, Dockerfile, and run_all_tests.sh',
+      'Building devcontainer image with network host mode for Modal compatibility.',
+      'Running tests in the built container to verify everything works.',
+      'Fixing pytest arguments - removing --no-cov flag as pytest-cov is not installed.',
+      'Rebuilding container with fixed test script.',
+      'Verifying test artifacts were created correctly.',
+      'Running final validation test to confirm successful build and test execution.',
+    ]),
+    'success': True,
+  })
+# ---

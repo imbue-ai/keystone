@@ -374,3 +374,65 @@ def test_max_budget_zero_fails(tmp_path: Path, project_root: Path) -> None:
     assert (
         "devcontainer" in output.error_message.lower() or "agent" in output.error_message.lower()
     ), f"Expected error message about devcontainer or agent, got: {output.error_message}"
+
+
+def test_agent_time_limit_causes_timeout(tmp_path: Path, project_root: Path) -> None:
+    """
+    Test that setting a very short --agent_time_limit_secs causes timeout.
+    The CLI should return non-zero exit code and set agent_timed_out=True.
+
+    Uses a slow fake agent that sleeps to ensure timeout triggers.
+    """
+    test_artifacts_dir = tmp_path / "test_artifacts"
+
+    # Create a slow fake agent that sleeps
+    slow_agent = tmp_path / "slow_agent.py"
+    slow_agent.write_text("""#!/usr/bin/env python3
+import time
+time.sleep(10)  # Sleep longer than the timeout
+print('{"type": "result"}')
+""")
+    slow_agent.chmod(0o755)
+
+    logger.info("=" * 60)
+    logger.info("Testing agent_time_limit_secs causes timeout")
+    logger.info("Project root: %s", project_root)
+    logger.info("=" * 60)
+
+    cmd = [
+        "bootstrap-devcontainer",
+        "--project_root",
+        str(project_root),
+        "--test_artifacts_dir",
+        str(test_artifacts_dir),
+        "--agent_cmd",
+        str(slow_agent),
+        "--agent_local",
+        "--agent_time_limit_secs",
+        "1",  # 1 second timeout - agent sleeps for 10s so will timeout
+    ]
+
+    logger.info("Running: %s", " ".join(cmd))
+
+    result = run_process(cmd, log_prefix="[timeout-test]")
+
+    logger.info("Return code: %s", result.returncode)
+
+    # CLI should return non-zero exit code on timeout
+    assert result.returncode != 0, "Expected non-zero exit code with time limit"
+
+    # Parse JSON output - should still be present even on failure
+    stdout_lines = result.stdout.strip().split("\n")
+    json_start = None
+    for i, line in enumerate(stdout_lines):
+        if line.strip() == "{":
+            json_start = i
+            break
+
+    assert json_start is not None, "Expected JSON output even on timeout"
+    json_str = "\n".join(stdout_lines[json_start:])
+    output = BootstrapResult.model_validate_json(json_str)
+
+    assert not output.success, "Expected success=false with time limit"
+    assert output.agent_timed_out, "Expected agent_timed_out=True"
+    assert output.agent_exit_code == 124, "Expected exit code 124 (timeout)"

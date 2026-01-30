@@ -215,13 +215,14 @@ class ModalAgentRunner(AgentRunner):
         project_archive: bytes,
         max_budget_usd: float,
         agent_cmd: str,
+        time_limit_secs: int | None = None,
     ) -> Iterator[StreamEvent]:
         """Run the agent in the Modal sandbox."""
         self.ensure_sandbox()
         self.upload_project(project_archive)
 
         try:
-            yield from self._run_agent(prompt, max_budget_usd, agent_cmd)
+            yield from self._run_agent(prompt, max_budget_usd, agent_cmd, time_limit_secs)
         except Exception:
             if self._sandbox:
                 self._sandbox.terminate()
@@ -233,6 +234,7 @@ class ModalAgentRunner(AgentRunner):
         prompt: str,
         max_budget_usd: float,
         agent_cmd: str,
+        time_limit_secs: int | None = None,
     ) -> Iterator[StreamEvent]:
         """Execute the agent inside the sandbox (sandbox and project already set up)."""
         assert self._sandbox is not None
@@ -265,7 +267,7 @@ class ModalAgentRunner(AgentRunner):
 set -e
 cd /project
 {f"export ANTHROPIC_API_KEY={shlex.quote(env_vars['ANTHROPIC_API_KEY'])}" if "ANTHROPIC_API_KEY" in env_vars else ""}
-exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
+exec timeout {time_limit_secs if time_limit_secs is not None else DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
 """
         # Upload script using Modal's native filesystem API
         with sb.open("/run_agent.sh", "w") as f:

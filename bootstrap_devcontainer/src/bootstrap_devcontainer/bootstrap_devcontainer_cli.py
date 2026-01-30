@@ -17,7 +17,7 @@ from bootstrap_devcontainer.agent_cache import (
     compute_cache_key,
     extract_devcontainer_tarball,
 )
-from bootstrap_devcontainer.agent_runner import LocalAgentRunner
+from bootstrap_devcontainer.agent_runner import TIMEOUT_EXIT_CODE, LocalAgentRunner
 from bootstrap_devcontainer.constants import (
     ANSI_BLUE,
     ANSI_CYAN,
@@ -217,6 +217,11 @@ def bootstrap(
         "--agent_in_modal/--agent_local",
         help="Run agent in Modal sandbox (default) or locally",
     ),
+    agent_time_limit_secs: int | None = typer.Option(
+        None,
+        "--agent_time_limit_secs",
+        help="Maximum seconds for agent execution (uses timeout command)",
+    ),
 ):
     assert project_root is not None, "--project_root is required"
     project_root = project_root.resolve()
@@ -264,6 +269,7 @@ def bootstrap(
     total_cost_usd = 0.0
     model_name = ""
     exit_code = 1
+    agent_timed_out = False
     verification_success = False
     verification_seconds = 0.0
     agent_summary: AgentStatusMessage | None = None
@@ -411,7 +417,9 @@ def bootstrap(
                 assert agent_cmd is not None
                 assert max_budget_usd is not None
 
-                for event in runner.run(prompt, project_archive, max_budget_usd, agent_cmd):
+                for event in runner.run(
+                    prompt, project_archive, max_budget_usd, agent_cmd, agent_time_limit_secs
+                ):
                     if event_collector is not None:
                         event_collector.add(event.stream, event.line)
                     if event.stream == "stdout":
@@ -420,6 +428,8 @@ def bootstrap(
                         process_stderr_line(event.line)
 
                 exit_code = runner.exit_code
+                if exit_code == TIMEOUT_EXIT_CODE:
+                    agent_timed_out = True
 
                 # If the agent succeeded (or at least finished), extract the .devcontainer
                 # so it's available for local use and for the next verification step
@@ -503,6 +513,7 @@ def bootstrap(
     output = BootstrapResult(
         success=overall_success,
         error_message=error_message,
+        agent_timed_out=agent_timed_out,
         start_time=start_datetime,
         end_time=datetime.now(UTC),
         agent_summary=agent_summary,

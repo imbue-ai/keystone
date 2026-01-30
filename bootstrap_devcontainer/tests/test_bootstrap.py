@@ -86,17 +86,17 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
     assert output.success, f"Test failed: {output}"
 
     # Verify agent_summary was captured
-    assert output.agent_summary is not None, "Expected agent_summary to be set"
-    assert output.agent_summary.message == "Created Python devcontainer with pytest support.", (
-        f"Expected agent_summary to be captured, got: {output.agent_summary}"
+    assert output.agent.summary is not None, "Expected agent.summary to be set"
+    assert output.agent.summary.message == "Created Python devcontainer with pytest support.", (
+        f"Expected agent.summary to be captured, got: {output.agent.summary}"
     )
 
     # Verify status_messages were captured in order
-    assert [m.message for m in output.status_messages] == [
+    assert [m.message for m in output.agent.status_messages] == [
         "Exploring repository structure.",
         "Creating devcontainer.json and Dockerfile.",
         "Completed setup of devcontainer files.",
-    ], f"Expected status_messages to be captured, got: {output.status_messages}"
+    ], f"Expected status_messages to be captured, got: {output.agent.status_messages}"
 
     # Verify pytest_summary contents (now nested in verification)
     assert output.verification is not None
@@ -291,12 +291,12 @@ def test_e2e_sample_projects(
 
 def _validate_status_messages(output: BootstrapResult) -> None:
     """Validate that status messages have increasing timestamps and non-zero cumulative costs."""
-    if not output.status_messages:
+    if not output.agent.status_messages:
         return
 
     # Verify timestamps are increasing
     prev_ts = None
-    for msg in output.status_messages:
+    for msg in output.agent.status_messages:
         if prev_ts is not None:
             assert msg.timestamp >= prev_ts, (
                 f"Timestamps should be non-decreasing: {prev_ts} -> {msg.timestamp}"
@@ -304,8 +304,8 @@ def _validate_status_messages(output: BootstrapResult) -> None:
         prev_ts = msg.timestamp
 
     # Verify final cost on the result (not on status messages)
-    assert output.cost.cost_usd > 0, f"Result should have non-zero cost: {output.cost}"
-    ts = output.cost.token_spending
+    assert output.agent.cost.cost_usd > 0, f"Result should have non-zero cost: {output.agent.cost}"
+    ts = output.agent.cost.token_spending
     assert ts.input > 0 or ts.cached > 0, f"Result should have some input tokens: {ts}"
     assert ts.output > 0, f"Result should have output tokens: {ts}"
 
@@ -313,23 +313,25 @@ def _validate_status_messages(output: BootstrapResult) -> None:
 def _strip_nondeterministic_fields(output: BootstrapResult) -> dict[str, Any]:
     """Remove timing and cost fields that vary between runs."""
     result = output.model_dump()
-    # Remove timing fields
-    result.pop("agent_work_seconds", None)
-    result.pop("start_time", None)
-    result.pop("end_time", None)
+    # Remove agent timing/cost fields
+    if "agent" in result:
+        result["agent"].pop("duration_seconds", None)
+        result["agent"].pop("start_time", None)
+        result["agent"].pop("end_time", None)
+        result["agent"].pop("cost", None)
+        # Status messages contain timestamps and cumulative costs that vary
+        # Extract just the message text for deterministic comparison
+        if "status_messages" in result["agent"]:
+            result["agent"]["status_messages"] = [
+                msg["message"] for msg in result["agent"]["status_messages"]
+            ]
+        # Same for summary
+        if result["agent"].get("summary") is not None:
+            result["agent"]["summary"] = result["agent"]["summary"]["message"]
     # Remove verification timing fields (nested in verification)
     if result.get("verification"):
         result["verification"].pop("image_build_seconds", None)
         result["verification"].pop("test_execution_seconds", None)
-    # Cost and token counts vary, but success/model/test results should be stable
-    result.pop("cost", None)
-    # Status messages contain timestamps and cumulative costs that vary
-    # Extract just the message text for deterministic comparison
-    if "status_messages" in result:
-        result["status_messages"] = [msg["message"] for msg in result["status_messages"]]
-    # Same for agent_summary
-    if result.get("agent_summary") is not None:
-        result["agent_summary"] = result["agent_summary"]["message"]
     return result
 
 
@@ -440,5 +442,5 @@ print('{"type": "result"}')
     output = BootstrapResult.model_validate_json(json_str)
 
     assert not output.success, "Expected success=false with time limit"
-    assert output.agent_timed_out, "Expected agent_timed_out=True"
-    assert output.agent_exit_code == 124, "Expected exit code 124 (timeout)"
+    assert output.agent.timed_out, "Expected agent.timed_out=True"
+    assert output.agent.exit_code == 124, "Expected exit code 124 (timeout)"

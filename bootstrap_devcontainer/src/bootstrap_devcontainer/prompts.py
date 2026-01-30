@@ -110,7 +110,8 @@ Tips and Notes:
 * Run parts of test suites in parallel if feasible, both inside run_all_tests.sh, and as you explore and debug portions of the test suite.
 
 * For Python projects with simple dependencies, using uv for package management speeds up builds significantly.
-  Remember to set PYTHONPATH in run_all_tests.sh if your tests import from the project root without an installed package.
+  Remember to set PYTHONPATH in run_all_tests.sh if your tests import from the project root without an installed package,
+  and that there may not already be a PYTHONPATH set in the image: `export PYTHONPATH=/project_src:${{PYTHONPATH:-}}`
 
 * If tests cannot be fixed by Dockerfile environment changes, disable them via command line args in run_all_tests.sh.
 

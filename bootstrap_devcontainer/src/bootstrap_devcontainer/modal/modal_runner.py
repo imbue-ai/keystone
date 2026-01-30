@@ -1,4 +1,9 @@
-"""Modal-based agent runner for running bootstrap agent in cloud sandbox."""
+"""Modal-based agent runner for running bootstrap agent in cloud sandbox.
+
+The sandbox is created once and reused for both agent execution and verification.
+This avoids the 20-30s cold start penalty of creating a new sandbox for verification,
+and lets us use Docker's build cache directly instead of Modal's from_dockerfile.
+"""
 
 import io
 import logging
@@ -142,33 +147,31 @@ def _read_claude_auth() -> dict[str, str]:
 
 
 class ModalAgentRunner(AgentRunner):
-    """Run agent in a Modal sandbox with Docker support."""
+    """Run agent in a Modal sandbox with Docker support.
+
+    The sandbox is created once via ensure_sandbox() and reused for both
+    agent execution and verification. This saves the 20-30s cold start
+    and benefits from Docker's build cache.
+    """
 
     def __init__(self, timeout_seconds: int = 3600) -> None:
         self._timeout_seconds = timeout_seconds
         self._exit_code: int = 1
         self._devcontainer_tarball: bytes = b""
         self._sandbox: modal.Sandbox | None = None
+        self._project_uploaded: bool = False
 
-    def run(
-        self,
-        prompt: str,
-        project_root: Path,
-        max_budget_usd: float,
-        agent_cmd: str,
-    ) -> Iterator[StreamEvent]:
-        """Run the agent in a Modal sandbox."""
+    def ensure_sandbox(self) -> modal.Sandbox:
+        """Create sandbox if not already created. Returns the sandbox."""
+        if self._sandbox is not None:
+            return self._sandbox
+
         modal.enable_output()
-
         print("Creating Modal sandbox with Docker...", file=sys.stderr)
 
-        # Get or create app
         app = modal.App.lookup("bootstrap-devcontainer-sandbox", create_if_missing=True)
-
-        # Create image
         image = create_modal_image()
 
-        # Create sandbox with Docker enabled
         self._sandbox = modal.Sandbox.create(
             app=app,
             image=image,
@@ -177,59 +180,66 @@ class ModalAgentRunner(AgentRunner):
             experimental_options={"enable_docker": True},
         )
 
-        # Print sandbox info for debugging
         sandbox_id = self._sandbox.object_id
         print(f"Modal sandbox created: {sandbox_id}", file=sys.stderr)
         print("  Dashboard: https://modal.com/apps/bootstrap-devcontainer-sandbox", file=sys.stderr)
         print(f"  Shell:     modal shell {sandbox_id}", file=sys.stderr)
 
-        try:
-            yield from self._run_in_sandbox(prompt, project_root, max_budget_usd, agent_cmd)
-        except Exception:
-            if self._sandbox:
-                self._sandbox.terminate()
-                self._sandbox = None
-            raise
+        # Start Docker daemon
+        run_modal_command(self._sandbox, "/start-dockerd.sh", name="dockerd")
+        logger.info("Waiting for Docker daemon to be ready...")
+        run_modal_command(self._sandbox, "/wait_for_docker.sh", name="docker-wait").wait()
 
-    def _run_in_sandbox(
+        return self._sandbox
+
+    def upload_project(self, project_root: Path) -> None:
+        """Upload project to sandbox. Idempotent - only uploads once."""
+        if self._project_uploaded:
+            return
+
+        sb = self.ensure_sandbox()
+        logger.info("Uploading project to sandbox...")
+        project_tarball = create_git_archive_bytes(project_root)
+        run_modal_command(sb, "mkdir", "-p", "/project", name="upload").wait()
+
+        with sb.open("/tmp/project.tar.gz", "wb") as f:
+            f.write(project_tarball)
+        run_modal_command(
+            sb, "tar", "-xzf", "/tmp/project.tar.gz", "-C", "/project", name="upload"
+        ).wait()
+        run_modal_command(sb, "chown", "-R", "agent:agent", "/project", name="upload").wait()
+        self._project_uploaded = True
+
+    def run(
         self,
         prompt: str,
         project_root: Path,
         max_budget_usd: float,
         agent_cmd: str,
     ) -> Iterator[StreamEvent]:
-        """Execute agent workflow inside the sandbox."""
+        """Run the agent in the Modal sandbox."""
+        self.ensure_sandbox()
+        self.upload_project(project_root)
+
+        try:
+            yield from self._run_agent(prompt, max_budget_usd, agent_cmd)
+        except Exception:
+            if self._sandbox:
+                self._sandbox.terminate()
+                self._sandbox = None
+            raise
+
+    def _run_agent(
+        self,
+        prompt: str,
+        max_budget_usd: float,
+        agent_cmd: str,
+    ) -> Iterator[StreamEvent]:
+        """Execute the agent inside the sandbox (sandbox and project already set up)."""
         assert self._sandbox is not None
         sb = self._sandbox
 
-        # 1. Start Docker daemon
-        # We start it in the background by not calling .wait() here
-        run_modal_command(sb, "/start-dockerd.sh", name="dockerd")
-
-        # 2. Wait for Docker to be ready
-        logger.info("Waiting for Docker daemon to be ready...")
-        run_modal_command(sb, "/wait_for_docker.sh", name="docker-wait").wait()
-
-        # 2. Upload project (using git archive for clean, reproducible content)
-        logger.info("Uploading project to sandbox...")
-        project_tarball = create_git_archive_bytes(project_root)
-        run_modal_command(sb, "mkdir", "-p", "/project", name="upload").wait()
-
-        # Write tarball using Modal's native filesystem API
-        with sb.open("/tmp/project.tar.gz", "wb") as f:
-            f.write(project_tarball)
-        run_modal_command(
-            sb,
-            "tar",
-            "-xzf",
-            "/tmp/project.tar.gz",
-            "-C",
-            "/project",
-            name="upload",
-        ).wait()
-        run_modal_command(sb, "chown", "-R", "agent:agent", "/project", name="upload").wait()
-
-        # 3. Set up Claude auth
+        # Set up Claude auth
         logger.info("Setting up Claude authentication...")
         auth_env = _read_claude_auth()
 
@@ -307,67 +317,113 @@ exec timeout {DEFAULT_AGENT_TIMEOUT} {shlex.join(cmd_parts)}
         project_root: Path,
         test_artifacts_dir: Path,
     ) -> Iterator[StreamEvent]:
-        """Run verification tests using Modal's from_dockerfile (cached image builds)."""
-        dockerfile_path = project_root / ".devcontainer" / "Dockerfile"
+        """Run verification by building and running docker in the existing sandbox.
 
-        if not dockerfile_path.exists():
-            logger.error("Dockerfile not found at %s", dockerfile_path)
+        Uses docker commands directly instead of Modal's from_dockerfile, which:
+        - Avoids 20-30s cold start for a new sandbox
+        - Benefits from Docker's build cache already in this sandbox
+        """
+        sb = self.ensure_sandbox()
+        self.upload_project(project_root)
+
+        # Check Dockerfile exists in sandbox
+        check_proc = run_modal_command(
+            sb, "test", "-f", "/project/.devcontainer/Dockerfile", name="verify"
+        )
+        if check_proc.wait() != 0:
+            logger.error("Dockerfile not found at /project/.devcontainer/Dockerfile")
+            yield StreamEvent(
+                stream="stderr",
+                line="Build failed: .devcontainer/Dockerfile not found in sandbox.",
+            )
             return
 
-        logger.info("Building devcontainer image...")
+        image_name = "bootstrap-verify"
+        container_name = "bootstrap-verify-container"
 
-        # Build image using Modal's cached from_dockerfile
-        image = modal.Image.from_dockerfile(
-            path=dockerfile_path,
-            context_dir=project_root,
+        # 1. Build the image using docker
+        logger.info("Building devcontainer image with docker...")
+        build_proc = run_modal_command(
+            sb,
+            "docker",
+            "build",
+            "-t",
+            image_name,
+            "-f",
+            "/project/.devcontainer/Dockerfile",
+            "/project",
+            name="docker-build",
+            capture=True,
         )
+        yield from build_proc.stream()
+        build_exit = build_proc.wait()
+        if build_exit != 0:
+            yield StreamEvent(stream="stderr", line=f"Build failed with exit code {build_exit}")
+            return
 
-        app = modal.App.lookup("bootstrap-devcontainer-verify", create_if_missing=True)
+        # 2. Run the test script in a container
+        logger.info("Running tests in container...")
+        # Remove any existing container with that name
+        run_modal_command(sb, "docker", "rm", "-f", container_name, name="cleanup").wait()
 
-        logger.info("Creating sandbox (this may take 20-30s for cold start)...")
-
-        sandbox = modal.Sandbox.create(
-            app=app,
-            image=image,
-            timeout=self._timeout_seconds,
+        test_proc = run_modal_command(
+            sb,
+            "docker",
+            "run",
+            "--name",
+            container_name,
+            image_name,
+            "./.devcontainer/run_all_tests.sh",
+            name="docker-test",
+            capture=True,
         )
+        yield from test_proc.stream()
+        test_exit_code = test_proc.wait()
 
-        logger.info("Sandbox created, running tests...")
+        # 3. Extract test artifacts from container
+        logger.info("Extracting test artifacts...")
+        run_modal_command(
+            sb,
+            "docker",
+            "cp",
+            f"{container_name}:/test_artifacts",
+            "/tmp/test_artifacts",
+            name="extract",
+        ).wait()
+
+        # Tar and download artifacts
+        run_modal_command(
+            sb,
+            "tar",
+            "-czf",
+            "/tmp/test_artifacts.tar.gz",
+            "-C",
+            "/tmp/test_artifacts",
+            ".",
+            name="extract",
+        ).wait()
 
         try:
-            # Run the test script using ManagedProcess for proper interleaved streaming
-            proc = sandbox.exec("bash", "/project_src/.devcontainer/run_all_tests.sh")
-            logger.info("Test process started")
-            managed = ManagedProcess(proc, prefix="verify", capture=True)
+            with sb.open("/tmp/test_artifacts.tar.gz", "rb") as f:
+                tarball = f.read()
+            test_artifacts_dir.mkdir(parents=True, exist_ok=True)
+            with tarfile.open(fileobj=io.BytesIO(tarball), mode="r:gz") as tar:
+                tar.extractall(test_artifacts_dir)
+            logger.info("Test artifacts extracted.")
+        except Exception as e:
+            logger.error("Error extracting artifacts: %s", e)
 
-            # Stream events as they come in (interleaved stdout/stderr)
-            yield from managed.stream()
+        # 4. Clean up container
+        run_modal_command(sb, "docker", "rm", container_name, name="cleanup").wait()
 
-            test_exit_code = proc.returncode
-
-            # Extract test artifacts using Modal's native filesystem API
-            logger.info("Extracting test artifacts...")
-            tar_proc = sandbox.exec(
-                "tar", "-czf", "/tmp/test_artifacts.tar.gz", "-C", "/test_artifacts", "."
+        if test_exit_code == 0:
+            logger.info("Verification successful!")
+            yield StreamEvent(stream="stderr", line="Verification successful!")
+        else:
+            logger.error(f"Test run failed with return code {test_exit_code}")
+            yield StreamEvent(
+                stream="stderr", line=f"Test run failed with return code {test_exit_code}"
             )
-            tar_proc.wait()
-
-            try:
-                with sandbox.open("/tmp/test_artifacts.tar.gz", "rb") as f:
-                    tarball = f.read()
-                test_artifacts_dir.mkdir(parents=True, exist_ok=True)
-                with tarfile.open(fileobj=io.BytesIO(tarball), mode="r:gz") as tar:
-                    tar.extractall(test_artifacts_dir)
-                logger.info("Test artifacts extracted.")
-            except Exception as e:
-                logger.error("Error extracting artifacts: %s", e)
-
-            if test_exit_code == 0:
-                logger.info("Verification successful!")
-            else:
-                logger.error(f"Test run failed with return code {test_exit_code}")
-        finally:
-            sandbox.terminate()
 
     def cleanup(self) -> None:
         """Terminate the Modal sandbox."""

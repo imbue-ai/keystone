@@ -87,13 +87,18 @@ so that the image can execute its own tests.
       i. For each command run, create a subdirectory with an identifying “name”.
       ii. In that directory, put files called stdout.txt and stderr.txt, with timestamps.
       iii. Tee the outputs to stdout/stderr.
-      iv. Create language-specific JSON test reports in /test_artifacts:
-          - Python: /test_artifacts/pytest-json-report.json (use pytest-json-report plugin)
-          - Go: /test_artifacts/go-test-report.json (use `go test -json ./...`)
-          - Node.js: /test_artifacts/node-test-report.json (use `node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=json --test-reporter-destination=/test_artifacts/node-test-report.json`)
-            IMPORTANT: Node's JSON reporter outputs newline-delimited JSON. Each line is an event object with "type" field.
-            Look for events with type="test:pass", type="test:fail", or type="test:skip" to count test results.
-          - Rust: /test_artifacts/cargo-test-report.json (use `cargo test -- -Z unstable-options --format json` or parse output)
+      iv. Create language-specific JSON test reports in /test_artifacts.
+          CRITICAL: Use the EXACT commands below to generate reports. Do NOT use TAP format. Do NOT write fake/placeholder JSON.
+          - Python: /test_artifacts/pytest-json-report.json
+            Command: `pytest --json-report --json-report-file=/test_artifacts/pytest-json-report.json`
+            (requires pytest-json-report plugin - add to requirements or install via pip)
+          - Go: /test_artifacts/go-test-report.json
+            Command: `go test -json ./... > /test_artifacts/go-test-report.json`
+          - Node.js: /test_artifacts/node-test-report.json
+            Command: `node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=json --test-reporter-destination=/test_artifacts/node-test-report.json`
+            NOTE: This uses dual reporters - spec for human-readable stdout, json for the report file.
+          - Rust: /test_artifacts/cargo-test-report.json
+            Command: `cargo test -- -Z unstable-options --format json > /test_artifacts/cargo-test-report.json`
       v. A file called /test_artifacts/final_result.json stating success/failure.
    d. run_all_tests.sh should forward enough information to stdout/stderr to enable debugging failing tests.
    e. run_all_tests.sh is allowed to fail early (before running all tests) if that helps complete the task faster.

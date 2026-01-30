@@ -473,6 +473,56 @@ exec timeout {time_limit_secs} {shlex.join(cmd_parts)}
                 test_execution_seconds=test_execution_seconds,
             )
 
+    def get_claude_jsonl(self) -> str | None:
+        """Extract Claude's JSONL log from the sandbox.
+
+        Claude Code stores conversation logs in ~/.claude/projects/*/.../*.jsonl
+        Since we only run the agent once, there should be exactly one JSONL file.
+
+        Returns:
+            The JSONL content as a string, or None if not found/multiple found.
+        """
+        if self._sandbox is None:
+            return None
+
+        sb = self._sandbox
+        try:
+            # Find JSONL files in Claude's project directory
+            find_proc = run_modal_command(
+                sb,
+                "find",
+                "/home/agent/.claude/projects",
+                "-name",
+                "*.jsonl",
+                "-type",
+                "f",
+                name="find-jsonl",
+                capture=True,
+            )
+
+            # Collect output
+            jsonl_paths: list[str] = []
+            for event in find_proc.stream():
+                if event.stream == "stdout" and event.line.strip():
+                    jsonl_paths.append(event.line.strip())
+            find_proc.wait()
+
+            if len(jsonl_paths) == 0:
+                logger.warning("No Claude JSONL files found in sandbox")
+                return None
+            elif len(jsonl_paths) > 1:
+                logger.warning(f"Multiple Claude JSONL files found: {jsonl_paths}, expected 1")
+                return None
+
+            # Read the single JSONL file
+            jsonl_path = jsonl_paths[0]
+            logger.info(f"Reading Claude JSONL from: {jsonl_path}")
+            with sb.open(jsonl_path, "r") as f:
+                return f.read()
+        except Exception as e:
+            logger.error(f"Error extracting Claude JSONL: {e}")
+            return None
+
     def cleanup(self) -> None:
         """Terminate the Modal sandbox."""
         if self._sandbox:

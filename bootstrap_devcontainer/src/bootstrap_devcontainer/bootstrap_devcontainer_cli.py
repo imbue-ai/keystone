@@ -1,4 +1,3 @@
-import hashlib
 import json
 import logging
 import subprocess
@@ -10,10 +9,12 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from bootstrap_devcontainer.agent_cache import (
-    AgentCache,
-    CacheValue,
-    EventCollector,
+from bootstrap_devcontainer.agent_log import (
+    AgentConfig,
+    AgentLog,
+    AgentRunRecord,
+    CLIRunRecord,
+    StreamEvent,
     compute_cache_key,
     extract_devcontainer_tarball,
 )
@@ -207,8 +208,30 @@ def bootstrap(
     max_budget_usd: float | None = typer.Option(
         1.0, "--max_budget_usd", help="Maximum dollar amount to spend on agent inference"
     ),
+    # Legacy option - will be removed in favor of log_db
     sqlite_cache_dir: Path | None = typer.Option(
-        None, "--sqlite_cache_dir", help="SQLite cache file path (enables caching)"
+        None, "--sqlite_cache_dir", help="[DEPRECATED] Use --log_db instead", hidden=True
+    ),
+    # New logging/caching options
+    log_db: Path | None = typer.Option(
+        None,
+        "--log_db",
+        help="SQLite database for logging and caching (default: ~/.bootstrap_devcontainer/log.sqlite)",
+    ),
+    require_cache_hit: bool = typer.Option(
+        False,
+        "--require_cache_hit",
+        help="Fail immediately if cache miss (useful for CI/testing)",
+    ),
+    no_cache_replay: bool = typer.Option(
+        False,
+        "--no_cache_replay",
+        help="Skip cache lookup but still log the run (force fresh execution)",
+    ),
+    cache_version: str = typer.Option(
+        "",
+        "--cache_version",
+        help="String appended to cache key to invalidate old entries",
     ),
     output_file: Path | None = typer.Option(
         None, "--output_file", help="Path to write JSON result (defaults to stdout)"
@@ -366,72 +389,102 @@ def bootstrap(
         print(f"Agent stderr: {line}", file=sys.stderr, flush=True)
 
     try:
-        # Set up cache if requested
-        cache: AgentCache | None = None
-        cache_key: str | None = None
-        if sqlite_cache_dir is not None:
-            cache = AgentCache(sqlite_cache_dir)
-            cache_key = compute_cache_key(prompt, project_root)
-
-        # Check cache first
-        cached_value: CacheValue | None = None
-        if cache is not None and cache_key is not None:
-            # Print cache key components
-            tree_hash = get_git_tree_hash(project_root)
-            prompt_hash = hashlib.md5(prompt.encode("utf-8")).hexdigest()
-            print(
-                f"Cache lookup - git tree: {tree_hash}, prompt MD5: {prompt_hash}",
-                file=sys.stderr,
+        # Handle legacy --sqlite_cache_dir option
+        if sqlite_cache_dir is not None and log_db is None:
+            console.print(
+                "[yellow]Warning:[/yellow] --sqlite_cache_dir is deprecated, use --log_db instead"
             )
-            cached_value = cache.get(cache_key)
+            # Note: old format is incompatible, so we just use log_db default behavior
+
+        # Set up logging/caching
+        # Default to ~/.bootstrap_devcontainer/log.sqlite if not specified
+        effective_log_db = log_db
+        if effective_log_db is None:
+            effective_log_db = Path.home() / ".bootstrap_devcontainer" / "log.sqlite"
+
+        agent_log = AgentLog(effective_log_db)
+        cli_run_id = agent_log.generate_run_id()
+
+        # Build agent config (part of cache key)
+        assert agent_cmd is not None
+        assert max_budget_usd is not None
+        agent_config = AgentConfig(
+            agent_cmd=agent_cmd,
+            max_budget_usd=max_budget_usd,
+            agent_time_limit_secs=agent_time_limit_secs,
+            agent_in_modal=agent_in_modal,
+        )
+
+        # Compute cache key
+        cache_key = compute_cache_key(prompt, project_root, agent_config, cache_version)
+
+        # Print cache key components for debugging
+        print(
+            f"Cache key - git tree: {cache_key.git_tree_hash}, "
+            f"prompt MD5: {cache_key.prompt_hash}, "
+            f"config: {agent_config.to_cache_key_json()[:50]}..., "
+            f"version: {cache_version or '(none)'}",
+            file=sys.stderr,
+        )
+
+        # Check cache (unless --no_cache_replay)
+        cached_run: AgentRunRecord | None = None
+        cache_hit = False
+        if not no_cache_replay:
+            cached_run = agent_log.lookup_cache(cache_key)
+            if cached_run is not None:
+                cache_hit = True
+
+        # Handle --require_cache_hit
+        if require_cache_hit and not cache_hit:
+            console.print("[red]Error:[/red] --require_cache_hit specified but cache miss")
+            raise typer.Exit(1)
 
         # Create project archive once - used for both agent run and verification
         project_archive = create_git_archive_bytes(project_root)
 
         devcontainer_tarball: bytes = b""
-        if cached_value is not None:
+        collected_events: list[StreamEvent] = []
+
+        if cache_hit and cached_run is not None:
             # Cache hit - replay events and restore .devcontainer
             print(
-                f"{ANSI_GREEN}CACHE HIT: Replaying cached agent output from {sqlite_cache_dir}{ANSI_RESET}",
+                f"{ANSI_GREEN}CACHE HIT: Replaying cached agent output from {effective_log_db}{ANSI_RESET}",
                 file=sys.stderr,
             )
             print(
-                f"  Cached return_code: {cached_value.return_code}, "
-                f"events: {len(cached_value.events)}, "
-                f"tarball size: {len(cached_value.devcontainer_tarball)} bytes",
+                f"  Cached return_code: {cached_run.return_code}, "
+                f"events: {len(cached_run.events)}, "
+                f"tarball size: {len(cached_run.devcontainer_tarball)} bytes",
                 file=sys.stderr,
             )
-            for event in cached_value.events:
+            for event in cached_run.events:
                 if event.stream == "stdout":
                     process_stdout_line(event.line)
                 else:
                     process_stderr_line(event.line)
-            extract_devcontainer_tarball(cached_value.devcontainer_tarball, project_root)
-            exit_code = cached_value.return_code
-            devcontainer_tarball = cached_value.devcontainer_tarball
+            extract_devcontainer_tarball(cached_run.devcontainer_tarball, project_root)
+            exit_code = cached_run.return_code
+            devcontainer_tarball = cached_run.devcontainer_tarball
         else:
-            # Cache miss - run agent
-            if cache is not None:
+            # Cache miss (or --no_cache_replay) - run agent
+            if no_cache_replay:
                 print(
-                    f"{ANSI_MAGENTA}CACHE MISS: Running agent (cache: {sqlite_cache_dir}){ANSI_RESET}",
+                    f"{ANSI_MAGENTA}CACHE BYPASS (--no_cache_replay): Running agent{ANSI_RESET}",
                     file=sys.stderr,
                 )
             else:
-                print(f"Starting agent with command: {agent_cmd}", file=sys.stderr)
-
-            event_collector: EventCollector | None = None
-            if cache is not None:
-                event_collector = EventCollector()
+                print(
+                    f"{ANSI_MAGENTA}CACHE MISS: Running agent (log: {effective_log_db}){ANSI_RESET}",
+                    file=sys.stderr,
+                )
 
             try:
-                assert agent_cmd is not None
-                assert max_budget_usd is not None
-
                 for event in runner.run(
                     prompt, project_archive, max_budget_usd, agent_cmd, agent_time_limit_secs
                 ):
-                    if event_collector is not None:
-                        event_collector.add(event.stream, event.line)
+                    # Collect all events for logging
+                    collected_events.append(StreamEvent(stream=event.stream, line=event.line))
                     if event.stream == "stdout":
                         process_stdout_line(event.line)
                     else:
@@ -441,33 +494,33 @@ def bootstrap(
                 if exit_code == TIMEOUT_EXIT_CODE:
                     agent_timed_out = True
 
-                # If the agent succeeded (or at least finished), extract the .devcontainer
-                # so it's available for local use and for the next verification step
+                # Extract .devcontainer and log the run
                 try:
                     devcontainer_tarball = runner.get_devcontainer_tarball()
                     extract_devcontainer_tarball(devcontainer_tarball, project_root)
 
-                    # Store in cache if caching is enabled and agent succeeded
-                    if (
-                        cache is not None
-                        and cache_key is not None
-                        and event_collector is not None
-                        and exit_code == 0
-                    ):
-                        cache_value = CacheValue(
-                            events=event_collector.get_events(),
-                            devcontainer_tarball=devcontainer_tarball,
-                            return_code=exit_code,
-                        )
-                        cache.set(cache_key, cache_value)
-                        cache.close()
-                    elif cache is not None and exit_code != 0:
+                    # Extract Claude JSONL if available (Modal only)
+                    claude_jsonl = runner.get_claude_jsonl()
+
+                    # Log agent run (always, regardless of success - for analytics)
+                    agent_run_record = AgentRunRecord(
+                        cli_run_id=cli_run_id,
+                        timestamp=datetime.now(UTC),
+                        cache_key=cache_key,
+                        events=collected_events,
+                        devcontainer_tarball=devcontainer_tarball,
+                        return_code=exit_code,
+                        claude_jsonl=claude_jsonl,
+                    )
+                    agent_log.log_agent_run(agent_run_record)
+
+                    if exit_code != 0:
                         print(
-                            f"Skipping cache (agent failed with exit_code={exit_code})",
+                            f"Agent failed (exit_code={exit_code}), logged but not cached for replay",
                             file=sys.stderr,
                         )
                 except Exception as e:
-                    print(f"Warning: could not extract/cache .devcontainer: {e}", file=sys.stderr)
+                    print(f"Warning: could not extract/log .devcontainer: {e}", file=sys.stderr)
             except Exception as e:
                 print(f"Error running agent: {e}", file=sys.stderr)
                 exit_code = 1
@@ -556,6 +609,18 @@ def bootstrap(
         agent_exit_code=exit_code,
         verification=verification,
     )
+
+    # Log CLI run (with result)
+    cli_run_record = CLIRunRecord(
+        id=cli_run_id,
+        timestamp=start_datetime,
+        cwd=str(Path.cwd()),
+        args=sys.argv,
+        cache_hit=cache_hit,
+        bootstrap_result_json=output.model_dump_json(),
+    )
+    agent_log.log_cli_run(cli_run_record)
+    agent_log.close()
 
     if output_file:
         output_file.parent.mkdir(parents=True, exist_ok=True)

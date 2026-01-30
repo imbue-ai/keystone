@@ -109,6 +109,17 @@ class AgentRunner(ABC):
         """Perform any necessary cleanup (e.g. terminating sandboxes)."""
         ...
 
+    def get_claude_jsonl(self) -> str | None:
+        """Get Claude's JSONL conversation log if available.
+
+        This is optional - only Modal runner implements it since it has access
+        to the sandbox filesystem. Local runner returns None.
+
+        Returns:
+            JSONL content as string, or None if not available.
+        """
+        return None
+
 
 class LocalAgentRunner(AgentRunner):
     """Run agent locally using subprocess.

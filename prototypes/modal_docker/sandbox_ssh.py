@@ -121,7 +121,9 @@ def main():
     print("\nIn another terminal, run:")
     print(f"  modal shell {sb.object_id}")
     print("\nThen test Docker with:")
-    print("  cd /root/test-build && docker build -t hello-test . && docker run --network host hello-test")
+    print(
+        "  cd /root/test-build && docker build -t hello-test . && docker run --network host hello-test"
+    )
     print("\nNOTE: You MUST use '--network host' for docker run in Modal/gVisor environments.")
     print("      Bridge networking doesn't work due to veth/netns permission restrictions.")
     print("=" * 60)

@@ -96,9 +96,10 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
         "Completed setup of devcontainer files.",
     ], f"Expected status_messages to be captured, got: {output.status_messages}"
 
-    # Verify pytest_summary contents
-    assert output.pytest_summary is not None
-    summary = output.pytest_summary
+    # Verify pytest_summary contents (now nested in verification)
+    assert output.verification is not None
+    assert output.verification.pytest_summary is not None
+    summary = output.verification.pytest_summary
     assert summary.passed_count == 2, f"Expected 2 passed tests: {summary}"
     assert summary.failed_count == 0, f"Expected 0 failed tests: {summary}"
     assert summary.skipped_count == 0, f"Expected 0 skipped tests: {summary}"
@@ -312,9 +313,12 @@ def _strip_nondeterministic_fields(output: BootstrapResult) -> dict[str, Any]:
     result = output.model_dump()
     # Remove timing fields
     result.pop("agent_work_seconds", None)
-    result.pop("verification_seconds", None)
     result.pop("start_time", None)
     result.pop("end_time", None)
+    # Remove verification timing fields (nested in verification)
+    if result.get("verification"):
+        result["verification"].pop("image_build_seconds", None)
+        result["verification"].pop("test_execution_seconds", None)
     # Cost and token counts vary, but success/model/test results should be stable
     result.pop("cost", None)
     # Status messages contain timestamps and cumulative costs that vary

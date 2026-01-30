@@ -61,7 +61,6 @@ Example Usage
     bootstrap --project_root ./myproject --cache_version v2
 """
 
-import base64
 import hashlib
 import json
 import uuid
@@ -70,7 +69,7 @@ from pathlib import Path
 from typing import Literal
 
 import pandas as pd
-from pydantic import BaseModel, field_serializer, field_validator
+from pydantic import BaseModel
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
@@ -113,21 +112,6 @@ class AgentRunRecord(BaseModel):
     devcontainer_tarball: bytes
     return_code: int
     claude_dir_tarball: bytes | None = None  # Tarball of ~/.claude from Modal
-
-    @field_serializer("devcontainer_tarball", "claude_dir_tarball")
-    def serialize_tarball(self, v: bytes | None) -> str | None:
-        if v is None:
-            return None
-        return base64.b64encode(v).decode("ascii")
-
-    @field_validator("devcontainer_tarball", "claude_dir_tarball", mode="before")
-    @classmethod
-    def deserialize_tarball(cls, v: str | bytes | None) -> bytes | None:
-        if v is None:
-            return None
-        if isinstance(v, str):
-            return base64.b64decode(v)
-        return v
 
 
 class CLIRunRecord(BaseModel):
@@ -229,15 +213,9 @@ class AgentLog:
                     "cache_version": record.cache_key.cache_version,
                     "cache_key_hash": record.cache_key.compute_hash(),
                     "events_json": json.dumps([e.model_dump() for e in record.events]),
-                    "devcontainer_tarball_b64": base64.b64encode(
-                        record.devcontainer_tarball
-                    ).decode("ascii"),
+                    "devcontainer_tarball": record.devcontainer_tarball,
                     "return_code": record.return_code,
-                    "claude_dir_tarball_b64": (
-                        base64.b64encode(record.claude_dir_tarball).decode("ascii")
-                        if record.claude_dir_tarball
-                        else None
-                    ),
+                    "claude_dir_tarball": record.claude_dir_tarball,
                 }
             ]
         )
@@ -253,7 +231,7 @@ class AgentLog:
         query = text("""
             SELECT cli_run_id, timestamp,
                    git_tree_hash, prompt_hash, agent_config_json, cache_version,
-                   events_json, devcontainer_tarball_b64, return_code, claude_dir_tarball_b64
+                   events_json, devcontainer_tarball, return_code, claude_dir_tarball
             FROM agent_run
             WHERE cache_key_hash = :cache_hash AND return_code = 0
             ORDER BY timestamp DESC
@@ -278,9 +256,9 @@ class AgentLog:
                 cache_version=row[5],
             ),
             events=[StreamEvent(**e) for e in events_data],
-            devcontainer_tarball=base64.b64decode(row[7]),
+            devcontainer_tarball=row[7],
             return_code=row[8],
-            claude_dir_tarball=base64.b64decode(row[9]) if row[9] else None,
+            claude_dir_tarball=row[9],
         )
 
 

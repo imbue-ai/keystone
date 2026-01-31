@@ -94,11 +94,11 @@ so that the image can execute its own tests.
             (requires pytest-json-report plugin - add to requirements or install via pip)
           - Go: /test_artifacts/go-test-report.json
             Command: `go test -json ./... > /test_artifacts/go-test-report.json`
-          - Node.js: /test_artifacts/node-test-report.json
-            Preferred: Use Jest with json reporter: `npx jest --json --outputFile=/test_artifacts/node-test-report.json`
-            If using Node's built-in test runner, you MUST use dual reporters (the syntax is tricky):
-            `node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=json --test-reporter-destination=/test_artifacts/node-test-report.json`
-            Do NOT parse spec/tap output to create fake JSON - use the actual JSON reporter.
+          - Node.js: /test_artifacts/node-test-report.json OR /test_artifacts/node-test-report.tap
+            Option 1 (Jest): `npx jest --json --outputFile=/test_artifacts/node-test-report.json`
+            Option 2 (Mocha): `npx mocha --reporter json > /test_artifacts/node-test-report.json`
+            Option 3 (Node built-in): `node --test --test-reporter=tap > /test_artifacts/node-test-report.tap`
+            NOTE: Node's built-in test runner only supports spec, dot, tap, junit - NOT json.
           - Rust: /test_artifacts/cargo-test-report.json
             Command: `cargo test -- -Z unstable-options --format json > /test_artifacts/cargo-test-report.json`
       v. A file called /test_artifacts/final_result.json stating success/failure.

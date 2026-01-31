@@ -142,45 +142,63 @@ def parse_test_reports(test_artifacts_dir: Path) -> TestReports:
         except Exception as e:
             print(f"Error parsing Go test report: {e}", file=sys.stderr)
 
-    # Try Node test JSON report (supports Jest format or Node's NDJSON format)
+    # Try Node test report (supports Jest JSON, Mocha JSON, or TAP format)
     node_report = test_artifacts_dir / "node-test-report.json"
-    if node_report.exists():
+    node_tap_report = test_artifacts_dir / "node-test-report.tap"
+    node_report_path = (
+        node_report
+        if node_report.exists()
+        else (node_tap_report if node_tap_report.exists() else None)
+    )
+    if node_report_path:
         try:
             passed, failed, skipped = [], [], []
-            content = node_report.read_text().strip()
+            content = node_report_path.read_text().strip()
 
-            # Try Jest format first (single JSON object with testResults array)
-            try:
-                report_data = json.loads(content)
-                if "testResults" in report_data:
-                    # Jest format
-                    for test_file in report_data.get("testResults", []):
-                        for assertion in test_file.get("assertionResults", []):
-                            name = assertion.get("fullName") or assertion.get("title", "")
-                            status = assertion.get("status", "")
-                            if status == "passed":
-                                passed.append(name)
-                            elif status == "failed":
-                                failed.append(name)
-                            elif status in ("pending", "skipped"):
-                                skipped.append(name)
-                else:
-                    # Unknown single-object format, skip
-                    raise ValueError("Unknown JSON format, trying NDJSON")
-            except (json.JSONDecodeError, ValueError):
-                # Try Node's built-in test runner NDJSON format
+            if node_report_path.suffix == ".tap" or content.startswith("TAP version"):
+                # Parse TAP format
+                import re
+
                 for line in content.split("\n"):
-                    if not line:
-                        continue
-                    event = json.loads(line)
-                    event_type = event.get("type", "")
-                    name = event.get("data", {}).get("name", "")
-                    if event_type == "test:pass":
-                        passed.append(name)
-                    elif event_type == "test:fail":
-                        failed.append(name)
-                    elif event_type == "test:skip":
-                        skipped.append(name)
+                    # TAP format: "ok 1 - test name" or "not ok 2 - test name"
+                    match = re.match(r"^(ok|not ok)\s+\d+\s*-?\s*(.*)", line)
+                    if match:
+                        status, name = match.groups()
+                        name = name.strip()
+                        if "# SKIP" in name or "# skip" in name:
+                            skipped.append(name.split("#")[0].strip())
+                        elif status == "ok":
+                            passed.append(name)
+                        else:
+                            failed.append(name)
+            else:
+                # Try Jest/Mocha JSON format (single JSON object with testResults array)
+                try:
+                    report_data = json.loads(content)
+                    if "testResults" in report_data:
+                        # Jest format
+                        for test_file in report_data.get("testResults", []):
+                            for assertion in test_file.get("assertionResults", []):
+                                name = assertion.get("fullName") or assertion.get("title", "")
+                                status = assertion.get("status", "")
+                                if status == "passed":
+                                    passed.append(name)
+                                elif status == "failed":
+                                    failed.append(name)
+                                elif status in ("pending", "skipped"):
+                                    skipped.append(name)
+                    elif "stats" in report_data and "tests" in report_data:
+                        # Mocha JSON format
+                        for test in report_data.get("tests", []):
+                            name = test.get("fullTitle") or test.get("title", "")
+                            if test.get("pass"):
+                                passed.append(name)
+                            elif test.get("fail"):
+                                failed.append(name)
+                            elif test.get("pending"):
+                                skipped.append(name)
+                except json.JSONDecodeError:
+                    pass  # Not valid JSON, skip
 
             reports.node_test_summary = TestSummary(
                 passed_count=len(passed),

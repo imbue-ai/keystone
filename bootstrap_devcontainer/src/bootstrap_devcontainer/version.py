@@ -14,11 +14,11 @@ from pydantic import BaseModel
 class VersionInfo(BaseModel):
     """Version information for the current codebase."""
 
-    git_hash: str
-    is_dirty: bool
     branch: str
     commit_count: int
     commit_timestamp: str  # ISO format
+    git_hash: str
+    is_dirty: bool
 
 
 @cache

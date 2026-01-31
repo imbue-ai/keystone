@@ -34,13 +34,13 @@ from bootstrap_devcontainer.git_utils import (
     is_git_repo,
 )
 from bootstrap_devcontainer.prompts import build_agent_prompt
+from bootstrap_devcontainer.report_parsers import parse_test_reports
 from bootstrap_devcontainer.schema import (
     AgentConfig,
     AgentExecution,
     AgentStatusMessage,
     BootstrapResult,
     InferenceCost,
-    TestSummary,
     TokenSpending,
     VerificationResult,
 )
@@ -80,164 +80,6 @@ def check_docker_available() -> bool:
         return result.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return False
-
-
-class TestReports:
-    """Container for per-language test summaries."""
-
-    def __init__(self) -> None:
-        self.pytest_summary: TestSummary | None = None
-        self.go_test_summary: TestSummary | None = None
-        self.node_test_summary: TestSummary | None = None
-        self.cargo_test_summary: TestSummary | None = None
-
-
-def parse_test_reports(test_artifacts_dir: Path) -> TestReports:
-    """Parse test reports from various formats (pytest, go, node, cargo)."""
-    reports = TestReports()
-
-    # Try pytest JSON report
-    pytest_report = test_artifacts_dir / "pytest-json-report.json"
-    if pytest_report.exists():
-        try:
-            report_data = json.loads(pytest_report.read_text())
-            tests = report_data.get("tests", [])
-            passed = sorted([t["nodeid"] for t in tests if t.get("outcome") == "passed"])
-            failed = sorted([t["nodeid"] for t in tests if t.get("outcome") == "failed"])
-            skipped = sorted([t["nodeid"] for t in tests if t.get("outcome") == "skipped"])
-            reports.pytest_summary = TestSummary(
-                passed_count=len(passed),
-                failed_count=len(failed),
-                skipped_count=len(skipped),
-                passed_tests=passed,
-                failed_tests=failed,
-                skipped_tests=skipped,
-            )
-        except Exception as e:
-            print(f"Error parsing pytest report: {e}", file=sys.stderr)
-
-    # Try Go test JSON report
-    go_report = test_artifacts_dir / "go-test-report.json"
-    if go_report.exists():
-        try:
-            passed, failed, skipped = [], [], []
-            for line in go_report.read_text().strip().split("\n"):
-                if not line:
-                    continue
-                event = json.loads(line)
-                if event.get("Action") == "pass" and event.get("Test"):
-                    passed.append(event["Test"])
-                elif event.get("Action") == "fail" and event.get("Test"):
-                    failed.append(event["Test"])
-                elif event.get("Action") == "skip" and event.get("Test"):
-                    skipped.append(event["Test"])
-            reports.go_test_summary = TestSummary(
-                passed_count=len(passed),
-                failed_count=len(failed),
-                skipped_count=len(skipped),
-                passed_tests=sorted(passed),
-                failed_tests=sorted(failed),
-                skipped_tests=sorted(skipped),
-            )
-        except Exception as e:
-            print(f"Error parsing Go test report: {e}", file=sys.stderr)
-
-    # Try Node test report (supports Jest JSON, Mocha JSON, or TAP format)
-    node_report = test_artifacts_dir / "node-test-report.json"
-    node_tap_report = test_artifacts_dir / "node-test-report.tap"
-    node_report_path = (
-        node_report
-        if node_report.exists()
-        else (node_tap_report if node_tap_report.exists() else None)
-    )
-    if node_report_path:
-        try:
-            passed, failed, skipped = [], [], []
-            content = node_report_path.read_text().strip()
-
-            if node_report_path.suffix == ".tap" or content.startswith("TAP version"):
-                # Parse TAP format
-                import re
-
-                for line in content.split("\n"):
-                    # TAP format: "ok 1 - test name" or "not ok 2 - test name"
-                    match = re.match(r"^(ok|not ok)\s+\d+\s*-?\s*(.*)", line)
-                    if match:
-                        status, name = match.groups()
-                        name = name.strip()
-                        if "# SKIP" in name or "# skip" in name:
-                            skipped.append(name.split("#")[0].strip())
-                        elif status == "ok":
-                            passed.append(name)
-                        else:
-                            failed.append(name)
-            else:
-                # Try Jest/Mocha JSON format (single JSON object with testResults array)
-                try:
-                    report_data = json.loads(content)
-                    if "testResults" in report_data:
-                        # Jest format
-                        for test_file in report_data.get("testResults", []):
-                            for assertion in test_file.get("assertionResults", []):
-                                name = assertion.get("fullName") or assertion.get("title", "")
-                                status = assertion.get("status", "")
-                                if status == "passed":
-                                    passed.append(name)
-                                elif status == "failed":
-                                    failed.append(name)
-                                elif status in ("pending", "skipped"):
-                                    skipped.append(name)
-                    elif "stats" in report_data and "tests" in report_data:
-                        # Mocha JSON format
-                        for test in report_data.get("tests", []):
-                            name = test.get("fullTitle") or test.get("title", "")
-                            if test.get("pass"):
-                                passed.append(name)
-                            elif test.get("fail"):
-                                failed.append(name)
-                            elif test.get("pending"):
-                                skipped.append(name)
-                except json.JSONDecodeError:
-                    pass  # Not valid JSON, skip
-
-            reports.node_test_summary = TestSummary(
-                passed_count=len(passed),
-                failed_count=len(failed),
-                skipped_count=len(skipped),
-                passed_tests=sorted(passed),
-                failed_tests=sorted(failed),
-                skipped_tests=sorted(skipped),
-            )
-        except Exception as e:
-            print(f"Error parsing Node test report: {e}", file=sys.stderr)
-
-    # Try Cargo test JSON report
-    cargo_report = test_artifacts_dir / "cargo-test-report.json"
-    if cargo_report.exists():
-        try:
-            passed, failed, skipped = [], [], []
-            for line in cargo_report.read_text().strip().split("\n"):
-                if not line:
-                    continue
-                event = json.loads(line)
-                if event.get("type") == "test" and event.get("event") == "ok":
-                    passed.append(event.get("name", ""))
-                elif event.get("type") == "test" and event.get("event") == "failed":
-                    failed.append(event.get("name", ""))
-                elif event.get("type") == "test" and event.get("event") == "ignored":
-                    skipped.append(event.get("name", ""))
-            reports.cargo_test_summary = TestSummary(
-                passed_count=len(passed),
-                failed_count=len(failed),
-                skipped_count=len(skipped),
-                passed_tests=sorted(passed),
-                failed_tests=sorted(failed),
-                skipped_tests=sorted(skipped),
-            )
-        except Exception as e:
-            print(f"Error parsing Cargo test report: {e}", file=sys.stderr)
-
-    return reports
 
 
 @app.command()

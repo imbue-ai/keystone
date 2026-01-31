@@ -1,0 +1,12 @@
+{"Time":"2026-01-30T16:18:54.116473-08:00","Action":"start","Package":"sample-go-project"}
+{"Time":"2026-01-30T16:18:54.322056-08:00","Action":"run","Package":"sample-go-project","Test":"TestAdd"}
+{"Time":"2026-01-30T16:18:54.322109-08:00","Action":"output","Package":"sample-go-project","Test":"TestAdd","Output":"=== RUN   TestAdd\n"}
+{"Time":"2026-01-30T16:18:54.32213-08:00","Action":"output","Package":"sample-go-project","Test":"TestAdd","Output":"--- PASS: TestAdd (0.00s)\n"}
+{"Time":"2026-01-30T16:18:54.322139-08:00","Action":"pass","Package":"sample-go-project","Test":"TestAdd","Elapsed":0}
+{"Time":"2026-01-30T16:18:54.322148-08:00","Action":"run","Package":"sample-go-project","Test":"TestMultiply"}
+{"Time":"2026-01-30T16:18:54.322151-08:00","Action":"output","Package":"sample-go-project","Test":"TestMultiply","Output":"=== RUN   TestMultiply\n"}
+{"Time":"2026-01-30T16:18:54.322155-08:00","Action":"output","Package":"sample-go-project","Test":"TestMultiply","Output":"--- PASS: TestMultiply (0.00s)\n"}
+{"Time":"2026-01-30T16:18:54.322158-08:00","Action":"pass","Package":"sample-go-project","Test":"TestMultiply","Elapsed":0}
+{"Time":"2026-01-30T16:18:54.322162-08:00","Action":"output","Package":"sample-go-project","Output":"PASS\n"}
+{"Time":"2026-01-30T16:18:54.322426-08:00","Action":"output","Package":"sample-go-project","Output":"ok  \tsample-go-project\t0.206s\n"}
+{"Time":"2026-01-30T16:18:54.322975-08:00","Action":"pass","Package":"sample-go-project","Elapsed":0.207}

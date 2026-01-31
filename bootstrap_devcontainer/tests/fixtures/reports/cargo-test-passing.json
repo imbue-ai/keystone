@@ -1,0 +1,5 @@
+   Compiling rust_project v0.1.0 (/Users/thad/.mux/src/bootstrap_devcontainer/test-parsing-sfpx/samples/rust_project)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.40s
+     Running unittests src/lib.rs (target/debug/deps/rust_project-84446f8f4683dbeb)
+error: the option `Z` is only accepted on the nightly compiler
+error: test failed, to rerun pass `--lib`

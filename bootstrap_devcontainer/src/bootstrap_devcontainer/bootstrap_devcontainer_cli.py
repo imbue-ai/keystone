@@ -44,6 +44,7 @@ from bootstrap_devcontainer.schema import (
     TokenSpending,
     VerificationResult,
 )
+from bootstrap_devcontainer.version import get_version_info
 
 
 class ISOFormatter(logging.Formatter):
@@ -518,6 +519,7 @@ def bootstrap(
 
 def main():
     """Entry point for the CLI."""
+    logging.info("Starting bootstrap_devcontainer CLI, version: %s", get_version_info())
     app()
 
 

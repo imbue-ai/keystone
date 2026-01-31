@@ -75,6 +75,7 @@ from sqlalchemy.engine import Engine
 
 from bootstrap_devcontainer.git_utils import get_git_tree_hash
 from bootstrap_devcontainer.schema import AgentConfig
+from bootstrap_devcontainer.version import VersionInfo, get_version_info
 
 
 class StreamEvent(BaseModel):
@@ -112,6 +113,7 @@ class AgentRunRecord(BaseModel):
     devcontainer_tarball: bytes
     return_code: int
     claude_dir_tarball: bytes | None = None  # Tarball of ~/.claude from Modal
+    version_info: VersionInfo | None = None  # Version of the code that ran
 
 
 class CLIRunRecord(BaseModel):
@@ -140,6 +142,43 @@ def compute_cache_key(
         agent_config_json=agent_config.to_cache_key_json(),
         cache_version=cache_version,
     )
+
+
+def ensure_column_exists(engine: Engine, table: str, column: str, column_type: str) -> None:
+    """Add a column to a table if it doesn't exist.
+
+    Does nothing if the table doesn't exist (table will be created with the column).
+
+    Args:
+        engine: SQLAlchemy engine
+        table: Table name
+        column: Column name to add
+        column_type: SQL type for the column (e.g., 'TEXT', 'INTEGER')
+    """
+    with engine.connect() as conn:
+        # Check if column exists (works for SQLite and PostgreSQL)
+        if engine.dialect.name == "sqlite":
+            result = conn.execute(text(f"PRAGMA table_info({table})"))
+            columns = {row[1] for row in result}
+            if not columns:
+                # Table doesn't exist yet
+                return
+        else:
+            # PostgreSQL
+            result = conn.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns WHERE table_name = :table"
+                ),
+                {"table": table},
+            )
+            columns = {row[0] for row in result}
+            if not columns:
+                # Table doesn't exist yet
+                return
+
+        if column not in columns:
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}"))
+            conn.commit()
 
 
 def _create_engine(db_url: str) -> Engine:
@@ -202,6 +241,12 @@ class AgentLog:
 
     def log_agent_run(self, record: AgentRunRecord) -> None:
         """Log an agent execution."""
+        # Ensure version_info column exists (schema migration)
+        ensure_column_exists(self._engine, "agent_run", "version_info_json", "TEXT")
+
+        # Use current version if not provided
+        version_info = record.version_info or get_version_info()
+
         df = pd.DataFrame(
             [
                 {
@@ -216,6 +261,7 @@ class AgentLog:
                     "devcontainer_tarball": record.devcontainer_tarball,
                     "return_code": record.return_code,
                     "claude_dir_tarball": record.claude_dir_tarball,
+                    "version_info_json": version_info.model_dump_json(),
                 }
             ]
         )

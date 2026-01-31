@@ -122,49 +122,6 @@
     'success': False,
   })
 # ---
-# name: test_e2e_sample_projects[fullstack_project]
-  dict({
-    'agent': dict({
-      'exit_code': 0,
-      'model': '',
-      'status_messages': list([
-        'Exploring repository structure to identify file types and test locations.',
-        'Creating initial Dockerfile with Python and Node.js runtimes.',
-        'Building the dev container image.',
-        'Build failed due to uv environment variable issue; fixing Dockerfile.',
-        'Rebuilding the dev container with fixed Dockerfile.',
-        'Running the test suite in the container.',
-        'Test script has issues; fixing function scoping and directory creation.',
-        'Rebuilding container with fixed test runner.',
-        'Tests passed; verifying test artifacts.',
-        'Verifying reproducibility with another test run.',
-        'Running final comprehensive test.',
-      ]),
-      'summary': 'All tests pass successfully. The polyglot project (Python Flask backend + Node.js frontend) required both runtimes in the container. Key insights: 1) uv needs virtual environment activated before pip install, 2) Node.js tests spawn the Python backend server which required both runtimes, 3) --network host is critical for Modal compatibility, 4) Test artifacts properly captured in /test_artifacts with stdout/stderr separation.',
-      'timed_out': False,
-    }),
-    'error_message': None,
-    'success': True,
-    'verification': dict({
-      'cargo_test_summary': None,
-      'error_message': None,
-      'go_test_summary': None,
-      'node_test_summary': None,
-      'pytest_summary': dict({
-        'failed_count': 0,
-        'failed_tests': list([
-        ]),
-        'passed_count': 0,
-        'passed_tests': list([
-        ]),
-        'skipped_count': 0,
-        'skipped_tests': list([
-        ]),
-      }),
-      'success': True,
-    }),
-  })
-# ---
 # name: test_e2e_sample_projects[python_project]
   dict({
     'agent': dict({
@@ -173,39 +130,36 @@
       'status_messages': list([
         'Exploring repository structure to identify file types and test locations.',
         'Creating .devcontainer directory structure with devcontainer.json, Dockerfile, and run_all_tests.sh.',
-        'Building the dev container image to verify the setup.',
-        'Running tests in the container to verify the setup.',
-        'Fixing run_all_tests.sh to remove unnecessary --no-cov flag.',
-        'Rebuilding image with fixed test script.',
-        'Running tests with fixed script.',
-        'Verifying test artifacts in the container.',
-        'Final verification of .devcontainer structure.',
-        'Running complete end-to-end test from clean build.',
+        'Building dev container image to verify setup.',
+        "Build failed due to lockfile issue. The uv.lock file needs to be updated. I'll modify the Dockerfile to not use --locked flag.",
+        'Rebuilding dev container image with updated Dockerfile.',
+        'Running tests in the container to verify everything works.',
+        "Test run failed because pytest doesn't have coverage plugin. Removing the --no-cov flag from run_all_tests.sh.",
+        'Rebuilding image with updated test script.',
+        'Running tests again with the updated script.',
+        'Verifying test artifacts were created correctly.',
+        'Running final end-to-end verification.',
       ]),
-      'summary': 'All tests pass successfully. The dev container uses uv for fast Python dependency management, includes --network=host for Modal compatibility, and uses UV_LINK_MODE=copy to avoid snapshot issues with symlinks.',
+      'summary': 'All tests pass successfully. The project uses Python 3.11 with pytest. UV package manager was used for fast dependency installation with pre-warmed cache. Removed --locked flag from uv sync since the lockfile needed updating. Simple project with only 2 basic tests.',
       'timed_out': False,
     }),
     'error_message': None,
     'success': True,
     'verification': dict({
-      'cargo_test_summary': None,
       'error_message': None,
-      'go_test_summary': None,
-      'node_test_summary': None,
-      'pytest_summary': dict({
-        'failed_count': 0,
-        'failed_tests': list([
-        ]),
-        'passed_count': 2,
-        'passed_tests': list([
-          'tests/test_app.py::test_add',
-          'tests/test_app.py::test_multiply',
-        ]),
-        'skipped_count': 0,
-        'skipped_tests': list([
-        ]),
-      }),
       'success': True,
+      'test_results': list([
+        dict({
+          'name': 'tests.test_app::test_add',
+          'passed': True,
+          'skipped': False,
+        }),
+        dict({
+          'name': 'tests.test_app::test_multiply',
+          'passed': True,
+          'skipped': False,
+        }),
+      ]),
     }),
   })
 # ---

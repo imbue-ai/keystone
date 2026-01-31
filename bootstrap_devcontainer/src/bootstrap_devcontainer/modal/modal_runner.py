@@ -443,9 +443,9 @@ exec timeout {time_limit_secs} {shlex.join(cmd_parts)}
             test_artifacts_dir.mkdir(parents=True, exist_ok=True)
             with tarfile.open(fileobj=io.BytesIO(tarball), mode="r:gz") as tar:
                 tar.extractall(test_artifacts_dir)
-            logger.info("Test artifacts extracted.")
+            logger.info(f"Test artifacts extracted to {test_artifacts_dir}")
         except Exception as e:
-            logger.error("Error extracting artifacts: %s", e)
+            logger.exception("Error extracting artifacts: %s", e)
 
         # 4. Clean up container
         run_modal_command(sb, "docker", "rm", container_name, name="cleanup").wait()

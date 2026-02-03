@@ -362,9 +362,13 @@ exec timeout {time_limit_secs} {shlex.join(cmd_parts)}
         image_name = "bootstrap-verify"
         container_name = "bootstrap-verify-container"
 
-        # 1. Build the image
+        # 1. Build the image with registry cache
         logger.info("Building devcontainer image with docker...")
         import time
+
+        # Registry cache for faster rebuilds across sandboxes
+        cache_registry = "imbue--docker-registry-registry.modal.run"
+        cache_ref = f"{cache_registry}/cache:devcontainer"
 
         build_start = time.time()
         build_proc = run_modal_command(
@@ -372,13 +376,17 @@ exec timeout {time_limit_secs} {shlex.join(cmd_parts)}
             "timeout",
             str(image_build_timeout_secs),
             "docker",
+            "buildx",
             "build",
             "--network=host",
+            f"--cache-from=type=registry,ref={cache_ref}",
+            f"--cache-to=type=registry,ref={cache_ref},mode=max",
             "-t",
             image_name,
             "-f",
             "/project/.devcontainer/Dockerfile",
             "/project",
+            "--load",
             name="docker-build",
         )
         build_exit = build_proc.wait()

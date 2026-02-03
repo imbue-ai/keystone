@@ -29,10 +29,49 @@ Instructions:
   }}
 ```
 
-2. Create a .devcontainer/Dockerfile alongside that.
+2. Copy the timestamp helper script into .devcontainer/:
+   ```bash
+   cp /timestamp_process_output.pl .devcontainer/
+   ```
 
-The Dockerfile MUST contain these lines, to create a writable test artifacts directory:
+   This script wraps command execution with timestamped, tab-separated output that's easy to parse.
+   Usage: `./.devcontainer/timestamp_process_output.pl [--logfile FILE] command [args...]`
+
+   Example output:
+   ```
+   2026-02-02T17:28:47-0800	STDOUT	Running tests...
+   2026-02-02T17:28:47-0800	STDERR	Warning: deprecated function
+   2026-02-02T17:28:48-0800	STDOUT	Tests passed!
+   ```
+
+   The format is: `ISO_TIMESTAMP<tab>STDOUT|STDERR<tab>original_line`
+   This makes it trivial to filter/parse with grep, cut, awk, etc.
+
+   Use it in run_all_tests.sh like this:
+   ```bash
+   ./.devcontainer/timestamp_process_output.pl --logfile /test_artifacts/pytest.log \
+       pytest --junitxml=/test_artifacts/junit/pytest.xml tests/
+   ```
+
+   Or prefix your own commands, like this:
+   ```bash
+    devcontainer build \
+       --image-name "project_image-$(date +%Y%m%d-%H%M%S)" \
+       --workspace-folder .
+   ```
+
+   IMPORTANT: Your Dockerfile must include perl for this script to work:
+   ```dockerfile
+   RUN apt-get update && apt-get install -y perl
+   ```
+
+3. Create a .devcontainer/Dockerfile alongside that.
+
+The Dockerfile MUST contain these lines, ideally early in the file, to create a writable test artifacts directory:
 ```
+# Set up timestamp helper script.
+COPY ./devcontainer/timestamp_process_output.pl /timestamp_process_output.pl
+
 # Create test artifacts directory.
 RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
 ```
@@ -83,16 +122,14 @@ For example, you might want to `RUN apt-get install` must-have core dependencies
 and have subsequent layers of `RUN apt-get install` for dependencies you later discover are necessary.
 This way, the layer caching for the early `RUN apt-get install` will be reused when you later add dependencies.
 
-3. Create a .devcontainer/run_all_tests.sh script alongside the Dockerfile.
+4. Create a .devcontainer/run_all_tests.sh script alongside the Dockerfile.
 Note that this will be copied into the image by the `COPY . .` line,
 so that the image can execute its own tests.
 
    a. run_all_tests.sh takes no arguments.
    b. It always writes test artifacts to /test_artifacts inside the container filesystem.
    c. /test_artifacts should be populated with artifacts from running the tests:
-      i. For each command run, create a subdirectory with an identifying “name”.
-      ii. In that directory, put files called stdout.txt and stderr.txt, with timestamps.
-      iii. Tee the outputs to stdout/stderr.
+      i. Run long-running comands prefixed with `/timestamp_process_output.pl --logfile /test_artifacts/COMMAND_NAME.log COMMAND arg1 arg2 ...`.
       iv. Create JUnit XML test reports in /test_artifacts/junit/.
           All test reports should be JUnit XML format and placed in /test_artifacts/junit/*.xml.
           Create the directory first: `mkdir -p /test_artifacts/junit`
@@ -111,38 +148,9 @@ so that the image can execute its own tests.
    e. run_all_tests.sh is allowed to fail early (before running all tests) if that helps complete the task faster.
    f. If some of the test runs fail, run_all_tests.sh should fail as well (No need to explicitlyverify this behavior, though).
       You can use `set -euo pipefail` to exit the script if any test fails.
-   g. There's no need to branch in this file, because the code tree that you see now will always be the code tree that this script runs against.
+   g. There's no need to branch in run_all_tests.sh, because the code tree that you see now will always be the code tree that this script runs against.
    h. If the project uses some framework to run tests (e.g., bazel, buck, CMake, pytest, Jest, Mocha, cargo-nextest), use that framework's built-in reporting capabilities to generate JUnit XML reports.
    i. Make it executable: `chmod +x .devcontainer/run_all_tests.sh`.
-
-4. Copy the timestamp helper script into .devcontainer/:
-   ```bash
-   cp /timestamp_process_output.pl .devcontainer/
-   ```
-
-   This script wraps command execution with timestamped, tab-separated output that's easy to parse.
-   Usage: `./.devcontainer/timestamp_process_output.pl [--logfile FILE] command [args...]`
-
-   Example output:
-   ```
-   2026-02-02T17:28:47-0800	STDOUT	Running tests...
-   2026-02-02T17:28:47-0800	STDERR	Warning: deprecated function
-   2026-02-02T17:28:48-0800	STDOUT	Tests passed!
-   ```
-
-   The format is: `ISO_TIMESTAMP<tab>STDOUT|STDERR<tab>original_line`
-   This makes it trivial to filter/parse with grep, cut, awk, etc.
-
-   Use it in run_all_tests.sh like this:
-   ```bash
-   ./.devcontainer/timestamp_process_output.pl --logfile /test_artifacts/pytest.log \
-       pytest --junitxml=/test_artifacts/junit/pytest.xml tests/
-   ```
-
-   IMPORTANT: Your Dockerfile must include perl for this script to work:
-   ```dockerfile
-   RUN apt-get update && apt-get install -y perl
-   ```
 
 Tips and Notes:
 
@@ -204,7 +212,8 @@ Verify your work using commands like these:
 1. To build your image:
 ```bash
 IMAGE_NAME="project_image-$(date +%Y%m%d-%H%M%S)"
-devcontainer build \
+/timestamp_process_output.pl --logfile /tmp/devcontainer_build.$IMAGE_NAME.log \
+  devcontainer build \
   --image-name "$IMAGE_NAME" \
   --workspace-folder .
 ```

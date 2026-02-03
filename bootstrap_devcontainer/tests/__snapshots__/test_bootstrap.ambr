@@ -122,6 +122,40 @@
     'success': False,
   })
 # ---
+# name: test_e2e_sample_projects[cmake_vcpkg_project]
+  dict({
+    'agent': dict({
+      'exit_code': 0,
+      'model': '',
+      'status_messages': list([
+        'Exploring repository structure to identify file types and test locations.',
+        'Creating .devcontainer directory and copying timestamp helper script.',
+        'Creating devcontainer.json with build configuration.',
+        'Creating Dockerfile with C++ build environment and vcpkg for dependency management.',
+        'Creating run_all_tests.sh script to execute CMake/CTest test suite.',
+        'Creating .dockerignore to optimize build context.',
+        'Building Docker image to test the setup.',
+        'Running tests in the built container.',
+        'Running second build to verify layer caching works correctly.',
+      ]),
+      'summary': 'All tests pass successfully. The dev container uses Ubuntu 22.04 with CMake, vcpkg for dependency management (fmt library), and CTest for testing. Build artifacts are cached in Docker layers for fast rebuilds. Key insight: C++ projects with vcpkg benefit greatly from building dependencies and source code directly in the Dockerfile to cache compilation artifacts, reducing test execution time to seconds.',
+      'timed_out': False,
+    }),
+    'error_message': None,
+    'success': True,
+    'verification': dict({
+      'error_message': None,
+      'success': True,
+      'test_results': list([
+        dict({
+          'name': 'test_greeter::test_greeter',
+          'passed': True,
+          'skipped': False,
+        }),
+      ]),
+    }),
+  })
+# ---
 # name: test_e2e_sample_projects[fullstack_project]
   dict({
     'agent': dict({

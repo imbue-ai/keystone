@@ -29,6 +29,12 @@ class AgentConfig(BaseModel):
     max_budget_usd: float = Field(default=1.0, description="Maximum budget per repo")
     timeout_minutes: int = Field(default=30, description="Timeout per repo in minutes")
 
+    # Agent command (use fake_agent.py for testing)
+    agent_cmd: str = Field(default="claude", description="Agent command to run")
+
+    # Run agent in Modal or locally
+    agent_in_modal: bool = Field(default=True, description="Run agent in Modal sandbox")
+
     # Log database (shared with CLI)
     log_db: str | None = Field(
         default=None,

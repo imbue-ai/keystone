@@ -14,6 +14,7 @@ from config import AgentConfig, EvalConfig
 from flow import eval_flow
 
 SAMPLES_DIR = Path(__file__).parent.parent / "samples"
+FAKE_AGENT = Path(__file__).parent.parent / "bootstrap_devcontainer" / "tests" / "fake_agent.py"
 
 
 def init_git_repo(path: Path) -> None:
@@ -71,14 +72,16 @@ def sample_repos(tmp_path: Path) -> tuple[Path, list[str]]:
 
 
 @pytest.mark.slow
-@pytest.mark.modal
-def test_eval_flow(sample_repos: tuple[Path, list[str]], tmp_path: Path) -> None:
-    """Test the eval flow with local sample repos.
+def test_eval_flow_fake_agent(sample_repos: tuple[Path, list[str]], tmp_path: Path) -> None:
+    """Test the eval flow with fake agent (no Modal, no LLM).
 
     This test:
     1. Creates local git repos from samples
-    2. Runs the eval flow with Modal execution
+    2. Runs the eval flow with fake agent locally
     3. Verifies results structure and that repos are pinned
+
+    Uses fake_agent.py which generates a working Python devcontainer.
+    Only python_project will succeed; go_project will fail (expected).
     """
     repo_list_path, _repo_paths = sample_repos
     clone_dir = tmp_path / "clones"
@@ -87,7 +90,9 @@ def test_eval_flow(sample_repos: tuple[Path, list[str]], tmp_path: Path) -> None
 
     agent_config = AgentConfig(
         max_budget_usd=1.0,
-        timeout_minutes=10,
+        timeout_minutes=5,
+        agent_cmd=f"python {FAKE_AGENT}",
+        agent_in_modal=False,  # Run locally with fake agent
     )
 
     eval_config = EvalConfig(

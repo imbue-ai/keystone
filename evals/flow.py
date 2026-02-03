@@ -133,8 +133,14 @@ def process_repo_task(
             str(result_file),
             "--agent_time_limit_secs",
             str(agent_config.timeout_minutes * 60),
-            "--agent_in_modal",
+            "--agent_cmd",
+            agent_config.agent_cmd,
         ]
+
+        if agent_config.agent_in_modal:
+            cmd.append("--agent_in_modal")
+        else:
+            cmd.append("--agent_local")
 
         if agent_config.log_db:
             cmd.extend(["--log_db", str(resolve_path(agent_config.log_db))])

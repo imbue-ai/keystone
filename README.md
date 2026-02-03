@@ -15,9 +15,10 @@ IMPORTANT WARNING: Running this command invokes Claude Code with `--dangerously-
 ```bash
 uvx --from 'git+https://github.com/imbue-ai/bootstrap_devcontainer@main#subdirectory=bootstrap_devcontainer' \
   bootstrap-devcontainer \
-  --project_root ./samples/python_project \
+  --log_db ~/.bootstrap_devcontainer/log.sqlite \
+  --max_budget_usd 3.0 \
   --test_artifacts_dir /tmp/test_artifacts \
-  --max_budget_usd 2.0
+  --project_root ./samples/python_project
 ```
 
 Not currently supported:
@@ -48,7 +49,8 @@ Not currently supported:
 ```bash
 # Run local code tree on a project.
 uv run bootstrap-devcontainer \
-  --project_root ./samples/python_project \
+  --log_db ~/.bootstrap_devcontainer/log.sqlite \
+  --max_budget_usd 3.0 \
   --test_artifacts_dir /tmp/test_artifacts \
-  --max_budget_usd 2.0
+  --project_root ./samples/python_project
 ```

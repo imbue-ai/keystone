@@ -1,0 +1,21 @@
+# Python
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.coverage
+**/.tox
+**/*.egg-info
+
+# Build artifacts
+**/build
+**/dist
+
+# Git
+**/.git
+
+# IDE
+**/.vscode
+**/.idea
+
+# Dev container itself
+.devcontainer

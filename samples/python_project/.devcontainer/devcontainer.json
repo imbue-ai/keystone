@@ -1,0 +1,21 @@
+{
+  "name": "Sample Python Project Dev Container",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "..",
+    "args": {
+      "network": "host"
+    }
+  },
+  "runArgs": [
+    "--network=host"
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance"
+      ]
+    }
+  }
+}

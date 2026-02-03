@@ -14,6 +14,7 @@ from prefect import flow, get_run_logger, task
 from prefect.futures import wait
 from prefect.tasks import task_input_hash
 
+from bootstrap_devcontainer.process_runner import run_process
 from bootstrap_devcontainer.version import get_version_info
 
 logger = logging.getLogger(__name__)
@@ -153,12 +154,12 @@ def process_repo_task(
 
         log.info(f"Running: {' '.join(cmd[:8])}...")
 
-        proc = subprocess.run(
+        # Use streaming process runner to forward CLI output in real-time
+        repo_name = repo_path.name
+        proc = run_process(
             cmd,
-            cwd=work_path,
-            capture_output=True,
-            text=True,
-            timeout=agent_config.timeout_minutes * 60 + 60,  # Extra buffer
+            log_prefix=f"[{repo_name}]",
+            cwd=str(work_path),
         )
 
         # Step 4: Parse result

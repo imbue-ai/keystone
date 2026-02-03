@@ -363,6 +363,9 @@ exec timeout {time_limit_secs} {shlex.join(cmd_parts)}
         container_name = "bootstrap-verify-container"
 
         # 1. Build the image
+        # NOTE: Registry-based caching was attempted but Modal's serverless architecture
+        # doesn't support the stateful upload sessions that Docker registries require.
+        # See scripts/modal_registry.py for the attempted implementation.
         logger.info("Building devcontainer image with docker...")
         import time
 

@@ -154,18 +154,8 @@ COPY tests/ ./tests/
 COPY pyproject.toml uv.lock ./
 ```
 
-You may also want to create a .devcontainer/.dockerignore file to exclude common build artifacts
-and unnecessary files from the build context:
-```
-# .devcontainer/.dockerignore
-**/__pycache__
-**/*.pyc
-**/.pytest_cache
-**/node_modules
-**/.git
-**/target
-**/build
-```
+Note: Do NOT create .dockerignore files. You can only write inside the .devcontainer/ directory,
+and a .dockerignore file there won't work correctly with the build context set to "..".
 
 The Dockerfile MUST end with these lines, copying the test runner script last since it changes frequently:
 ```dockerfile
@@ -212,6 +202,7 @@ This will be copied to /run_all_tests.sh in the image by the final COPY command.
 Tips and Notes:
 
 * Start by exploring the repository structure. Use commands like:
+  - `cat README.md` or `cat README.rst` to understand the project (check for setup/test instructions)
   - `find . -type f | sed 's/.*\\.//' | sort | uniq -c | sort -rn` to identify file types
   - `find . -iname '*test*'` to find test-related files and folders
 

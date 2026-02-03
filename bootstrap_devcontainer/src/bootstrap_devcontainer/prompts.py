@@ -12,14 +12,12 @@ only the .devcontainer/ directory and reapply it to the original repo. Any chang
 If the project needs modifications to run tests (e.g., creating config files, setting up fixtures),
 implement those modifications in run_all_tests.sh so they happen at test runtime inside the container.
 
-You are currently at a clean copy of the root of the project's code tree,
-without any build artifacts or git history.
+You are currently at a clean copy of the root of the project's code tree, without any build artifacts or git history.
 This copy was created using `git archive`.
 
 Instructions:
 
 1. Create a .devcontainer/devcontainer.json file at the project root.
-   Note: devcontainer.json uses JSON5 format, so comments are allowed.
    This file MUST include these lines, specifying exactly where the Dockerfile should be
    and that the build context is the entire source tree:
 ```
@@ -28,6 +26,7 @@ Instructions:
     "context": ".."
   }}
 ```
+   Note: devcontainer.json uses JSON5 format, so comments are allowed.
 
 2. Copy the timestamp helper script into .devcontainer/:
    ```bash
@@ -49,16 +48,17 @@ Instructions:
 
    Use it in run_all_tests.sh like this:
    ```bash
-   ./.devcontainer/timestamp_process_output.pl --logfile /test_artifacts/pytest.log \
+   /timestamp_process_output.pl --logfile /test_artifacts/pytest.log \
        pytest --junitxml=/test_artifacts/junit/pytest.xml tests/
    ```
 
    Or prefix your own commands, like this:
-   ```bash
-    devcontainer build \
-       --image-name "project_image-$(date +%Y%m%d-%H%M%S)" \
-       --workspace-folder .
-   ```
+```bash
+/timestamp_process_output.pl --logfile /tmp/devcontainer_build.$IMAGE_NAME.log \
+  devcontainer build \
+    --image-name "project_image-$(date +%Y%m%d-%H%M%S)" \
+    --workspace-folder .
+```
 
    IMPORTANT: Your Dockerfile must include perl for this script to work:
    ```dockerfile
@@ -67,7 +67,7 @@ Instructions:
 
 3. Create a .devcontainer/Dockerfile alongside that.
 
-The Dockerfile MUST contain these lines, ideally early in the file, to create a writable test artifacts directory:
+  The Dockerfile MUST contain these lines, ideally early in the file, to create a writable test artifacts directory:
 ```
 # Set up timestamp helper script.
 COPY ./devcontainer/timestamp_process_output.pl /timestamp_process_output.pl
@@ -76,13 +76,13 @@ COPY ./devcontainer/timestamp_process_output.pl /timestamp_process_output.pl
 RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
 ```
 
-A nice trick that can dramatically speed up subsequent Dockerfile builds is to pre-warm package caches
-by fetching dependencies early in the Dockerfile, before copying the entire source tree into the image.
-This can help because if these packages are not present in the image, they will need to be fetched
-from the internet every time the image is used.
-If the project depends on TensorFlow or PyTorch, this can speed things up a lot.
+  A nice trick that can dramatically speed up subsequent Dockerfile builds is to pre-warm package caches
+  and fetch/build dependencies early in the Dockerfile, before copying the entire source tree into the image.
+  This can help because if these packages are not present in the image, they will need to be fetched/built
+  from the internet every time the image is used.
+  If the project depends on TensorFlow or PyTorch, this can speed things up a lot.
 
-As an example of how to do this in Python and UV:
+  As an example of how to do this in Python and UV:
 ```
 # Copy uv from official image.
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
@@ -99,20 +99,20 @@ RUN cd /tmp/deps && \
     echo "Python virtual environment created successfully at $UV_PROJECT_ENVIRONMENT"
 ```
 
-A similar trick can be used with other languages and package managers, such as npm, yarn, pip, and Cargo.
-
-If you use this trick, please also add this environment variable to the Dockerfile so that this works correctly on Modal:
+  If you use this trick, please also add this environment variable to the Dockerfile so that this works correctly on Modal:
 ```
 # Very important on Modal -- without this, there is a crazy bug that means that some files do not show up in snapshots!  This was a nightmare to debug.
 # This is because Modal's snapshotting mechanism does not work correctly with symlinks.
 ENV UV_LINK_MODE=copy
 ```
 
-For compiled languages (C++, Rust, Go) or build systems like Bazel, run the build step in a Dockerfile layer
-so that build artifacts are cached. This avoids rebuilding every time you run the tests.
-Examples:
+  A similar trick can be used with other languages and package managers, such as vcpkg, npm, yarn, pip, and Cargo.
 
-For Rust projects:
+  For compiled languages (C++, Rust, Go) or build systems like Bazel, run the build step in a Dockerfile layer
+  so that build artifacts are cached. This avoids rebuilding every time you run the tests.
+  Examples:
+
+  For Rust projects:
 ```dockerfile
 # Copy Cargo manifests and source, then build
 COPY Cargo.toml Cargo.lock /project_src/
@@ -122,7 +122,7 @@ RUN cargo build --release
 # Tests will use the cached build artifacts
 ```
 
-For C++/CMake projects:
+  For C++/CMake projects:
 ```dockerfile
 COPY CMakeLists.txt /project_src/
 COPY src/ /project_src/src/
@@ -130,7 +130,7 @@ WORKDIR /project_src
 RUN mkdir build && cd build && cmake .. && make -j$(nproc)
 ```
 
-For Bazel projects:
+  For Bazel projects:
 ```dockerfile
 COPY WORKSPACE BUILD.bazel /project_src/
 COPY src/ /project_src/src/
@@ -177,7 +177,7 @@ This will be copied to /run_all_tests.sh in the image by the final COPY command.
    b. It always writes test artifacts to /test_artifacts inside the container filesystem.
    c. /test_artifacts should be populated with artifacts from running the tests:
       i. Run long-running comands prefixed with `/timestamp_process_output.pl --logfile /test_artifacts/COMMAND_NAME.log COMMAND arg1 arg2 ...`.
-      iv. Create JUnit XML test reports in /test_artifacts/junit/.
+      ii. Create JUnit XML test reports in /test_artifacts/junit/.
           All test reports should be JUnit XML format and placed in /test_artifacts/junit/*.xml.
           Create the directory first: `mkdir -p /test_artifacts/junit`
           Examples for common frameworks:
@@ -202,6 +202,7 @@ This will be copied to /run_all_tests.sh in the image by the final COPY command.
 Tips and Notes:
 
 * Start by exploring the repository structure. Use commands like:
+  - `ls -a` to list all files and directories in the current directory.
   - `cat README.md` or `cat README.rst` to understand the project (check for setup/test instructions)
   - `find . -type f | sed 's/.*\\.//' | sort | uniq -c | sort -rn` to identify file types
   - `find . -iname '*test*'` to find test-related files and folders

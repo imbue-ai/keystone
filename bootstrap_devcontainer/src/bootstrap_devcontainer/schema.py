@@ -84,6 +84,14 @@ class AgentExecution(BaseModel):
     cost: InferenceCost
 
 
+class GeneratedFiles(BaseModel):
+    """Contents of the generated devcontainer files."""
+
+    devcontainer_json: str | None = None
+    dockerfile: str | None = None
+    run_all_tests_sh: str | None = None
+
+
 class BootstrapResult(BaseModel):
     success: bool
     error_message: str | None = None
@@ -91,3 +99,5 @@ class BootstrapResult(BaseModel):
     agent: AgentExecution
 
     verification: VerificationResult | None = None
+
+    generated_files: GeneratedFiles | None = None

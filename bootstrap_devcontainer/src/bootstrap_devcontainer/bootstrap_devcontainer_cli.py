@@ -40,6 +40,7 @@ from bootstrap_devcontainer.schema import (
     AgentExecution,
     AgentStatusMessage,
     BootstrapResult,
+    GeneratedFiles,
     InferenceCost,
     TokenSpending,
     VerificationResult,
@@ -464,6 +465,16 @@ def bootstrap(
         elif exit_code != 0:
             error_message = f"Agent exited with code {exit_code}"
 
+    # Read generated files for inclusion in result
+    devcontainer_json_path = project_root / ".devcontainer" / "devcontainer.json"
+    generated_files = GeneratedFiles(
+        devcontainer_json=devcontainer_json_path.read_text()
+        if devcontainer_json_path.exists()
+        else None,
+        dockerfile=dockerfile_path.read_text() if dockerfile_path.exists() else None,
+        run_all_tests_sh=test_script_path.read_text() if test_script_path.exists() else None,
+    )
+
     output = BootstrapResult(
         success=overall_success,
         error_message=error_message,
@@ -482,6 +493,7 @@ def bootstrap(
             ),
         ),
         verification=verification,
+        generated_files=generated_files,
     )
 
     # Log CLI run (with result)

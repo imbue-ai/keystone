@@ -258,7 +258,12 @@ def test_e2e_sample_projects(
 
     result = run_process(cmd, log_prefix="[e2e]")
 
-    assert result.returncode == 0
+    if "failing" in str(project_root):
+        assert result.returncode != 0, "Expected failure for failing project"
+    else:
+        assert result.returncode == 0, (
+            f"f{project_root!s} failed with exit code {result.returncode}"
+        )
 
     # Parse the JSON output (find the JSON object in stdout)
     stdout_lines = result.stdout.strip().split("\n")

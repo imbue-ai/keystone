@@ -4,13 +4,20 @@ use warnings;
 use IO::Select;
 use IO::Handle;
 use POSIX qw(strftime);
+use Time::HiRes qw(time);
 use Getopt::Long;
 
 my $logfile;
+my $stamp_stdout = 0;
+my $stamp_stderr = 0;
 Getopt::Long::Configure("require_order");
-GetOptions('logfile=s' => \$logfile) or die "Usage: $0 [--logfile FILE] command [args...]\n";
+GetOptions(
+    'logfile=s' => \$logfile,
+    'stamp-stdout' => \$stamp_stdout,
+    'stamp-stderr' => \$stamp_stderr,
+) or die "Usage: $0 [--logfile FILE] [--stamp-stdout] [--stamp-stderr] command [args...]\n";
 
-die "Usage: $0 [--logfile FILE] command [args...]\n" unless @ARGV;
+die "Usage: $0 [--logfile FILE] [--stamp-stdout] [--stamp-stderr] command [args...]\n" unless @ARGV;
 
 my @cmd = @ARGV;
 
@@ -25,6 +32,8 @@ STDERR->autoflush(1);
 
 pipe my $out_r, my $out_w or die "pipe: $!";
 pipe my $err_r, my $err_w or die "pipe: $!";
+
+my $start_time = time();
 
 my $pid = fork();
 die "fork: $!" unless defined $pid;
@@ -44,6 +53,7 @@ my $sel = IO::Select->new();
 $sel->add($out_r, $err_r);
 
 sub iso_ts { strftime("%Y-%m-%dT%H:%M:%S%z", localtime) }
+sub elapsed { sprintf("%.3f", time() - $start_time) }
 
 while (my @ready = $sel->can_read) {
     for my $fh (@ready) {
@@ -52,9 +62,24 @@ while (my @ready = $sel->can_read) {
             chomp $line;
             my $type = ($fh == $out_r) ? "STDOUT" : "STDERR";
             my $ts = iso_ts();
-            my $msg = "$ts\t$type\t$line\n";
-            print $msg;
-            print $log $msg if defined $log;
+            my $el = elapsed();
+            my $log_msg = "$ts\t$el\t$type\t$line\n";
+            print $log $log_msg if defined $log;
+
+            my $stamp = ($type eq "STDOUT" && $stamp_stdout) || ($type eq "STDERR" && $stamp_stderr);
+            if ($stamp) {
+                if ($type eq "STDOUT") {
+                    print STDOUT $log_msg;
+                } else {
+                    print STDERR $log_msg;
+                }
+            } else {
+                if ($type eq "STDOUT") {
+                    print STDOUT "$line\n";
+                } else {
+                    print STDERR "$line\n";
+                }
+            }
         } else {
             $sel->remove($fh);
             close $fh;

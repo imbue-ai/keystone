@@ -34,16 +34,21 @@ Instructions:
    ```
 
    This script wraps command execution with timestamped, tab-separated output that's easy to parse.
-   Usage: `./.devcontainer/timestamp_process_output.pl [--logfile FILE] command [args...]`
+   Usage: `./.devcontainer/timestamp_process_output.pl [--logfile FILE] [--stamp-stdout] [--stamp-stderr] command [args...]`
 
-   Example output:
+   Options:
+   - `--logfile FILE`: Write timestamped output to FILE (always includes timestamps and elapsed time)
+   - `--stamp-stdout`: Add timestamps to stdout (default: pass through unchanged)
+   - `--stamp-stderr`: Add timestamps to stderr (default: pass through unchanged)
+
+   Example output (with --stamp-stdout or in logfile):
    ```
-   2026-02-02T17:28:47-0800	STDOUT	Running tests...
-   2026-02-02T17:28:47-0800	STDERR	Warning: deprecated function
-   2026-02-02T17:28:48-0800	STDOUT	Tests passed!
+   2026-02-02T17:28:47-0800	0.000	STDOUT	Running tests...
+   2026-02-02T17:28:47-0800	0.052	STDERR	Warning: deprecated function
+   2026-02-02T17:28:48-0800	1.234	STDOUT	Tests passed!
    ```
 
-   The format is: `ISO_TIMESTAMP<tab>STDOUT|STDERR<tab>original_line`
+   The format is: `ISO_TIMESTAMP<tab>ELAPSED_SECS<tab>STDOUT|STDERR<tab>original_line`
    This makes it trivial to filter/parse with grep, cut, awk, etc.
 
    Use it in run_all_tests.sh like this:

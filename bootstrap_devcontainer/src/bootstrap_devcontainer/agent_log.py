@@ -131,7 +131,7 @@ def compute_cache_key(
     prompt: str,
     repo_path: Path,
     agent_config: AgentConfig,
-    cache_version: str = "",
+    cache_version: str,
 ) -> CacheKey:
     """Compute cache key components from inputs."""
     git_tree_hash = get_git_tree_hash(repo_path)

@@ -24,7 +24,7 @@ uv run python -m evals.eval_cli run \
 uv run python -m evals.eval_cli run \
     --repo_list_path evals/examples/repos.jsonl \
     --log_db ~/.bootstrap_devcontainer/eval.sqlite \
-    --output_path ./eval_output.json
+    --output_path ~/eval_output_$(date +"%Y%m%d_%H%M%S").json
 
 # Run on only the first N repos (useful for testing)
 uv run python -m evals.eval_cli \
@@ -33,8 +33,8 @@ uv run python -m evals.eval_cli \
     --worktree_dir ~/.cache/bootstrap_eval/worktrees \
     --timeout_minutes 60 \
     --max_budget_usd 10.0 \
-    --limit 1 \
-    --output_path ~/eval_output.json
+    --output_path ~/eval_output_$(date +"%Y%m%d_%H%M%S").json \
+    --limit 1
 ```
 
 ## Configuration

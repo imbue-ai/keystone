@@ -185,7 +185,10 @@ class ModalAgentRunner(AgentRunner):
 
         sandbox_id = self._sandbox.object_id
         print(f"Modal sandbox created: {sandbox_id}", file=sys.stderr)
-        print("  Dashboard: https://modal.com/apps/bootstrap-devcontainer-sandbox", file=sys.stderr)
+        print(
+            "  Dashboard: https://modal.com/apps/imbue/main/deployed/bootstrap-devcontainer-sandbox",
+            file=sys.stderr,
+        )
         print(f"  Shell:     modal shell {sandbox_id}", file=sys.stderr)
 
         # Start Docker daemon

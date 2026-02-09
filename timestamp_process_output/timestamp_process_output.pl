@@ -53,7 +53,12 @@ my $sel = IO::Select->new();
 $sel->add($out_r, $err_r);
 
 sub iso_ts { strftime("%Y-%m-%dT%H:%M:%S%z", localtime) }
-sub elapsed { sprintf("%d", time() - $start_time) }
+
+my $have_hires = eval { require Time::HiRes; Time::HiRes->import('time'); 1 };
+
+sub elapsed {
+    $have_hires ? sprintf("%.3f", time() - $start_time) : sprintf("%d", time() - $start_time)
+}
 
 while (my @ready = $sel->can_read) {
     for my $fh (@ready) {

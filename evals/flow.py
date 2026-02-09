@@ -74,8 +74,15 @@ def clone_repo_task(
     return repo_path, commit_hash
 
 
+def _process_repo_task_name(repo_entry: RepoEntry, **_kwargs: object) -> str:
+    """Derive a human-friendly task-run name from the repo URL."""
+    short_name = repo_entry.repo.rstrip("/").split("/")[-1].replace(".git", "")
+    return f"process_repo/{short_name}"
+
+
 @task(
     name="process_repo",
+    task_run_name=_process_repo_task_name,
     description="Run bootstrap-devcontainer on a repo worktree",
     retries=1,
     retry_delay_seconds=60,
@@ -163,9 +170,20 @@ def process_repo_task(
         # create a venv and install its dependencies locally (e.g. compiling pytorch).
         # The --project_root CLI arg already tells bootstrap-devcontainer where the target is.
         repo_name = repo_path.name
+
+        # Forward all CLI stdout/stderr to the Prefect logger so it appears
+        # on the dashboard (print() alone doesn't show up there).
+        def _log_stdout(line: str) -> None:
+            log.info(f"[{repo_name}] {line}")
+
+        def _log_stderr(line: str) -> None:
+            log.warning(f"[{repo_name}] {line}")
+
         proc = run_process(
             cmd,
             log_prefix=f"[{repo_name}]",
+            stdout_callback=_log_stdout,
+            stderr_callback=_log_stderr,
         )
 
         # Step 4: Parse result

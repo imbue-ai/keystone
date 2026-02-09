@@ -130,12 +130,12 @@ def bootstrap(
         help="Maximum seconds for agent execution (uses timeout command)",
     ),
     image_build_timeout_secs: int = typer.Option(
-        600,
+        30 * 60,
         "--image_build_timeout_secs",
         help="Maximum seconds for building the devcontainer image",
     ),
     test_timeout_secs: int = typer.Option(
-        1800,
+        30 * 60,
         "--test_timeout_secs",
         help="Maximum seconds for running tests",
     ),

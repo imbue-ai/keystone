@@ -2,14 +2,15 @@ import json
 import logging
 import shlex
 import shutil
-import subprocess
 from pathlib import Path
 from typing import Any
 
 import pytest
 from conftest import SAMPLES_DIR, init_git_repo
 from syrupy.assertion import SnapshotAssertion
+from typer.testing import CliRunner
 
+from bootstrap_devcontainer.bootstrap_devcontainer_cli import app
 from bootstrap_devcontainer.constants import DEFAULT_TESTING_LOG_PATH
 from bootstrap_devcontainer.process_runner import run_process
 from bootstrap_devcontainer.schema import BootstrapResult
@@ -18,13 +19,8 @@ logger = logging.getLogger(__name__)
 
 
 def test_cli_help() -> None:
-    result = subprocess.run(
-        ["bootstrap-devcontainer", "--help"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    assert result.returncode == 0
+    result = CliRunner().invoke(app, ["--help"])
+    assert result.exit_code == 0
     assert "[OPTIONS]" in result.stdout
     assert "--project_root" in result.stdout
 
@@ -45,7 +41,6 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
     logger.info("=" * 60)
 
     cmd = [
-        "bootstrap-devcontainer",
         "--project_root",
         str(project_root),
         "--test_artifacts_dir",
@@ -58,12 +53,11 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
     ]
 
     logger.info("Running: %s", " ".join(cmd))
+    result = CliRunner().invoke(app, cmd)
 
-    result = run_process(cmd, log_prefix="[fake-agent]")
+    # result = run_process(cmd, log_prefix="[fake-agent]")
 
-    logger.info("Return code: %s", result.returncode)
-
-    assert result.returncode == 0, f"Process failed: {result.stderr}"
+    assert result.exit_code == 0, f"Process failed: {result.stderr}"
     assert "CACHE MISS" in result.stderr, "Expected cache miss on first run"
 
     # Check that status lines were emitted to stdout (rich prints in blue)
@@ -141,7 +135,7 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
     test_artifacts_dir2 = tmp_path / "test_artifacts2"
 
     cmd2 = [
-        "bootstrap-devcontainer",
+        # "bootstrap-devcontainer",
         "--project_root",
         str(project_root2),
         "--test_artifacts_dir",
@@ -153,9 +147,11 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
         "--agent_local",  # Use local runner for fake agent tests
     ]
 
-    result2 = run_process(cmd2, log_prefix="[fake-agent-cached]")
+    result2 = CliRunner().invoke(app, cmd2)
 
-    assert result2.returncode == 0, f"Cached run failed: {result2.stderr}"
+    # result2 = run_process(cmd2, log_prefix="[fake-agent-cached]")
+
+    assert result2.exit_code == 0, f"Cached run failed: {result2.stderr}"
     assert "CACHE HIT" in result2.stderr, "Expected cache hit on second run"
     # Verify devcontainer was restored from cache
     assert (project_root2 / ".devcontainer" / "devcontainer.json").exists()

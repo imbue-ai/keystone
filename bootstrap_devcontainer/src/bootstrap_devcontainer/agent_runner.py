@@ -8,12 +8,15 @@ import tarfile
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass
+from logging import getLogger
 from pathlib import Path
 from typing import Literal
 
 from bootstrap_devcontainer.agent_log import create_devcontainer_tarball
 from bootstrap_devcontainer.process_runner import run_process
 from bootstrap_devcontainer.schema import VerifyResult
+
+logger = getLogger(__name__)
 
 DEFAULT_AGENT_TIMEOUT = 3600
 TIMEOUT_EXIT_CODE = 124  # Exit code used by GNU timeout command
@@ -266,6 +269,7 @@ class LocalAgentRunner(AgentRunner):
                 "--image-name",
                 image_name,
             ]
+            logger.info("Building image: %s", " ".join(build_cmd))
             build_proc = subprocess.run(build_cmd, capture_output=True, text=True)
             image_build_seconds = time.time() - build_start
             if build_proc.returncode == TIMEOUT_EXIT_CODE:

@@ -49,7 +49,14 @@ def run(
     no_cache_replay: bool = typer.Option(False, "--no_cache_replay", help="Force fresh execution"),
     limit: int | None = typer.Option(None, "--limit", help="Limit to first N repos"),
 ) -> None:
-    """Run the eval harness on a list of repos."""
+    """Run the eval harness on a list of repos.
+
+    Docker Build Cache (optional):
+    Configure via environment variables:
+    - BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY: Registry URL (e.g., https://registry.example.com)
+    - BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_USERNAME: Username for authentication
+    - BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_PASSWORD: Password for authentication
+    """
     agent_config = AgentConfig(
         max_budget_usd=max_budget_usd,
         timeout_minutes=timeout_minutes,

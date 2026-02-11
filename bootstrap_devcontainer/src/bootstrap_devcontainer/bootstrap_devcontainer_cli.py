@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import subprocess
 import sys
 import time
@@ -139,7 +140,15 @@ def bootstrap(
         "--test_timeout_secs",
         help="Maximum seconds for running tests",
     ),
-):
+) -> None:
+    """Bootstrap a devcontainer for a project.
+
+    Docker Build Cache (optional):
+    When running in Modal (--agent_in_modal), configure cache registry via environment variables:
+    - BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY: Registry URL (e.g., https://registry.example.com)
+    - BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_USERNAME: Username for authentication
+    - BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_PASSWORD: Password for authentication
+    """
     assert project_root is not None, "--project_root is required"
     project_root = project_root.resolve()
 
@@ -177,6 +186,23 @@ def bootstrap(
     # Set up runner based on --agent_in_modal flag
     if agent_in_modal:
         from bootstrap_devcontainer.modal.modal_runner import ModalAgentRunner
+
+        # Log Docker cache registry configuration if present
+        docker_registry = os.environ.get("BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY")
+        docker_username = os.environ.get("BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_USERNAME")
+        docker_password = os.environ.get("BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_PASSWORD")
+
+        if docker_registry:
+            if docker_username and docker_password:
+                console.print(
+                    f"[blue]Docker cache registry:[/blue] {docker_registry} (with authentication)"
+                )
+            else:
+                console.print(
+                    f"[blue]Docker cache registry:[/blue] {docker_registry} (no authentication)"
+                )
+        else:
+            console.print("[dim]Docker cache registry: not configured[/dim]")
 
         runner = ModalAgentRunner()
     else:

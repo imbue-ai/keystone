@@ -150,6 +150,44 @@ def _read_claude_auth() -> dict[str, str]:
     return auth_env
 
 
+def _read_docker_cache_config() -> dict[str, str]:
+    """Read Docker cache registry configuration from environment.
+
+    Returns dict with optional keys:
+    - BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY: Registry URL for build cache
+    - BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_USERNAME: Username for registry auth
+    - BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_PASSWORD: Password for registry auth
+    - DOCKER_AUTH_CONFIG: Formatted auth config for Docker (generated if URL+creds provided)
+    """
+    config: dict[str, str] = {}
+
+    registry_url = os.environ.get("BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY")
+    username = os.environ.get("BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_USERNAME")
+    password = os.environ.get("BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_PASSWORD")
+
+    if registry_url:
+        config["BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY"] = registry_url
+
+        # If credentials provided, generate DOCKER_AUTH_CONFIG
+        if username and password:
+            import base64
+
+            auth_string = f"{username}:{password}"
+            auth_b64 = base64.b64encode(auth_string.encode()).decode()
+
+            # Generate Docker auth config JSON
+            auth_config = {"auths": {registry_url: {"auth": auth_b64}}}
+            import json
+
+            config["DOCKER_AUTH_CONFIG"] = json.dumps(auth_config)
+
+            logger.info(f"Configured Docker registry authentication for {registry_url}")
+        else:
+            logger.info(f"Docker cache registry URL provided ({registry_url}) but no credentials")
+
+    return config
+
+
 class ModalAgentRunner(AgentRunner):
     """Run agent in a Modal sandbox with Docker support.
 
@@ -195,6 +233,16 @@ class ModalAgentRunner(AgentRunner):
         run_modal_command(self._sandbox, "/start-dockerd.sh", name="dockerd")
         logger.info("Waiting for Docker daemon to be ready...")
         run_modal_command(self._sandbox, "/wait_for_docker.sh", name="docker-wait").wait()
+
+        # Configure Docker registry authentication if provided
+        docker_config = _read_docker_cache_config()
+        if "DOCKER_AUTH_CONFIG" in docker_config:
+            logger.info("Configuring Docker registry authentication...")
+            # Write auth config to Docker's expected location
+            auth_config_json = docker_config["DOCKER_AUTH_CONFIG"]
+            with self._sandbox.open("/root/.docker/config.json", "w") as f:
+                f.write(auth_config_json)
+            logger.info("Docker authentication configured")
 
         return self._sandbox
 
@@ -373,18 +421,46 @@ exec timeout {time_limit_secs} {shlex.join(cmd_parts)}
         import time
 
         build_start = time.time()
-        build_proc = run_modal_command(
-            sb,
+
+        # Build docker build command with optional cache registry
+        docker_config = _read_docker_cache_config()
+        build_cmd = [
             "timeout",
             str(image_build_timeout_secs),
             "docker",
             "build",
             "--network=host",
-            "-t",
-            image_name,
-            "-f",
-            "/project/.devcontainer/Dockerfile",
-            "/project",
+        ]
+
+        # Add cache-from and cache-to flags if registry configured
+        if "BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY" in docker_config:
+            cache_registry = docker_config["BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY"]
+            # Use a unique cache key per project (could be based on project hash or name)
+            # For now, use a generic tag - in production you might want project-specific tags
+            cache_ref = f"{cache_registry}/buildcache:latest"
+            build_cmd.extend(
+                [
+                    "--cache-from",
+                    f"type=registry,ref={cache_ref}",
+                    "--cache-to",
+                    f"type=registry,ref={cache_ref},mode=max",
+                ]
+            )
+            logger.info(f"Using Docker build cache registry: {cache_ref}")
+
+        build_cmd.extend(
+            [
+                "-t",
+                image_name,
+                "-f",
+                "/project/.devcontainer/Dockerfile",
+                "/project",
+            ]
+        )
+
+        build_proc = run_modal_command(
+            sb,
+            *build_cmd,
             name="docker-build",
         )
         build_exit = build_proc.wait()

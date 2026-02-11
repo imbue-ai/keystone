@@ -83,7 +83,7 @@ def _process_repo_task_name(repo_entry: RepoEntry, **_kwargs: object) -> str:
 
 @task(
     name="process_repo",
-    task_run_name=_process_repo_task_name,
+    task_run_name=_process_repo_task_name,  # type: ignore[reportArgumentType]  # prefect resolves callback params at runtime
     description="Run bootstrap-devcontainer on a repo worktree",
     retries=1,
     retry_delay_seconds=60,

@@ -1,6 +1,7 @@
 """Tests for the agent_log module."""
 
 import tempfile
+from collections.abc import Generator
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -17,7 +18,7 @@ from bootstrap_devcontainer.schema import AgentConfig
 
 
 @pytest.fixture
-def temp_db() -> Path:
+def temp_db() -> Generator[Path, None, None]:
     """Create a temporary database path."""
     with tempfile.TemporaryDirectory() as tmpdir:
         yield Path(tmpdir) / "test.sqlite"

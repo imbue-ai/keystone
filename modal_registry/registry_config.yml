@@ -8,8 +8,9 @@ storage:
     rootdirectory: /var/lib/registry
 
 http:
-  addr: 0.0.0.0:5000
+  addr: 0.0.0.0:5001
   relativeurls: true
+  secret: bootstrap-devcontainer-registry-secret-v1
   headers:
     X-Content-Type-Options: [nosniff]
 

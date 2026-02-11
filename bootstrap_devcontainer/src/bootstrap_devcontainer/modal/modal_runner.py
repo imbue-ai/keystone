@@ -5,7 +5,9 @@ This avoids the 20-30s cold start penalty of creating a new sandbox for verifica
 and lets us use Docker's build cache directly instead of Modal's from_dockerfile.
 """
 
+import base64
 import io
+import json
 import logging
 import os
 import queue
@@ -13,6 +15,7 @@ import shlex
 import sys
 import tarfile
 import threading
+import time
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any, Literal
@@ -170,15 +173,11 @@ def _read_docker_cache_config() -> dict[str, str]:
 
         # If credentials provided, generate DOCKER_AUTH_CONFIG
         if username and password:
-            import base64
-
             auth_string = f"{username}:{password}"
             auth_b64 = base64.b64encode(auth_string.encode()).decode()
 
             # Generate Docker auth config JSON
             auth_config = {"auths": {registry_url: {"auth": auth_b64}}}
-            import json
-
             config["DOCKER_AUTH_CONFIG"] = json.dumps(auth_config)
 
             logger.info(f"Configured Docker registry authentication for {registry_url}")
@@ -418,8 +417,6 @@ exec timeout {time_limit_secs} {shlex.join(cmd_parts)}
         # doesn't support the stateful upload sessions that Docker registries require.
         # See scripts/modal_registry.py for the attempted implementation.
         logger.info("Building devcontainer image with docker...")
-        import time
-
         build_start = time.time()
 
         # Build docker build command with optional cache registry

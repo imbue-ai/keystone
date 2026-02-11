@@ -7,6 +7,7 @@ import json
 import logging
 import shutil
 import subprocess
+import traceback
 from pathlib import Path
 
 from config import AgentConfig, EvalConfig, EvalOutput, RepoEntry, RepoResult, resolve_path
@@ -213,8 +214,6 @@ def process_repo_task(
             error_message=f"Timeout after {agent_config.timeout_minutes} minutes",
         )
     except Exception as e:
-        import traceback
-
         return RepoResult(
             repo_entry=repo_entry,
             success=False,

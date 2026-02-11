@@ -5,6 +5,8 @@ import shlex
 import shutil
 import subprocess
 import tarfile
+import tempfile
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -168,8 +170,6 @@ class LocalAgentRunner(AgentRunner):
             stream="stderr",
             line="Extracting project archive to working directory...",
         )
-        import tempfile
-
         self._work_dir = Path(tempfile.mkdtemp(prefix="bootstrap-agent-"))
         with tarfile.open(fileobj=io.BytesIO(project_archive), mode="r:gz") as tar:
             tar.extractall(self._work_dir)
@@ -225,8 +225,6 @@ class LocalAgentRunner(AgentRunner):
         Extracts pristine project source + agent's devcontainer to a temp dir,
         then builds and runs tests.
         """
-        import tempfile
-
         if not self._check_docker_available():
             return VerifyResult(
                 success=False,
@@ -251,8 +249,6 @@ class LocalAgentRunner(AgentRunner):
                     success=False,
                     error_message="Build failed: .devcontainer/devcontainer.json not found.",
                 )
-
-            import time
 
             image_name = "bootstrap-verify-local"
             container_name = "bootstrap-verify-local-container"

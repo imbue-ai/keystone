@@ -34,6 +34,7 @@ from bootstrap_devcontainer.git_utils import (
     is_git_dirty,
     is_git_repo,
 )
+from bootstrap_devcontainer.modal.modal_runner import ModalAgentRunner
 from bootstrap_devcontainer.prompts import build_agent_prompt
 from bootstrap_devcontainer.report_parsers import parse_junit_xml
 from bootstrap_devcontainer.schema import (
@@ -185,8 +186,6 @@ def bootstrap(
 
     # Set up runner based on --agent_in_modal flag
     if agent_in_modal:
-        from bootstrap_devcontainer.modal.modal_runner import ModalAgentRunner
-
         # Log Docker cache registry configuration if present
         docker_registry = os.environ.get("BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY")
         docker_username = os.environ.get("BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_USERNAME")

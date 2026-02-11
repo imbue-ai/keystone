@@ -1,6 +1,8 @@
 """Git utilities for working with versioned code trees."""
 
+import io
 import subprocess
+import tarfile
 import tempfile
 from pathlib import Path
 
@@ -104,9 +106,6 @@ def extract_git_archive_to_temp(repo_path: Path) -> Path:
     Returns the path to the temporary directory containing the extracted files.
     The caller is responsible for cleaning up the temporary directory.
     """
-    import io
-    import tarfile
-
     archive_bytes = create_git_archive_bytes(repo_path)
     temp_dir = Path(tempfile.mkdtemp(prefix="git-archive-"))
 

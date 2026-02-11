@@ -36,6 +36,7 @@ select = [
     "SIM",    # flake8-simplify
     "TCH",    # flake8-type-checking
     "PTH",    # flake8-use-pathlib
+    "PLC",    # pylint conventions
     "RUF",    # ruff-specific rules
 ]
 ignore = [

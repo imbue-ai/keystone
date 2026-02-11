@@ -62,7 +62,9 @@ Example Usage
 """
 
 import hashlib
+import io
 import json
+import tarfile
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -314,9 +316,6 @@ class AgentLog:
 
 def create_devcontainer_tarball(project_root: Path) -> bytes:
     """Create a gzipped tarball of the .devcontainer directory."""
-    import io
-    import tarfile
-
     devcontainer_dir = project_root / ".devcontainer"
     if not devcontainer_dir.exists():
         return b""
@@ -329,9 +328,6 @@ def create_devcontainer_tarball(project_root: Path) -> bytes:
 
 def extract_devcontainer_tarball(tarball: bytes, project_root: Path) -> None:
     """Extract a .devcontainer tarball to the project root."""
-    import io
-    import tarfile
-
     if not tarball:
         return
 

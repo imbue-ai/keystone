@@ -10,7 +10,7 @@ This is **NOT** a production Docker registry. It is a **BuildKit cache backend o
 - ✅ Guarantees singleton writes (one registry instance)
 - ✅ Reachable from public internet (CI) and inside Modal sandboxes
 - ✅ Can run for hours but tolerates restarts (cache survives)
-- ❌ Does NOT have authentication
+- ✅ Has basic authentication (htpasswd)
 - ❌ Does NOT have high availability guarantees
 - ❌ Does NOT store production artifacts
 
@@ -24,7 +24,7 @@ Modal App: docker-registry-cache
 ```
 
 ## Files
-modal secret createmodal secret create
+
 - **app.py**: Modal application definition
 - **registry_config.yml**: Docker registry configuration
 - **README.md**: This file
@@ -63,20 +63,32 @@ export BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY="https://imbue--bootstrap-devconta
 
 ## Usage
 
+### Login, Push, and Pull
+
+```bash
+# Login
+docker login imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run \
+  -u buildcache -p JabiaJockSapSkelpRathWalt
+
+# Tag a local image and push
+docker tag alpine imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run/alpine:latest
+docker push imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run/alpine:latest
+
+# Pull
+docker pull imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run/alpine:latest
+```
+
+Replace `alpine:latest` with whatever image/tag you're working with.
+
 ### Basic Registry Test
 
 Verify the registry works:
 
 ```bash
-# Pull a test image
-docker pull alpine
-
-# Tag and push to the registry
-docker tag alpine $BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY/test/alpine:latest
-docker push $BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY/test/alpine:latest
+# Check the catalog
+curl -s -u buildcache:JabiaJockSapSkelpRathWalt \
+  "https://imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run/v2/_catalog"
 ```
-
-If successful, your registry is functional! 🎉
 
 ### Using as BuildKit Cache
 
@@ -149,7 +161,6 @@ subprocess.run([
 
 These are **NOT** required for MVP but could be added later:
 
-- [ ] Add basic authentication
 - [ ] Add periodic volume pruning job
 - [ ] Support separate cache tags per branch
 - [ ] Add metrics/monitoring

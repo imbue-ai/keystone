@@ -73,9 +73,20 @@ def test_buildkit_cache_roundtrip() -> None:
             f"Expected cache export in build 1 output:\n{output1}"
         )
 
+        # Prune local buildx cache so build 2 MUST fetch from the registry
+        subprocess.run(
+            ["docker", "buildx", "prune", "-af"],
+            capture_output=True,
+            timeout=30,
+            check=True,
+        )
+
         # Build 2: pull cache from registry — RUN steps should be CACHED
         output2 = _buildx(
             tmpdir,
             cache_from=f"type=registry,ref={cache_ref}",
+        )
+        assert "importing cache manifest from" in output2, (
+            f"Expected registry cache import in build 2 output:\n{output2}"
         )
         assert "CACHED" in output2, f"Expected CACHED layers in build 2 output:\n{output2}"

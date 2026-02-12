@@ -358,6 +358,7 @@ dev = [
     { name = "modal" },
     { name = "pre-commit" },
     { name = "pyright" },
+    { name = "pytest" },
     { name = "ruff" },
 ]
 
@@ -372,6 +373,7 @@ dev = [
     { name = "modal", specifier = ">=1.3.1" },
     { name = "pre-commit", specifier = ">=4.0.0" },
     { name = "pyright", specifier = ">=1.1.390" },
+    { name = "pytest", specifier = ">=8.0.0" },
     { name = "ruff", specifier = ">=0.9.0" },
 ]
 

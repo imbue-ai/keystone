@@ -1,0 +1,11 @@
+#!/bin/bash
+set -eo pipefail
+# Run pytest in collection-only mode to verify test discovery works
+# without actually executing any tests.
+# Ignore subprojects that have their own dependency environments
+uv run pytest --collect-only -q \
+  --ignore=samples \
+  --ignore=bootstrap_devcontainer \
+  --ignore=evals \
+  --ignore=github_datasets \
+  2>&1 | tail -5

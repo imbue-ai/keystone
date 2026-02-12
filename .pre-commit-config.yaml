@@ -14,3 +14,10 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
+
+      - id: pytest-discovery
+        name: pytest discovery
+        entry: ./scripts/pytest-discovery
+        language: system
+        types: [python]
+        pass_filenames: false

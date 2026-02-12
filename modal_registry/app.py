@@ -60,6 +60,27 @@ def registry() -> None:
     The registry uses relativeurls: true to avoid http:// vs https://
     scheme mismatches (Modal terminates TLS externally).
     """
+    # Verify that the URL in the secret matches this app's actual URL.
+    # The expected URL is derived from Modal's naming convention for web endpoints.
+    expected_url = os.environ.get("DOCKER_BUILD_CACHE_REGISTRY_URL", "")
+    if expected_url:
+        # Modal web_server URLs follow: <workspace>--<app-name>-<function-name>.modal.run
+        # We can't compute it exactly here, but we can check that the secret's URL
+        # at least ends with .modal.run and log it for verification.
+        print(f"Registry URL from secret: {expected_url}", file=sys.stderr)
+        if not expected_url.endswith(".modal.run"):
+            print(
+                f"WARNING: DOCKER_BUILD_CACHE_REGISTRY_URL ({expected_url}) "
+                "does not look like a Modal web endpoint URL",
+                file=sys.stderr,
+            )
+    else:
+        print(
+            "WARNING: DOCKER_BUILD_CACHE_REGISTRY_URL not set in secret - "
+            "clients won't know how to reach this registry",
+            file=sys.stderr,
+        )
+
     # Derive htpasswd file from plaintext credentials at startup
     username = os.environ["DOCKER_BUILD_CACHE_REGISTRY_USERNAME"]
     password = os.environ["DOCKER_BUILD_CACHE_REGISTRY_PASSWORD"]

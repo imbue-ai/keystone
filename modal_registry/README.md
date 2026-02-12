@@ -63,67 +63,27 @@ export BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY="https://imbue--bootstrap-devconta
 
 ## Usage
 
-### Login and Pull
+### BuildKit Cache (Primary Use Case)
+
+Use the registry as a `--cache-from` / `--cache-to` backend for `docker buildx`:
 
 ```bash
-# Login
-docker login imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run \
-  -u buildcache -p JabiaJockSapSkelpRathWalt
+export REGISTRY="imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run"
 
-# Pull
-docker pull imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run/alpine:latest
-```
+# Login (needed once)
+docker login "$REGISTRY" -u buildcache -p JabiaJockSapSkelpRathWalt
 
-### Pushing Images
-
-> **⚠️ `docker push` does not work.** Modal's HTTP proxy rejects `Transfer-Encoding: chunked`
-> requests with 500 Internal Server Error. Docker's push client sends chunked uploads for blob
-> data, which Modal cannot handle. This is a Modal platform limitation.
-
-Use one of these alternatives instead:
-
-**Option 1: `crane push`** (recommended for pushing pre-built images)
-```bash
-# Install: https://github.com/google/go-containerregistry/tree/main/cmd/crane
-crane auth login imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run \
-  -u buildcache -p JabiaJockSapSkelpRathWalt
-
-crane push myimage.tar imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run/myimage:latest
-```
-
-**Option 2: `docker buildx build --push`** (recommended for build-and-push workflows)
-```bash
-docker buildx build --push \
-  -t imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run/myimage:latest .
-```
-
-Both alternatives use `Content-Length` headers instead of chunked encoding and work reliably.
-
-### Basic Registry Test
-
-Verify the registry works:
-
-```bash
-# Check the catalog
-curl -s -u buildcache:JabiaJockSapSkelpRathWalt \
-  "https://imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run/v2/_catalog"
-```
-
-### Using as BuildKit Cache
-
-Use the registry as a cache backend for `docker buildx`:
-
-```bash
+# Build with registry cache
 docker buildx build \
   -t myimage:latest \
-  --cache-from type=registry,ref=$BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY/buildcache:main \
-  --cache-to type=registry,ref=$BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY/buildcache:main,mode=max \
+  --cache-from "type=registry,ref=$REGISTRY/buildcache:main" \
+  --cache-to "type=registry,ref=$REGISTRY/buildcache:main,mode=max" \
   .
 ```
 
 **Expected behavior:**
-- **First build**: Slow (cache warmup)
-- **Subsequent builds**: Much faster (cache hit)
+- **First build**: Slow (cache warmup, layers pushed to registry)
+- **Subsequent builds**: Much faster (cache hit, layers pulled from registry)
 
 ### Using from Modal Sandbox
 
@@ -132,7 +92,7 @@ Inside any Modal function, use the same cache flags:
 ```python
 import subprocess
 
-REGISTRY = "https://imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run"
+REGISTRY = "imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run"
 
 subprocess.run([
     "docker", "buildx", "build",
@@ -144,6 +104,20 @@ subprocess.run([
 ```
 
 **Note**: No special networking config required. Modal automatically routes traffic internally.
+
+### Verify the Registry
+
+```bash
+curl -s -u buildcache:JabiaJockSapSkelpRathWalt \
+  "https://imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run/v2/_catalog"
+```
+
+### Known Limitations
+
+> **`docker push` / `docker pull` are not supported.** Modal's HTTP proxy rejects
+> `Transfer-Encoding: chunked` requests (used by Docker's push client) and may strip
+> the `Accept` header (causing manifest schema issues on pull). BuildKit's own HTTP
+> client avoids both problems, so `--cache-from` / `--cache-to` work perfectly.
 
 ## Operational Characteristics
 
@@ -217,8 +191,8 @@ modal deploy app.py
 Project is complete when:
 
 - ✅ Modal app deploys successfully
-- ✅ Image push works via `crane` or `docker buildx build --push`
-- ✅ buildx cache reduces build time on second run
+- ✅ `--cache-to` pushes layers to registry (tested)
+- ✅ `--cache-from` pulls layers and produces cache hits (tested)
 - ✅ Cache works from inside a Modal function
 
 ## Support

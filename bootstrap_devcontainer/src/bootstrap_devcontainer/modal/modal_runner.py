@@ -265,16 +265,15 @@ class ModalAgentRunner(AgentRunner):
             return DockerCacheConfig(registry_url=url, username=username, password=password)
 
         if url:
-            logger.warning(
+            raise RuntimeError(
                 f"DOCKER_BUILD_CACHE_REGISTRY_URL is set ({url}) "
-                "but USERNAME or PASSWORD is missing - cache disabled"
+                "but USERNAME or PASSWORD is missing in secret "
+                f"'{self._docker_cache_secret}'"
             )
-        else:
-            logger.warning(
-                f"Docker cache secret '{self._docker_cache_secret}' was provided "
-                "but DOCKER_BUILD_CACHE_REGISTRY_URL is not set - cache disabled"
-            )
-        return None
+        raise RuntimeError(
+            f"Docker cache secret '{self._docker_cache_secret}' was provided "
+            "but DOCKER_BUILD_CACHE_REGISTRY_URL is not set"
+        )
 
     def _docker_login(self, config: DockerCacheConfig) -> None:
         """Run ``docker login`` inside the sandbox for both root and agent users."""

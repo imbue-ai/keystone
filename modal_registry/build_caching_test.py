@@ -9,12 +9,13 @@ Prerequisites:
     - Docker logged in to the registry (see README.md)
 """
 
-import subprocess
 import tempfile
 import time
 from pathlib import Path
 
 import pytest
+
+from bootstrap_devcontainer.process_runner import run_process
 
 REGISTRY = "imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run"
 
@@ -27,7 +28,7 @@ def _buildx(
     no_cache: bool = False,
     build_args: dict[str, str] | None = None,
 ) -> str:
-    """Run docker buildx build and return combined stdout+stderr."""
+    """Run docker buildx build and return combined stdout+stderr, streaming logs live."""
     cmd = [
         "docker",
         "buildx",
@@ -45,8 +46,8 @@ def _buildx(
         cmd.extend(["--build-arg", f"{key}={val}"])
     cmd.append(dockerfile_dir)
 
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-    output = result.stdout + result.stderr
+    result = run_process(cmd, log_prefix="[buildx]")
+    output = result.stdout + "\n" + result.stderr
     if result.returncode != 0:
         raise RuntimeError(f"buildx failed (exit {result.returncode}):\n{output}")
     return output
@@ -81,12 +82,11 @@ def test_buildkit_cache_roundtrip() -> None:
         )
 
         # Prune local buildx cache so build 2 MUST fetch from the registry
-        subprocess.run(
-            ["docker", "buildx", "prune", "-af"],
-            capture_output=True,
-            timeout=30,
-            check=True,
-        )
+        prune_result = run_process(["docker", "buildx", "prune", "-af"], log_prefix="[prune]")
+        if prune_result.returncode != 0:
+            raise RuntimeError(
+                f"buildx prune failed (exit {prune_result.returncode}):\n{prune_result.stderr}"
+            )
 
         # Build 2: pull cache from registry — RUN steps should be CACHED
         output2 = _buildx(

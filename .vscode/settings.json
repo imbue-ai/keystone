@@ -2,6 +2,7 @@
     "python.testing.pytestArgs": [
         "bootstrap_devcontainer",
         "evals",
+        "modal_registry",
         "-sv",
         "--log-cli-level=DEBUG",
     ],

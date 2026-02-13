@@ -10,8 +10,8 @@ from conftest import SAMPLES_DIR, init_git_repo
 from syrupy.assertion import SnapshotAssertion
 from typer.testing import CliRunner
 
-from bootstrap_devcontainer.bootstrap_devcontainer_cli import app
 from bootstrap_devcontainer.constants import DEFAULT_TESTING_LOG_PATH
+from bootstrap_devcontainer.keystone_cli import app
 from bootstrap_devcontainer.process_runner import run_process
 from bootstrap_devcontainer.schema import BootstrapResult
 
@@ -22,6 +22,28 @@ def test_cli_help() -> None:
     result = CliRunner().invoke(app, ["--help"])
     assert result.exit_code == 0
     assert "[OPTIONS]" in result.stdout
+    assert "--project_root" in result.stdout
+
+
+@pytest.mark.manual
+def test_cli_runs_from_uvx() -> None:
+    """Test that the CLI can be installed and invoked via uvx from the public repo.
+
+    The uvx command tested here is the one documented in the README:
+        uvx --from 'git+https://github.com/imbue-ai/keystone' bootstrap-devcontainer --help
+
+    Marked manual because it requires network access and installs from git.
+    """
+    result = run_process(
+        [
+            "uvx",
+            "--from",
+            "git+https://github.com/imbue-ai/keystone",
+            "bootstrap-devcontainer",
+            "--help",
+        ],
+    )
+    assert result.returncode == 0, f"uvx invocation failed:\n{result.stderr}"
     assert "--project_root" in result.stdout
 
 

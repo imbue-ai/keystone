@@ -1,4 +1,4 @@
-"""Shared constants for bootstrap_devcontainer."""
+"""Shared constants for keystone."""
 
 from pathlib import Path
 

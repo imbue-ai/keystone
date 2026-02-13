@@ -1,4 +1,4 @@
-"""Pytest fixtures and test utilities for bootstrap_devcontainer tests."""
+"""Pytest fixtures and test utilities for keystone tests."""
 
 import shutil
 import subprocess

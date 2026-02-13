@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from bootstrap_devcontainer.constants import STATUS_MARKER, SUMMARY_MARKER
+from keystone.constants import STATUS_MARKER, SUMMARY_MARKER
 
 
 def generate_devcontainer_json(cache_registry_url: str | None = None) -> str:

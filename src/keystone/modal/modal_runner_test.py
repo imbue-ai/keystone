@@ -4,9 +4,9 @@ import shlex
 
 import modal
 
-from bootstrap_devcontainer.agent_runner import build_claude_command
-from bootstrap_devcontainer.modal.image import create_modal_image
-from bootstrap_devcontainer.modal.modal_runner import run_modal_command
+from keystone.agent_runner import build_claude_command
+from keystone.modal.image import create_modal_image
+from keystone.modal.modal_runner import run_modal_command
 
 # Configure logging to silence noisy third-party libraries
 logging.basicConfig(
@@ -14,13 +14,13 @@ logging.basicConfig(
     format="%(levelname)s: %(message)s",
 )
 # Enable DEBUG only for our project
-logging.getLogger("bootstrap_devcontainer").setLevel(logging.DEBUG)
+logging.getLogger("keystone").setLevel(logging.DEBUG)
 # Specifically silence known noisy hpack/http2 logs
 logging.getLogger("hpack").setLevel(logging.INFO)
 logging.getLogger("httpcore").setLevel(logging.INFO)
 logging.getLogger("httpx").setLevel(logging.INFO)
 
-logger = logging.getLogger("bootstrap_devcontainer.modal_test")
+logger = logging.getLogger("keystone.modal_test")
 
 
 def test_run_modal_command_interleaved_streaming():

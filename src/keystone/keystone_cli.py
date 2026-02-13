@@ -9,7 +9,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from bootstrap_devcontainer.agent_log import (
+from keystone.agent_log import (
     AgentLog,
     AgentRunRecord,
     CLIRunRecord,
@@ -17,8 +17,8 @@ from bootstrap_devcontainer.agent_log import (
     compute_cache_key,
     extract_devcontainer_tarball,
 )
-from bootstrap_devcontainer.agent_runner import TIMEOUT_EXIT_CODE, LocalAgentRunner
-from bootstrap_devcontainer.constants import (
+from keystone.agent_runner import TIMEOUT_EXIT_CODE, LocalAgentRunner
+from keystone.constants import (
     ANSI_BLUE,
     ANSI_GREEN,
     ANSI_MAGENTA,
@@ -27,16 +27,16 @@ from bootstrap_devcontainer.constants import (
     STATUS_MARKER,
     SUMMARY_MARKER,
 )
-from bootstrap_devcontainer.git_utils import (
+from keystone.git_utils import (
     create_git_archive_bytes,
     get_git_tree_hash,
     is_git_dirty,
     is_git_repo,
 )
-from bootstrap_devcontainer.modal.modal_runner import ModalAgentRunner
-from bootstrap_devcontainer.prompts import build_agent_prompt
-from bootstrap_devcontainer.report_parsers import parse_junit_xml
-from bootstrap_devcontainer.schema import (
+from keystone.modal.modal_runner import ModalAgentRunner
+from keystone.prompts import build_agent_prompt
+from keystone.report_parsers import parse_junit_xml
+from keystone.schema import (
     AgentConfig,
     AgentExecution,
     AgentStatusMessage,
@@ -46,7 +46,7 @@ from bootstrap_devcontainer.schema import (
     TokenSpending,
     VerificationResult,
 )
-from bootstrap_devcontainer.version import get_version_info
+from keystone.version import get_version_info
 
 
 class ISOFormatter(logging.Formatter):
@@ -65,7 +65,7 @@ _handler.setFormatter(
 logging.root.addHandler(_handler)
 logging.root.setLevel(logging.INFO)
 # Enable DEBUG for our own modules
-logging.getLogger("bootstrap_devcontainer").setLevel(logging.DEBUG)
+logging.getLogger("keystone").setLevel(logging.DEBUG)
 
 app = typer.Typer()
 console = Console(stderr=True, force_terminal=True)
@@ -294,7 +294,7 @@ def bootstrap(
     try:
         # Set up logging/caching
         # Default to ~/.imbue_keystone/log.sqlite if not specified
-        effective_log_db = log_db or str(Path.home() / ".keystone" / "log.sqlite")
+        effective_log_db = log_db or str(Path.home() / ".imbue_keystone" / "log.sqlite")
 
         agent_log = AgentLog(effective_log_db)
         cli_run_id = agent_log.generate_run_id()

@@ -20,15 +20,15 @@ from typing import Any, Literal
 
 import modal
 
-from bootstrap_devcontainer.agent_runner import (
+from keystone.agent_runner import (
     TIMEOUT_EXIT_CODE,
     AgentRunner,
     StreamEvent,
     build_claude_command,
 )
-from bootstrap_devcontainer.modal.image import create_modal_image
-from bootstrap_devcontainer.prompts import generate_devcontainer_json
-from bootstrap_devcontainer.schema import VerifyResult
+from keystone.modal.image import create_modal_image
+from keystone.prompts import generate_devcontainer_json
+from keystone.schema import VerifyResult
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +70,7 @@ class ManagedProcess:
     def _stream_reader(
         self, stream: Iterable[str], stream_name: Literal["stdout", "stderr"]
     ) -> None:
-        logger = logging.getLogger("bootstrap_devcontainer.modal")
+        logger = logging.getLogger("keystone.modal")
         try:
             for chunk in stream:
                 # Modal may return multiple lines in a single chunk, so split them
@@ -132,7 +132,7 @@ def run_modal_command(
         **kwargs: Additional arguments passed to sb.exec()
     """
 
-    logger = logging.getLogger("bootstrap_devcontainer.modal")
+    logger = logging.getLogger("keystone.modal")
     logger.info(f"[{name}] Running: {shlex.join(args)}")
     proc = sb.exec(*args, **kwargs)
     return ManagedProcess(proc, prefix=name, capture=capture)

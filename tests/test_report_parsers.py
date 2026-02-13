@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from bootstrap_devcontainer.report_parsers import parse_junit_xml
+from keystone.report_parsers import parse_junit_xml
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "reports"
 

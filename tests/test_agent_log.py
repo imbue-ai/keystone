@@ -7,14 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from bootstrap_devcontainer.agent_log import (
+from keystone.agent_log import (
     AgentLog,
     AgentRunRecord,
     CacheKey,
     CLIRunRecord,
     StreamEvent,
 )
-from bootstrap_devcontainer.schema import AgentConfig
+from keystone.schema import AgentConfig
 
 
 @pytest.fixture

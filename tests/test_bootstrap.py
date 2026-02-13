@@ -10,10 +10,10 @@ from conftest import SAMPLES_DIR, init_git_repo
 from syrupy.assertion import SnapshotAssertion
 from typer.testing import CliRunner
 
-from bootstrap_devcontainer.constants import DEFAULT_TESTING_LOG_PATH
-from bootstrap_devcontainer.keystone_cli import app
-from bootstrap_devcontainer.process_runner import run_process
-from bootstrap_devcontainer.schema import BootstrapResult
+from keystone.constants import DEFAULT_TESTING_LOG_PATH
+from keystone.keystone_cli import app
+from keystone.process_runner import run_process
+from keystone.schema import BootstrapResult
 
 logger = logging.getLogger(__name__)
 

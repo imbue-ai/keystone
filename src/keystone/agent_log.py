@@ -75,9 +75,9 @@ from pydantic import BaseModel
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
-from bootstrap_devcontainer.git_utils import get_git_tree_hash
-from bootstrap_devcontainer.schema import AgentConfig
-from bootstrap_devcontainer.version import VersionInfo, get_version_info
+from keystone.git_utils import get_git_tree_hash
+from keystone.schema import AgentConfig
+from keystone.version import VersionInfo, get_version_info
 
 
 class StreamEvent(BaseModel):

@@ -14,9 +14,9 @@ from logging import getLogger
 from pathlib import Path
 from typing import Literal
 
-from bootstrap_devcontainer.agent_log import create_devcontainer_tarball
-from bootstrap_devcontainer.process_runner import run_process
-from bootstrap_devcontainer.schema import VerifyResult
+from keystone.agent_log import create_devcontainer_tarball
+from keystone.process_runner import run_process
+from keystone.schema import VerifyResult
 
 logger = getLogger(__name__)
 

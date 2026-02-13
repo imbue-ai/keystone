@@ -5,7 +5,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from bootstrap_devcontainer.modal.modal_runner import ManagedProcess
+from keystone.modal.modal_runner import ManagedProcess
 
 
 class FakeProcess:

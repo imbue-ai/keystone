@@ -11,7 +11,7 @@ from pathlib import Path
 
 from junitparser import JUnitXml, TestCase
 
-from bootstrap_devcontainer.schema import TestResult
+from keystone.schema import TestResult
 
 __all__ = ["TestResult", "parse_junit_xml"]
 

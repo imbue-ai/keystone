@@ -7,24 +7,26 @@ Given a source repo, it analyzes the project structure and creates:
 - `//devcontainer/Dockerfile` - Container image definition
 - `//devcontainer/run_all_tests.sh` - Test runner script with artifact collection
 
-## Prerequisites for your environment
+## Prerequisite setup
 
 * A [Modal account] (https://modal.com/docs/guide#getting-started) -- we use this to safely sandbox Claude Code as it works on your container.
 * `$ANTHROPIC_API_KEY` -- Keystone uses your API key to run Claude Code in its Modal sandbox.
 * [`uvx`](https://docs.astral.sh/uv/getting-started/installation/) to run Keystone.
 
-## Usage
+## Example usage
 
 Run directly from the repository using `uvx`:
 
-IMPORTANT WARNING: Running this command invokes Claude Code with `--dangerously-skip-permissions` in your current environment.
-
 ```bash
+# Make a repo.
+git clone https://github.com/fastapi/fastapi
+
+# Make a devcontainer for it.
 uvx --from 'git+https://github.com/imbue-ai/keystone' \
   keystone \
-  --max_budget_usd 3.0 \
+  --max_budget_usd 1.0 \
   --test_artifacts_dir /tmp/test_artifacts \
-  --project_root ./my_project
+  --project_root ./fastapi
 ```
 
 Not currently supported:

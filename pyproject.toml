@@ -8,7 +8,7 @@ dependencies = [
 ]
 
 [tool.uv.workspace]
-members = ["bootstrap_devcontainer", "evals", "modal_registry"]
+members = ["keystone", "evals", "modal_registry"]
 
 [tool.uv]
 dev-dependencies = [

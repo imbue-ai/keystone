@@ -1,6 +1,6 @@
 {
     "python.testing.pytestArgs": [
-        "bootstrap_devcontainer",
+        "keystone",
         "evals",
         "modal_registry",
         "-sv",

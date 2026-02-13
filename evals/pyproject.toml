@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Eval harness for bootstrap_devcontainer"
 requires-python = ">=3.12"
 dependencies = [
-    "bootstrap-devcontainer",
+    "keystone",
     "pydantic>=2.0",
     "prefect>=3.0",
     "typer>=0.9",
@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-bootstrap-devcontainer = { workspace = true }
+keystone = { workspace = true }
 
 [project.optional-dependencies]
 dask = ["prefect-dask>=0.3"]

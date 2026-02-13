@@ -14,6 +14,7 @@ from keystone.constants import DEFAULT_TESTING_LOG_PATH
 from keystone.keystone_cli import app
 from keystone.process_runner import run_process
 from keystone.schema import BootstrapResult
+from keystone.version import _UNKNOWN_VERSION, get_version_info
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,26 @@ def test_cli_runs_from_uvx() -> None:
     )
     assert result.returncode == 0, f"uvx invocation failed:\n{result.stderr}"
     assert "--project_root" in result.stdout
+
+
+def test_get_version_info_without_git(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """When CWD is not a git repo and no stamp file exists, get_version_info returns a fallback.
+
+    This simulates the uvx-from-github scenario where the process runs outside
+    any git repository and there is no baked-in version_stamp.json.
+    """
+    # Clear the @cache so we get a fresh call
+    get_version_info.cache_clear()
+
+    # Run from a directory that is not a git repo
+    monkeypatch.chdir(tmp_path)
+
+    result = get_version_info()
+    assert result == _UNKNOWN_VERSION
+    assert result.git_hash == "unknown"
+
+    # Clean up cache so other tests aren't affected
+    get_version_info.cache_clear()
 
 
 def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:

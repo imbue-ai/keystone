@@ -4,6 +4,7 @@ import shlex
 import shutil
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 from conftest import SAMPLES_DIR, init_git_repo
@@ -63,8 +64,44 @@ def test_get_version_info_without_git(tmp_path: Path, monkeypatch: pytest.Monkey
     result = get_version_info()
     assert result == _UNKNOWN_VERSION
     assert result.git_hash == "unknown"
+    assert result.commit_timestamp is None
 
     # Clean up cache so other tests aren't affected
+    get_version_info.cache_clear()
+
+
+def test_get_version_info_from_direct_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Simulate uvx installing from a git URL: no local git, but PEP 610 metadata exists.
+
+    uv/pip write a direct_url.json into .dist-info with the resolved commit_id
+    when installing from ``git+https://…@branch``.  We verify that
+    get_version_info picks up the hash and branch from that metadata.
+    """
+    get_version_info.cache_clear()
+    monkeypatch.chdir(tmp_path)
+
+    fake_direct_url = json.dumps(
+        {
+            "url": "https://github.com/imbue-ai/keystone.git",
+            "vcs_info": {
+                "vcs": "git",
+                "requested_revision": "prod",
+                "commit_id": "4dba85a1880214f687d1779e75d06440cc4bb9ef",
+            },
+        }
+    )
+
+    mock_dist = MagicMock()
+    mock_dist.read_text.return_value = fake_direct_url
+
+    with patch("keystone.version.importlib.metadata.distribution", return_value=mock_dist):
+        result = get_version_info()
+
+    assert result.git_hash == "4dba85a1880214f687d1779e75d06440cc4bb9ef"
+    assert result.branch == "prod"
+    assert result.is_dirty is False
+    assert result.commit_timestamp is None
+
     get_version_info.cache_clear()
 
 

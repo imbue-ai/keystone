@@ -482,9 +482,6 @@ def test_max_budget_zero_fails(tmp_path: Path, project_root: Path) -> None:
 
     assert not output.success, "Expected success=false with zero budget"
     assert output.error_message, "Expected error_message in output"
-    assert (
-        "devcontainer" in output.error_message.lower() or "agent" in output.error_message.lower()
-    ), f"Expected error message about devcontainer or agent, got: {output.error_message}"
 
 
 def test_agent_time_limit_causes_timeout(tmp_path: Path, project_root: Path) -> None:

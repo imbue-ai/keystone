@@ -1,5 +1,5 @@
 [project]
-name = "bootstrap-devcontainer"
+name = "keystone"
 version = "0.1.0"
 description = "Automatically generates a working .devcontainer/ setup for any project using an AI agent"
 readme = "README.md"

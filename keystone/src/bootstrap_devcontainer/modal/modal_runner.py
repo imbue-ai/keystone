@@ -179,7 +179,7 @@ class ModalAgentRunner(AgentRunner):
         modal.enable_output()
         print("Creating Modal sandbox with Docker...", file=sys.stderr)
 
-        app = modal.App.lookup("bootstrap-devcontainer-sandbox", create_if_missing=True)
+        app = modal.App.lookup("keystone-sandbox", create_if_missing=True)
         image = create_modal_image()
 
         # Attach the docker cache secret (if any) so its env vars are
@@ -200,7 +200,7 @@ class ModalAgentRunner(AgentRunner):
         sandbox_id = self._sandbox.object_id
         print(f"Modal sandbox created: {sandbox_id}", file=sys.stderr)
         print(
-            "  Dashboard: https://modal.com/apps/imbue/main/deployed/bootstrap-devcontainer-sandbox",
+            "  Dashboard: https://modal.com/apps/imbue/main/deployed/keystone-sandbox",
             file=sys.stderr,
         )
         print(f"  Shell:     modal shell {sandbox_id}", file=sys.stderr)

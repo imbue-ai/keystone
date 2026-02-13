@@ -29,7 +29,7 @@ def test_run_modal_command_interleaved_streaming():
     This uses a real Modal sandbox.
     """
     logger.info("Connecting to Modal...")
-    app = modal.App.lookup("bootstrap-devcontainer-test", create_if_missing=True)
+    app = modal.App.lookup("keystone-test", create_if_missing=True)
     image = create_modal_image()
 
     sb = modal.Sandbox.create(app=app, image=image, timeout=300)
@@ -85,7 +85,7 @@ def test_docker_readiness_and_run():
     Verify that we can start dockerd, wait for it, and run a container.
     """
     logger.info("\nConnecting to Modal for Docker test...")
-    app = modal.App.lookup("bootstrap-devcontainer-test", create_if_missing=True)
+    app = modal.App.lookup("keystone-test", create_if_missing=True)
     image = create_modal_image()
 
     logger.info("Creating sandbox with Docker enabled...")
@@ -139,7 +139,7 @@ def test_claude_streaming():
     Verify that Claude CLI can run and stream its output.
     """
     logger.info("\nConnecting to Modal for Claude test...")
-    app = modal.App.lookup("bootstrap-devcontainer-test", create_if_missing=True)
+    app = modal.App.lookup("keystone-test", create_if_missing=True)
     image = create_modal_image()
 
     api_key = os.environ.get("ANTHROPIC_API_KEY")

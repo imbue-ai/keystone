@@ -100,7 +100,7 @@ def bootstrap(
     log_db: str | None = typer.Option(
         None,
         "--log_db",
-        help="Database for logging/caching. SQLite path or postgresql:// URL (default: ~/.bootstrap_devcontainer/log.sqlite)",
+        help="Database for logging/caching. SQLite path or postgresql:// URL (default: ~/.imbue_keystone/log.sqlite)",
     ),
     require_cache_hit: bool = typer.Option(
         False,
@@ -293,8 +293,8 @@ def bootstrap(
 
     try:
         # Set up logging/caching
-        # Default to ~/.bootstrap_devcontainer/log.sqlite if not specified
-        effective_log_db = log_db or str(Path.home() / ".bootstrap_devcontainer" / "log.sqlite")
+        # Default to ~/.imbue_keystone/log.sqlite if not specified
+        effective_log_db = log_db or str(Path.home() / ".keystone" / "log.sqlite")
 
         agent_log = AgentLog(effective_log_db)
         cli_run_id = agent_log.generate_run_id()
@@ -559,7 +559,7 @@ def bootstrap(
 
 def main():
     """Entry point for the CLI."""
-    logging.info("Starting bootstrap_devcontainer CLI, version: %s", get_version_info())
+    logging.info("Starting keystone CLI, version: %s", get_version_info())
     app()
 
 

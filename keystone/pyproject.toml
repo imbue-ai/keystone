@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-bootstrap-devcontainer = "bootstrap_devcontainer:main"
+keystone = "bootstrap_devcontainer:main"
 
 [build-system]
 requires = ["hatchling"]

@@ -30,7 +30,7 @@ def test_cli_runs_from_uvx() -> None:
     """Test that the CLI can be installed and invoked via uvx from the public repo.
 
     The uvx command tested here is the one documented in the README:
-        uvx --from 'git+https://github.com/imbue-ai/keystone' bootstrap-devcontainer --help
+        uvx --from 'git+https://github.com/imbue-ai/keystone' keystone --help
 
     Marked manual because it requires network access and installs from git.
     """
@@ -39,7 +39,7 @@ def test_cli_runs_from_uvx() -> None:
             "uvx",
             "--from",
             "git+https://github.com/imbue-ai/keystone",
-            "bootstrap-devcontainer",
+            "keystone",
             "--help",
         ],
     )
@@ -157,7 +157,7 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
     test_artifacts_dir2 = tmp_path / "test_artifacts2"
 
     cmd2 = [
-        # "bootstrap-devcontainer",
+        # "keystone",
         "--project_root",
         str(project_root2),
         "--test_artifacts_dir",
@@ -195,7 +195,7 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path, project_root: Path
     logger.info("=" * 60)
 
     cmd = [
-        "bootstrap-devcontainer",
+        "keystone",
         "--project_root",
         str(project_root),
         "--test_artifacts_dir",
@@ -263,7 +263,7 @@ def test_e2e_sample_projects(
 
     # Use -u for unbuffered Python output
     cmd = [
-        "bootstrap-devcontainer",
+        "keystone",
         "--project_root",
         str(project_root),
         "--test_artifacts_dir",
@@ -309,7 +309,7 @@ def test_e2e_sample_projects(
     assert snapshot_data == snapshot
 
 
-DOCKER_CACHE_SECRET = "bootstrap-devcontainer-docker-registry-config"
+DOCKER_CACHE_SECRET = "keystone-docker-registry-config"
 
 
 def _parse_bootstrap_result(stdout: str) -> BootstrapResult:
@@ -338,7 +338,7 @@ def test_e2e_docker_build_cache(tmp_path: Path, project_root: Path) -> None:
     cache_file = tmp_path / "test_log.sqlite"
 
     base_cmd = [
-        "bootstrap-devcontainer",
+        "keystone",
         "--project_root",
         str(project_root),
         "--test_artifacts_dir",
@@ -376,7 +376,7 @@ def test_e2e_docker_build_cache(tmp_path: Path, project_root: Path) -> None:
     # Use a fresh artifacts dir so there's no leftover state
     run2_artifacts = tmp_path / "artifacts_run2"
     run2_cmd = [
-        "bootstrap-devcontainer",
+        "keystone",
         "--project_root",
         str(project_root),
         "--test_artifacts_dir",
@@ -473,7 +473,7 @@ def test_max_budget_zero_fails(tmp_path: Path, project_root: Path) -> None:
     logger.info("=" * 60)
 
     cmd = [
-        "bootstrap-devcontainer",
+        "keystone",
         *("--project_root", str(project_root)),
         *("--test_artifacts_dir", str(test_artifacts_dir)),
         *("--max_budget_usd", "0"),
@@ -529,7 +529,7 @@ print('{"type": "result"}')
     logger.info("=" * 60)
 
     cmd = [
-        "bootstrap-devcontainer",
+        "keystone",
         "--project_root",
         str(project_root),
         "--test_artifacts_dir",

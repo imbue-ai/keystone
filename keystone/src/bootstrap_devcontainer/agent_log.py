@@ -19,7 +19,7 @@ Two tables work together:
 Database Support
 ----------------
 Supports both SQLite and PostgreSQL via SQLAlchemy + pandas:
-- SQLite: Pass a file path (e.g., "./runs.db" or "~/.bootstrap_devcontainer/log.sqlite")
+- SQLite: Pass a file path (e.g., "./runs.db" or "~/.imbue_keystone/log.sqlite")
 - PostgreSQL: Pass a connect string (e.g., "postgresql://user:pass@host/db")
 
 Cache Behavior
@@ -38,7 +38,7 @@ This means failed runs are logged for analytics but never replayed.
 
 CLI Flags
 ---------
-- --log_db: Database path or connect string (default: ~/.bootstrap_devcontainer/log.sqlite)
+- --log_db: Database path or connect string (default: ~/.imbue_keystone/log.sqlite)
 - --require_cache_hit: Fail immediately if cache miss (useful for CI/testing)
 - --no_cache_replay: Skip cache lookup but still log the run (force fresh execution)
 - --cache_version: String appended to cache key to invalidate old entries

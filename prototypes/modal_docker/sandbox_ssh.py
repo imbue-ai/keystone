@@ -82,7 +82,7 @@ def main():
     print("Creating Modal sandbox with Docker...")
 
     # Initialize app lazily
-    app = modal.App.lookup("bootstrap-devcontainer-sandbox", create_if_missing=True)
+    app = modal.App.lookup("keystone-sandbox", create_if_missing=True)
 
     # Create a sandbox - this gives us an interactive container
     sb = modal.Sandbox.create(

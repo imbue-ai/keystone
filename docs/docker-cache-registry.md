@@ -1,6 +1,6 @@
 # Docker Build Cache Registry Support
 
-The bootstrap-devcontainer CLI now supports using an external Docker registry for build caching when running in Modal. This can significantly speed up builds by caching Docker layers across runs.
+The keystone CLI now supports using an external Docker registry for build caching when running in Modal. This can significantly speed up builds by caching Docker layers across runs.
 
 ## Configuration
 
@@ -47,8 +47,8 @@ export BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY="https://my-registry.example.com"
 export BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_USERNAME="myuser"
 export BOOTSTRAP_DEVCONTAINER_DOCKER_REGISTRY_PASSWORD="mypass"
 
-# Run bootstrap-devcontainer
-uv run bootstrap-devcontainer \
+# Run keystone
+uv run keystone \
   --project_root ./my-project \
   --test_artifacts_dir ./artifacts \
   --agent_in_modal

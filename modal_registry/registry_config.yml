@@ -9,7 +9,7 @@ storage:
 
 http:
   addr: 0.0.0.0:5000
-  secret: bootstrap-devcontainer-registry-secret-v1
+  secret: keystone-registry-secret-v1
   relativeurls: true
   headers:
     X-Content-Type-Options: [nosniff]

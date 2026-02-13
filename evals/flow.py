@@ -1,6 +1,6 @@
 """Prefect flow for eval harness.
 
-Clones repos, creates worktrees, and runs bootstrap-devcontainer CLI on each.
+Clones repos, creates worktrees, and runs keystone CLI on each.
 """
 
 import json
@@ -85,7 +85,7 @@ def _process_repo_task_name(parameters: dict[str, object]) -> str:
 @task(
     name="process_repo",
     task_run_name=_process_repo_task_name,  # type: ignore[reportArgumentType]  # prefect resolves callback params at runtime
-    description="Run bootstrap-devcontainer on a repo worktree",
+    description="Run keystone on a repo worktree",
     retries=1,
     retry_delay_seconds=60,
 )
@@ -99,7 +99,7 @@ def process_repo_task(
 
     1. Clone/fetch repo to clone_dir (cached)
     2. Create worktree in worktree_dir
-    3. Run bootstrap-devcontainer CLI
+    3. Run keystone CLI
     4. Return result
     """
     log = get_run_logger()
@@ -127,15 +127,15 @@ def process_repo_task(
         log.info(f"Created worktree at {work_path}")
 
         # Step 3: Run CLI
-        test_artifacts_dir = work_path / ".bootstrap_artifacts"
+        test_artifacts_dir = work_path / ".keystone_artifacts"
         test_artifacts_dir.mkdir(exist_ok=True)
 
-        result_file = work_path / "bootstrap_result.json"
+        result_file = work_path / "keystone_result.json"
 
         cmd = [
             "uv",
             "run",
-            "bootstrap-devcontainer",
+            "keystone",
             "--project_root",
             str(work_path),
             "--test_artifacts_dir",
@@ -173,7 +173,7 @@ def process_repo_task(
         # IMPORTANT: Run from our repo root, NOT the target repo's worktree.
         # If cwd is the target repo, `uv run` sees that repo's pyproject.toml and tries to
         # create a venv and install its dependencies locally (e.g. compiling pytorch).
-        # The --project_root CLI arg already tells bootstrap-devcontainer where the target is.
+        # The --project_root CLI arg already tells keystone where the target is.
         repo_name = repo_path.name
 
         # Forward all CLI stdout/stderr to the Prefect logger so it appears

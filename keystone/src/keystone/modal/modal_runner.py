@@ -1,4 +1,4 @@
-"""Modal-based agent runner for running bootstrap agent in cloud sandbox.
+"""Modal-based agent runner for running keystone agent in cloud sandbox.
 
 The sandbox is created once and reused for both agent execution and verification.
 This avoids the 20-30s cold start penalty of creating a new sandbox for verification,
@@ -470,8 +470,8 @@ exec timeout {time_limit_secs} {shlex.join(cmd_parts)}
                 error_message="Build failed: .devcontainer/Dockerfile not found.",
             )
 
-        image_name = "bootstrap-verify"
-        container_name = "bootstrap-verify-container"
+        image_name = "keystone-verify"
+        container_name = "keystone-verify-container"
 
         # 1. Build the image
         # When docker cache is configured, we build via a script that references

@@ -1,6 +1,6 @@
 """Append-only log and cache for agent runs.
 
-This module provides a database-backed logging and caching layer for the bootstrap agent.
+This module provides a database-backed logging and caching layer for the keystone agent.
 The design philosophy is "log everything, cache selectively":
 
 Architecture
@@ -46,19 +46,19 @@ CLI Flags
 Example Usage
 -------------
     # SQLite (default)
-    bootstrap --project_root ./myproject --log_db ./runs.db
+    keystone --project_root ./myproject --log_db ./runs.db
 
     # PostgreSQL
-    bootstrap --project_root ./myproject --log_db postgresql://user:pass@localhost/mydb
+    keystone --project_root ./myproject --log_db postgresql://user:pass@localhost/mydb
 
     # Force fresh run, ignore cache
-    bootstrap --project_root ./myproject --no_cache_replay
+    keystone --project_root ./myproject --no_cache_replay
 
     # Require cache hit (CI mode)
-    bootstrap --project_root ./myproject --require_cache_hit
+    keystone --project_root ./myproject --require_cache_hit
 
     # Invalidate cache for this config
-    bootstrap --project_root ./myproject --cache_version v2
+    keystone --project_root ./myproject --cache_version v2
 """
 
 import hashlib

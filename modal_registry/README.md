@@ -42,11 +42,11 @@ Single container, no nginx — the registry listens directly on the web server p
 ## Configuration — Modal Secret
 
 All credentials live in a single Modal secret named
-**`bootstrap-devcontainer-docker-registry-config`** with three environment variables:
+**`keystone-docker-registry-config`** with three environment variables:
 
 | Variable | Example | Description |
 |----------|---------|-------------|
-| `DOCKER_BUILD_CACHE_REGISTRY_URL` | `imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run` | Registry hostname (no `https://` prefix) |
+| `DOCKER_BUILD_CACHE_REGISTRY_URL` | `imbue--keystone-docker-registry-cache-registry.modal.run` | Registry hostname (no `https://` prefix) |
 | `DOCKER_BUILD_CACHE_REGISTRY_USERNAME` | `buildcache` | Basic-auth username |
 | `DOCKER_BUILD_CACHE_REGISTRY_PASSWORD` | `hunter2` | Plaintext password |
 
@@ -57,15 +57,15 @@ The same secret is used in two places:
 
 1. **`modal_registry/app.py`** — attached to the registry function so it can
    generate the htpasswd file and start the authenticated registry.
-2. **`bootstrap_devcontainer_cli.py --docker_cache_secret`** — passed by name to
+2. **`keystone_cli.py --docker_cache_secret`** — passed by name to
    `ModalAgentRunner`, which attaches it to the sandbox so `docker login` and
    build-cache flags work inside the sandbox.
 
 ### Creating the Secret
 
 ```bash
-modal secret create bootstrap-devcontainer-docker-registry-config \
-  DOCKER_BUILD_CACHE_REGISTRY_URL="imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run" \
+modal secret create keystone-docker-registry-config \
+  DOCKER_BUILD_CACHE_REGISTRY_URL="imbue--keystone-docker-registry-cache-registry.modal.run" \
   DOCKER_BUILD_CACHE_REGISTRY_USERNAME="buildcache" \
   DOCKER_BUILD_CACHE_REGISTRY_PASSWORD="your-password-here"
 ```
@@ -85,21 +85,21 @@ modal deploy app.py
 
 Modal will print a URL like:
 ```
-https://imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run
+https://imbue--keystone-docker-registry-cache-registry.modal.run
 ```
 
 The hostname (without `https://`) is the value for `DOCKER_BUILD_CACHE_REGISTRY_URL`.
 
 ## Usage
 
-### With bootstrap_devcontainer CLI
+### With keystone CLI
 
 ```bash
-uv run bootstrap_devcontainer bootstrap \
+uv run keystone bootstrap \
   --project_root /path/to/project \
   --test_artifacts_dir /tmp/artifacts \
   --agent_in_modal \
-  --docker_cache_secret bootstrap-devcontainer-docker-registry-config
+  --docker_cache_secret keystone-docker-registry-config
 ```
 
 The CLI will:
@@ -111,7 +111,7 @@ The CLI will:
 ### Manual BuildKit Cache Usage
 
 ```bash
-REGISTRY="imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run"
+REGISTRY="imbue--keystone-docker-registry-cache-registry.modal.run"
 
 docker login "$REGISTRY" -u buildcache -p your-password-here
 
@@ -126,7 +126,7 @@ docker buildx build \
 
 ```bash
 curl -s -u buildcache:your-password-here \
-  "https://imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run/v2/_catalog"
+  "https://imbue--keystone-docker-registry-cache-registry.modal.run/v2/_catalog"
 ```
 
 ## Operational Characteristics
@@ -152,7 +152,7 @@ Far cheaper than running a dedicated VM.
 ### Registry not responding
 
 ```bash
-modal app logs bootstrap-devcontainer-docker-registry-cache
+modal app logs keystone-docker-registry-cache
 ```
 
 ### Cache not working

@@ -1,6 +1,6 @@
-# Eval Harness for bootstrap_devcontainer
+# Eval Harness for keystone
 
-Runs `bootstrap_devcontainer` on many git repositories and collects results.
+Runs `keystone` on many git repositories and collects results.
 
 ## Installation
 
@@ -15,22 +15,22 @@ uv sync
 # Run on a list of repos
 uv run python -m evals.eval_cli run \
     --repo_list_path evals/examples/repos.jsonl \
-    --clone_dir ~/.cache/bootstrap_eval/repos \
-    --worktree_dir ~/.cache/bootstrap_eval/worktrees \
+    --clone_dir ~/.cache/keystone_eval/repos \
+    --worktree_dir ~/.cache/keystone_eval/worktrees \
     --output_path ./eval_output.json \
     --max_budget_usd 1.0
 
 # With caching database
 uv run python -m evals.eval_cli run \
     --repo_list_path evals/examples/repos.jsonl \
-    --log_db ~/.bootstrap_devcontainer/eval.sqlite \
+    --log_db ~/.keystone/eval.sqlite \
     --output_path ~/eval_output_$(date +"%Y%m%d_%H%M%S").json
 
 # Run on only the first N repos (useful for testing)
 uv run python -m evals.eval_cli \
     --repo_list_path evals/examples/repos.jsonl \
-    --clone_dir ~/.cache/bootstrap_eval/repos \
-    --worktree_dir ~/.cache/bootstrap_eval/worktrees \
+    --clone_dir ~/.cache/keystone_eval/repos \
+    --worktree_dir ~/.cache/keystone_eval/worktrees \
     --timeout_minutes 60 \
     --max_budget_usd 10.0 \
     --output_path ~/eval_output_$(date +"%Y%m%d_%H%M%S").json \
@@ -56,7 +56,7 @@ The output JSON contains:
 
 ```json
 {
-  "bootstrap_devcontainer_version": {
+  "keystone_version": {
     "git_hash": "abc123...",
     "branch": "main",
     "commit_count": 100,
@@ -80,7 +80,7 @@ The output JSON contains:
 
 1. **Clone** - Repos are cloned to `--clone_dir` (cached, reused across runs)
 2. **Worktree** - A git worktree is created in `--worktree_dir` for each run
-3. **Execute** - `bootstrap-devcontainer` CLI runs with `--agent_in_modal`
+3. **Execute** - `keystone` CLI runs with `--agent_in_modal`
 4. **Collect** - Results are aggregated with version stamps
 
 Uses Prefect for task orchestration with caching.

@@ -50,7 +50,7 @@ def build_claude_command(
 
 
 class AgentRunner(ABC):
-    """Abstract base class for running the bootstrap agent."""
+    """Abstract base class for running the keystone agent."""
 
     @abstractmethod
     def run(
@@ -170,7 +170,7 @@ class LocalAgentRunner(AgentRunner):
             stream="stderr",
             line="Extracting project archive to working directory...",
         )
-        self._work_dir = Path(tempfile.mkdtemp(prefix="bootstrap-agent-"))
+        self._work_dir = Path(tempfile.mkdtemp(prefix="keystone-agent-"))
         with tarfile.open(fileobj=io.BytesIO(project_archive), mode="r:gz") as tar:
             tar.extractall(self._work_dir)
 
@@ -232,7 +232,7 @@ class LocalAgentRunner(AgentRunner):
             )
 
         # Extract to fresh temp directory
-        work_dir = Path(tempfile.mkdtemp(prefix="bootstrap-verify-"))
+        work_dir = Path(tempfile.mkdtemp(prefix="keystone-verify-"))
         try:
             # Extract project archive
             with tarfile.open(fileobj=io.BytesIO(project_archive), mode="r:gz") as tar:
@@ -250,8 +250,8 @@ class LocalAgentRunner(AgentRunner):
                     error_message="Build failed: .devcontainer/devcontainer.json not found.",
                 )
 
-            image_name = "bootstrap-verify-local"
-            container_name = "bootstrap-verify-local-container"
+            image_name = "keystone-verify-local"
+            container_name = "keystone-verify-local-container"
 
             # 1. Build the image
             build_start = time.time()

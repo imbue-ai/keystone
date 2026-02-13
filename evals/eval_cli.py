@@ -25,12 +25,12 @@ console = Console()
 def run(
     repo_list_path: Path = typer.Option(..., "--repo_list_path", help="Path to repo_list.jsonl"),
     clone_dir: Path = typer.Option(
-        Path("~/.cache/bootstrap_eval/repos"),
+        Path("~/.cache/keystone_eval/repos"),
         "--clone_dir",
         help="Directory for pristine repo clones (cached)",
     ),
     worktree_dir: Path = typer.Option(
-        Path("~/.cache/bootstrap_eval/worktrees"),
+        Path("~/.cache/keystone_eval/worktrees"),
         "--worktree_dir",
         help="Directory for repo worktrees",
     ),

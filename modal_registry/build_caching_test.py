@@ -17,7 +17,7 @@ import pytest
 
 from keystone.process_runner import run_process
 
-REGISTRY = "imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run"
+REGISTRY = "imbue--keystone-docker-registry-cache-registry.modal.run"
 
 
 def _buildx(

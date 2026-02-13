@@ -6,11 +6,11 @@ import sys
 
 import modal
 
-from bootstrap_devcontainer.modal_runner import create_modal_image
+from keystone.modal_runner import create_modal_image
 
 # Reuse the image definition from the actual runner to ensure we have the same configuration
 image = create_modal_image()
-app = modal.App.lookup("bootstrap-devcontainer-debug", create_if_missing=True)
+app = modal.App.lookup("keystone-debug", create_if_missing=True)
 
 
 def main():

@@ -3,7 +3,7 @@
 ## Registry URL
 
 ```
-https://imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run
+https://imbue--keystone-docker-registry-cache-registry.modal.run
 ```
 
 ## Deployment Status
@@ -19,7 +19,7 @@ https://imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run
 
 ### Registry Health Check
 ```bash
-curl https://imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run/v2/
+curl https://imbue--keystone-docker-registry-cache-registry.modal.run/v2/
 # Returns: {}
 # Status: 200 OK
 ```
@@ -39,7 +39,7 @@ curl https://imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.
 ## Usage Example
 
 ```bash
-export REGISTRY_URL="imbue--bootstrap-devcontainer-docker-registry-cache-registry.modal.run"
+export REGISTRY_URL="imbue--keystone-docker-registry-cache-registry.modal.run"
 
 # Build with cache
 docker buildx build \
@@ -69,7 +69,7 @@ docker buildx build \
 
 View logs and metrics:
 ```bash
-modal app logs bootstrap-devcontainer-docker-registry-cache
+modal app logs keystone-docker-registry-cache
 ```
 
-Or visit: https://modal.com/apps/imbue/main/deployed/bootstrap-devcontainer-docker-registry-cache
+Or visit: https://modal.com/apps/imbue/main/deployed/keystone-docker-registry-cache

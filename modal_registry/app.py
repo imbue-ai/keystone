@@ -5,13 +5,13 @@ from pathlib import Path
 
 import modal
 
-app = modal.App("bootstrap-devcontainer-docker-registry-cache")
+app = modal.App("keystone-docker-registry-cache")
 
 REGISTRY_PORT = 5000
 
 # Persistent storage for cached layers
 registry_volume = modal.Volume.from_name(
-    "bootstrap-devcontainer-docker-registry-cache-volume",
+    "keystone-docker-registry-cache-volume",
     create_if_missing=True,
 )
 
@@ -34,7 +34,7 @@ registry_image = (
 #   DOCKER_BUILD_CACHE_REGISTRY_USERNAME  - username for basic auth
 #   DOCKER_BUILD_CACHE_REGISTRY_PASSWORD  - plaintext password for basic auth
 # The htpasswd file is derived at runtime from USERNAME + PASSWORD.
-auth_secret = modal.Secret.from_name("bootstrap-devcontainer-docker-registry-config")
+auth_secret = modal.Secret.from_name("keystone-docker-registry-config")
 
 
 @app.function(

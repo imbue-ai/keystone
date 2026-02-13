@@ -1,7 +1,7 @@
 [project]
 name = "evals"
 version = "0.1.0"
-description = "Eval harness for bootstrap_devcontainer"
+description = "Eval harness for keystone"
 requires-python = ">=3.12"
 dependencies = [
     "keystone",

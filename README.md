@@ -46,8 +46,8 @@ Run keystone directly from GitHub using `uvx`:
 
 ```bash
 uvx --from 'git+https://github.com/imbue-ai/keystone@main' \
-  bootstrap-devcontainer \
-  --log_db ~/.bootstrap_devcontainer/log.sqlite \
+  keystone \
+  --log_db ~/.imbue_keystone/log.sqlite \
   --max_budget_usd 3.0 \
   --test_artifacts_dir /tmp/test_artifacts \
   --project_root ./samples/python_project
@@ -62,7 +62,7 @@ Not currently supported:
 - `--test_artifacts_dir` - Directory for test artifacts (required)
 - `--agent_cmd` - Agent command to run (default: `claude`)
 - `--max_budget_usd` - Maximum budget for agent inference (default: 1.0)
-- `--log_db` - Database for logging/caching. SQLite path or postgresql:// URL (default: `~/.bootstrap_devcontainer/log.sqlite`)
+- `--log_db` - Database for logging/caching. SQLite path or postgresql:// URL (default: `~/.imbue_keystone/log.sqlite`)
 - `--require_cache_hit` - Fail immediately if cache miss (useful for CI/testing)
 - `--no_cache_replay` - Skip cache lookup but still log the run (force fresh execution)
 - `--cache_version` - String appended to cache key to invalidate old entries
@@ -80,8 +80,8 @@ Not currently supported:
 
 ```bash
 # Run local code tree on a project.
-uv run bootstrap-devcontainer \
-  --log_db ~/.bootstrap_devcontainer/log.sqlite \
+uv run keystone \
+  --log_db ~/.imbue_keystone/log.sqlite \
   --max_budget_usd 3.0 \
   --test_artifacts_dir /tmp/test_artifacts \
   --project_root ./samples/python_project

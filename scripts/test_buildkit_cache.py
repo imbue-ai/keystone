@@ -11,7 +11,7 @@ import modal
 
 app = modal.App("test-buildkit-cache")
 
-# Build image inline (same as bootstrap_devcontainer.modal.image but self-contained)
+# Build image inline (same as keystone.modal.image but self-contained)
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install(

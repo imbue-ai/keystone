@@ -13,7 +13,7 @@ import modal
 # Minimal image
 image = modal.Image.debian_slim(python_version="3.11")
 
-app = modal.App.lookup("bootstrap-devcontainer-debug", create_if_missing=True)
+app = modal.App.lookup("keystone-debug", create_if_missing=True)
 
 
 def main():

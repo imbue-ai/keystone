@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="nextest-run" tests="2" failures="0" errors="0" uuid="04a62edf-ea9a-4130-8ae4-a874b7643501" timestamp="2026-01-30T16:31:02.302-08:00" time="0.005">
+    <testsuite name="rust_project" tests="2" disabled="0" errors="0" failures="0">
+        <testcase name="tests::test_add" classname="rust_project" timestamp="2026-01-30T16:31:02.302-08:00" time="0.005">
+        </testcase>
+        <testcase name="tests::test_multiply" classname="rust_project" timestamp="2026-01-30T16:31:02.302-08:00" time="0.005">
+        </testcase>
+    </testsuite>
+</testsuites>

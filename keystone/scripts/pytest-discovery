@@ -1,0 +1,4 @@
+#!/bin/bash
+set -eo pipefail
+# Run pytest in collection-only mode to verify test discovery works
+uv run pytest --collect-only -q 2>&1 | tail -5

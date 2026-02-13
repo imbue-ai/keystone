@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="3" time="0.015" timestamp="2026-01-30T16:29:34.191546-08:00" hostname="Thad-Imbue-MacBook.local"><testcase classname="samples.python_with_failing_test.tests.test_app" name="test_add" time="0.000" /><testcase classname="samples.python_with_failing_test.tests.test_app" name="test_multiply" time="0.000" /><testcase classname="samples.python_with_failing_test.tests.test_app" name="test_impossible" time="0.000"><failure message="AssertionError: This test is intentionally designed to always fail&#10;assert False">def test_impossible() -&gt; None:
+        """This test can never pass - it's designed to always fail."""
+&gt;       assert False, "This test is intentionally designed to always fail"
+E       AssertionError: This test is intentionally designed to always fail
+E       assert False
+
+tests/test_app.py:14: AssertionError</failure></testcase></testsuite></testsuites>

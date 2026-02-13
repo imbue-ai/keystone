@@ -1,0 +1,9 @@
+{
+  "include": ["."],
+  "exclude": ["**/node_modules", "**/.venv"],
+  "pythonVersion": "3.12",
+  "typeCheckingMode": "basic",
+  "reportMissingImports": true,
+  "reportMissingTypeStubs": false,
+  "verboseOutput": false
+}

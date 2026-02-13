@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="2">
+	<testsuite name="sample-go-project" tests="2" failures="0" errors="0" id="0" hostname="Thad-Imbue-MacBook.local" time="0.000" timestamp="2026-01-30T16:29:34-08:00">
+		<testcase name="TestAdd" classname="sample-go-project" time="0.000"></testcase>
+		<testcase name="TestMultiply" classname="sample-go-project" time="0.000"></testcase>
+	</testsuite>
+</testsuites>

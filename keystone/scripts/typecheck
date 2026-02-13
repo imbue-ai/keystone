@@ -1,0 +1,4 @@
+#!/bin/bash
+set -o pipefail
+# Run pyright with relative paths (works around spaces in parent directories)
+uv run pyright "$@" 2>&1 | sed "s|$PWD/||g"

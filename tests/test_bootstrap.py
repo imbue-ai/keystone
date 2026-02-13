@@ -30,7 +30,7 @@ def test_cli_runs_from_uvx() -> None:
     """Test that the CLI can be installed and invoked via uvx from the public repo.
 
     The uvx command tested here is the one documented in the README:
-        uvx --from 'git+https://github.com/imbue-ai/keystone' keystone --help
+        uvx --from 'git+https://github.com/imbue-ai/keystone@prod' keystone --help
 
     Marked manual because it requires network access and installs from git.
     """
@@ -38,7 +38,7 @@ def test_cli_runs_from_uvx() -> None:
         [
             "uvx",
             "--from",
-            "git+https://github.com/imbue-ai/keystone",
+            "git+https://github.com/imbue-ai/keystone@prod",
             "keystone",
             "--help",
         ],

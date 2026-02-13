@@ -63,7 +63,8 @@ def test_get_version_info_without_git(tmp_path: Path, monkeypatch: pytest.Monkey
 
     result = get_version_info()
     assert result == _UNKNOWN_VERSION
-    assert result.git_hash == "unknown"
+    assert result.git_hash is None
+    assert result.branch is None
     assert result.commit_timestamp is None
 
     # Clean up cache so other tests aren't affected

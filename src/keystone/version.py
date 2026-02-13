@@ -29,18 +29,18 @@ _DIST_NAME = "keystone"
 class VersionInfo(BaseModel):
     """Version information for the current codebase."""
 
-    branch: str
+    branch: str | None
     commit_count: int
     commit_timestamp: str | None  # ISO format, None when unavailable
-    git_hash: str
+    git_hash: str | None
     is_dirty: bool
 
 
 _UNKNOWN_VERSION = VersionInfo(
-    branch="unknown",
+    branch=None,
     commit_count=0,
     commit_timestamp=None,
-    git_hash="unknown",
+    git_hash=None,
     is_dirty=False,
 )
 

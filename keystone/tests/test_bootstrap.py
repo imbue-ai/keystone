@@ -30,7 +30,7 @@ def test_cli_runs_from_uvx() -> None:
     """Test that the CLI can be installed and invoked via uvx from the public repo.
 
     The uvx command tested here is the one documented in the README:
-        uvx --from 'git+https://github.com/imbue-ai/keystone' keystone --help
+        uvx --from 'git+https://github.com/imbue-ai/keystone@prod' keystone --help
 
     Marked manual because it requires network access and installs from git.
     """
@@ -38,7 +38,7 @@ def test_cli_runs_from_uvx() -> None:
         [
             "uvx",
             "--from",
-            "git+https://github.com/imbue-ai/keystone",
+            "git+https://github.com/imbue-ai/keystone@prod",
             "keystone",
             "--help",
         ],
@@ -71,7 +71,7 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
         shlex.quote(str(fake_agent)),
         "--log_db",
         str(cache_file),
-        "--agent_local",  # Use local runner for fake agent tests
+        "--run_agent_locally_with_dangerously_skip_permissions",  # Use local runner for fake agent tests
     ]
 
     logger.info("Running: %s", " ".join(cmd))
@@ -166,7 +166,7 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
         shlex.quote(str(fake_agent)),
         "--log_db",
         str(cache_file),
-        "--agent_local",  # Use local runner for fake agent tests
+        "--run_agent_locally_with_dangerously_skip_permissions",  # Use local runner for fake agent tests
     ]
 
     result2 = CliRunner().invoke(app, cmd2)
@@ -202,7 +202,7 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path, project_root: Path
         str(test_artifacts_dir),
         "--agent_cmd",
         shlex.quote(str(fake_agent)),
-        "--agent_local",  # Use local runner for fake agent tests
+        "--run_agent_locally_with_dangerously_skip_permissions",  # Use local runner for fake agent tests
     ]
 
     logger.info("Running: %s", " ".join(cmd))
@@ -477,7 +477,7 @@ def test_max_budget_zero_fails(tmp_path: Path, project_root: Path) -> None:
         *("--project_root", str(project_root)),
         *("--test_artifacts_dir", str(test_artifacts_dir)),
         *("--max_budget_usd", "0"),
-        "--agent_local",  # Use local runner (budget test uses real claude locally)
+        "--run_agent_locally_with_dangerously_skip_permissions",  # Use local runner (budget test uses real claude locally)
     ]
 
     logger.info("Running: %s", " ".join(cmd))
@@ -536,7 +536,7 @@ print('{"type": "result"}')
         str(test_artifacts_dir),
         "--agent_cmd",
         str(slow_agent),
-        "--agent_local",
+        "--run_agent_locally_with_dangerously_skip_permissions",
         "--agent_time_limit_secs",
         "1",  # 1 second timeout - agent sleeps for 10s so will timeout
     ]

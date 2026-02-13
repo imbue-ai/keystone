@@ -153,7 +153,7 @@ def process_repo_task(
         if agent_config.agent_in_modal:
             cmd.append("--agent_in_modal")
         else:
-            cmd.append("--agent_local")
+            cmd.append("--run_agent_locally_with_dangerously_skip_permissions")
 
         if agent_config.log_db:
             cmd.extend(["--log_db", str(resolve_path(agent_config.log_db))])

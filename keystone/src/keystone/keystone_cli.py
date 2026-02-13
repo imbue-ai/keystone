@@ -122,7 +122,7 @@ def bootstrap(
     ),
     agent_in_modal: bool = typer.Option(
         True,
-        "--agent_in_modal/--agent_local",
+        "--agent_in_modal/--run_agent_locally_with_dangerously_skip_permissions",
         help="Run agent in Modal sandbox (default) or locally",
     ),
     agent_time_limit_secs: int = typer.Option(

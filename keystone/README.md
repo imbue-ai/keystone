@@ -22,7 +22,7 @@ Run directly from the repository using `uvx`:
 git clone https://github.com/fastapi/fastapi
 
 # Make a devcontainer for it.
-uvx --from 'git+https://github.com/imbue-ai/keystone' \
+uvx --from 'git+https://github.com/imbue-ai/keystone@prod' \
   keystone \
   --max_budget_usd 1.0 \
   --test_artifacts_dir /tmp/test_artifacts \

@@ -45,7 +45,7 @@ Run keystone directly from GitHub using `uvx`:
 > **WARNING:** This invokes Claude Code with `--dangerously-skip-permissions` in your current environment.
 
 ```bash
-uvx --from 'git+https://github.com/imbue-ai/keystone@main' \
+uvx --from 'git+https://github.com/imbue-ai/keystone@prod' \
   keystone \
   --log_db ~/.imbue_keystone/log.sqlite \
   --max_budget_usd 3.0 \

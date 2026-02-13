@@ -20,7 +20,7 @@ Run directly from the repository using `uvx`:
 IMPORTANT WARNING: Running this command invokes Claude Code with `--dangerously-skip-permissions` in your current environment.
 
 ```bash
-uvx --from 'git+https://github.com/imbue-ai/keystone' \
+uvx --from 'git+https://github.com/imbue-ai/keystone@prod' \
   keystone \
   --max_budget_usd 3.0 \
   --test_artifacts_dir /tmp/test_artifacts \

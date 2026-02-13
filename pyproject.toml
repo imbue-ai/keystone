@@ -47,6 +47,6 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["bootstrap_devcontainer", "evals"]
+known-first-party = ["keystone", "evals"]
 
 # Pyright config in pyrightconfig.json (needs explicit include to avoid hanging on symlinks)

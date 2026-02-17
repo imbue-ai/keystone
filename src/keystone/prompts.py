@@ -53,7 +53,7 @@ Instructions:
 
 1. Copy the pre-generated devcontainer.json into the .devcontainer/ directory:
    ```bash
-   cp /.devcontainer.json .devcontainer/devcontainer.json
+   cp /devcontainer.json .devcontainer/devcontainer.json
    ```
    This file is already configured with the correct build context, Dockerfile path,
    network settings, and build cache options. Do NOT modify it.
@@ -105,7 +105,7 @@ Instructions:
   The Dockerfile MUST contain these lines, ideally early in the file, to create a writable test artifacts directory:
 ```
 # Set up timestamp helper script.
-COPY ./devcontainer/timestamp_process_output.pl /timestamp_process_output.pl
+COPY ./.devcontainer/timestamp_process_output.pl /timestamp_process_output.pl
 
 # Create test artifacts directory.
 RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts

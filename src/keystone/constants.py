@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-# FIXME: Constants not used
+# FIXME: Constants not used -- we can delete these.
 DEFAULT_LOG_PATH = Path.home() / ".keystone" / "log.sqlite"
 DEFAULT_TESTING_LOG_PATH = Path.home() / ".keystone" / "testing_log.sqlite"
 

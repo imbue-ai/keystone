@@ -72,6 +72,54 @@ def test_get_version_info_without_git(tmp_path: Path, monkeypatch: pytest.Monkey
     get_version_info.cache_clear()
 
 
+def test_cli_does_not_crash_in_empty_git_repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The CLI must not crash when --project_root is an empty git repo (no commits).
+
+    This reproduces the bug seen when running via uvx:
+        uvx --from 'git+https://github.com/imbue-ai/keystone@prod' keystone \\
+            --project_root <empty-repo> --test_artifacts_dir <dir>
+
+    In that scenario the CWD may be inside a git repo with no commits, causing
+    ``git rev-parse HEAD`` to fail with exit code 128.  The version fallback
+    chain must catch this and continue.
+    """
+    # Create an empty git repo (init but no commits)
+    empty_repo = tmp_path / "empty_git_repo"
+    empty_repo.mkdir()
+    init_git_repo(empty_repo, add_all=False, commit=False)
+
+    test_artifacts_dir = tmp_path / "test_artifacts"
+
+    # Simulate uvx environment: CWD is the empty repo, no stamp file
+    monkeypatch.chdir(empty_repo)
+    get_version_info.cache_clear()
+
+    try:
+        cmd = [
+            "--project_root",
+            str(empty_repo),
+            "--test_artifacts_dir",
+            str(test_artifacts_dir),
+            "--max_budget_usd",
+            "0",
+            "--run_agent_locally_with_dangerously_skip_permissions",
+        ]
+        result = CliRunner().invoke(app, cmd)
+
+        # The CLI will fail because the empty repo has no devcontainer config etc.,
+        # but it must NOT crash with CalledProcessError from git rev-parse HEAD.
+        # Exit code 1 (controlled failure) is fine; a traceback with
+        # CalledProcessError from version.py is not.
+        assert "CalledProcessError" not in (result.stdout + (result.stderr or "")), (
+            f"CLI crashed with CalledProcessError (version resolution bug):\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+    finally:
+        get_version_info.cache_clear()
+
+
 def test_get_version_info_from_direct_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Simulate uvx installing from a git URL: no local git, but PEP 610 metadata exists.
 

@@ -44,6 +44,7 @@ def test_cli_runs_from_uvx() -> None:
             "keystone",
             "--help",
         ],
+        log_prefix="[uvx run]",
     )
     assert result.returncode == 0, f"uvx invocation failed:\n{result.stderr}"
     assert "--project_root" in result.stdout

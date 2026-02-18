@@ -128,7 +128,6 @@ def run_modal_command(
         name: Short name for this process (required, used in log prefix)
         **kwargs: Additional arguments passed to sb.exec()
     """
-    # Use the module-level logger instead of creating a new one.
     logger.info(f"[{name}] Running: {shlex.join(args)}")
     proc = sb.exec(*args, **kwargs)
     return ManagedProcess(proc, prefix=name, capture=capture)

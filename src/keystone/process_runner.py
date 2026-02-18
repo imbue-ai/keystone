@@ -10,6 +10,7 @@ from dataclasses import dataclass
 logger = logging.getLogger(__name__)
 
 
+# FIXME: Use Pydantic instead.
 @dataclass
 class ProcessResult:
     """Result of a process run with captured output."""

@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 _DIST_NAME = "keystone"
 
 
+# FIXME: Consider moving to schema.py.
 class VersionInfo(BaseModel):
     """Version information for the current codebase."""
 

@@ -187,7 +187,7 @@ class LocalAgentRunner(AgentRunner):
 
         result = run_process(
             full_cmd,
-            log_prefix="[agent]",
+            log_prefix="[local_agent]",
             cwd=str(self._work_dir),
             stdout_callback=collect_stdout,
             stderr_callback=collect_stderr,

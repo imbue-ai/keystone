@@ -129,22 +129,19 @@ def bootstrap(
         "--agent_in_modal/--run_agent_locally_with_dangerously_skip_permissions",
         help="Run agent in Modal sandbox (default) or locally",
     ),
-    agent_time_limit_secs: int = typer.Option(
+    agent_time_limit_seconds: int = typer.Option(
         60 * 60,
-        # FIXME: Rename all _secs to _seconds.
-        "--agent_time_limit_secs",
+        "--agent_time_limit_seconds",
         help="Maximum seconds for agent execution (uses timeout command)",
     ),
-    image_build_timeout_secs: int = typer.Option(
+    image_build_timeout_seconds: int = typer.Option(
         30 * 60,
-        # FIXME: Rename all _secs to _seconds.
-        "--image_build_timeout_secs",
+        "--image_build_timeout_seconds",
         help="Maximum seconds for building the devcontainer image",
     ),
-    test_timeout_secs: int = typer.Option(
+    test_timeout_seconds: int = typer.Option(
         30 * 60,
-        # FIXME: Rename all _secs to _seconds.
-        "--test_timeout_secs",
+        "--test_timeout_seconds",
         help="Maximum seconds for running tests",
     ),
     docker_cache_secret: str | None = typer.Option(
@@ -189,8 +186,7 @@ def bootstrap(
     # Build prompt
     prompt = build_agent_prompt(agent_in_modal)
 
-    # FIXME: Use monotonic time.
-    start_time = time.time()
+    start_time = time.monotonic()
     start_datetime = datetime.now(UTC)
 
     # Set up runner based on --agent_in_modal flag
@@ -319,7 +315,7 @@ def bootstrap(
         agent_config = AgentConfig(
             agent_cmd=agent_cmd,
             max_budget_usd=max_budget_usd,
-            agent_time_limit_secs=agent_time_limit_secs,
+            agent_time_limit_seconds=agent_time_limit_seconds,
             agent_in_modal=agent_in_modal,
         )
 
@@ -390,7 +386,7 @@ def bootstrap(
             try:
                 # FIXME: This feels a little deeply nested for the core logic.
                 for event in runner.run(
-                    prompt, project_archive, max_budget_usd, agent_cmd, agent_time_limit_secs
+                    prompt, project_archive, max_budget_usd, agent_cmd, agent_time_limit_seconds
                 ):
                     # Collect all events for logging
                     collected_events.append(StreamEvent(stream=event.stream, line=event.line))
@@ -434,7 +430,7 @@ def bootstrap(
                 print(f"Error running agent: {e}", file=sys.stderr)
                 exit_code = 1
 
-        agent_work_seconds = time.time() - start_time
+        agent_work_seconds = time.monotonic() - start_time
 
         # Verification step
         logging.info(f"{ANSI_BLUE}Verifying agent's work...{ANSI_RESET}")
@@ -463,8 +459,8 @@ def bootstrap(
                 project_archive,
                 devcontainer_tarball,
                 test_artifacts_dir,
-                image_build_timeout_secs,
-                test_timeout_secs,
+                image_build_timeout_seconds,
+                test_timeout_seconds,
             )
             verification_success = verify_result.success
             verification_error = verify_result.error_message

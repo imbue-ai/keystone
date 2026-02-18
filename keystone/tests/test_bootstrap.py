@@ -566,7 +566,7 @@ def test_max_budget_zero_fails(tmp_path: Path, project_root: Path) -> None:
 
 def test_agent_time_limit_causes_timeout(tmp_path: Path, project_root: Path) -> None:
     """
-    Test that setting a very short --agent_time_limit_secs causes timeout.
+    Test that setting a very short --agent_time_limit_seconds causes timeout.
     The CLI should return non-zero exit code and set agent_timed_out=True.
 
     Uses a slow fake agent that sleeps to ensure timeout triggers.
@@ -583,7 +583,7 @@ print('{"type": "result"}')
     slow_agent.chmod(0o755)
 
     logger.info("=" * 60)
-    logger.info("Testing agent_time_limit_secs causes timeout")
+    logger.info("Testing agent_time_limit_seconds causes timeout")
     logger.info("Project root: %s", project_root)
     logger.info("=" * 60)
 
@@ -596,7 +596,7 @@ print('{"type": "result"}')
         "--agent_cmd",
         str(slow_agent),
         "--run_agent_locally_with_dangerously_skip_permissions",
-        "--agent_time_limit_secs",
+        "--agent_time_limit_seconds",
         "1",  # 1 second timeout - agent sleeps for 10s so will timeout
     ]
 

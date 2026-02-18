@@ -129,8 +129,7 @@ def run_modal_command(
         name: Short name for this process (required, used in log prefix)
         **kwargs: Additional arguments passed to sb.exec()
     """
-    # FIXME: Why not use the outer logger?
-    logger = logging.getLogger("keystone.modal")
+    # Use the module-level logger instead of creating a new one.
     logger.info(f"[{name}] Running: {shlex.join(args)}")
     proc = sb.exec(*args, **kwargs)
     return ManagedProcess(proc, prefix=name, capture=capture)
@@ -427,8 +426,8 @@ exec timeout {time_limit_secs} {shlex.join(cmd_parts)}
         project_archive: bytes,
         devcontainer_tarball: bytes,
         test_artifacts_dir: Path,
-        image_build_timeout_secs: int,
-        test_timeout_secs: int,
+        image_build_timeout_seconds: int,
+        test_timeout_seconds: int,
     ) -> VerificationResult:
         """Run verification by building and running docker in the existing sandbox.
 
@@ -482,7 +481,7 @@ exec timeout {time_limit_secs} {shlex.join(cmd_parts)}
 #!/bin/bash
 set -euo pipefail
 CACHE_REF="$DOCKER_BUILD_CACHE_REGISTRY_URL/buildcache:latest"
-exec timeout {image_build_timeout_secs} docker build \
+exec timeout {image_build_timeout_seconds} docker build \
     --network=host \
     --cache-from "type=registry,ref=$CACHE_REF" \
     --cache-to "type=registry,ref=$CACHE_REF,mode=max" \
@@ -500,7 +499,7 @@ exec timeout {image_build_timeout_secs} docker build \
         else:
             build_cmd = [
                 "timeout",
-                str(image_build_timeout_secs),
+                str(image_build_timeout_seconds),
                 "docker",
                 "build",
                 "--network=host",
@@ -516,7 +515,7 @@ exec timeout {image_build_timeout_secs} docker build \
         if build_exit == TIMEOUT_EXIT_CODE:
             return VerificationResult(
                 success=False,
-                error_message=f"Image build timed out after {image_build_timeout_secs} seconds",
+                error_message=f"Image build timed out after {image_build_timeout_seconds} seconds",
                 image_build_seconds=image_build_seconds,
             )
         if build_exit != 0:
@@ -533,7 +532,7 @@ exec timeout {image_build_timeout_secs} docker build \
         test_proc = run_modal_command(
             sb,
             "timeout",
-            str(test_timeout_secs),
+            str(test_timeout_seconds),
             "docker",
             "run",
             "--network=host",
@@ -583,7 +582,7 @@ exec timeout {image_build_timeout_secs} docker build \
         if test_exit_code == TIMEOUT_EXIT_CODE:
             return VerificationResult(
                 success=False,
-                error_message=f"Test execution timed out after {test_timeout_secs} seconds",
+                error_message=f"Test execution timed out after {test_timeout_seconds} seconds",
                 image_build_seconds=image_build_seconds,
                 test_execution_seconds=test_execution_seconds,
             )

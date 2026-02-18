@@ -129,13 +129,13 @@ def test_agent_config_cache_key() -> None:
     config1 = AgentConfig(
         agent_cmd="claude",
         max_budget_usd=1.0,
-        agent_time_limit_secs=3600,
+        agent_time_limit_seconds=3600,
         agent_in_modal=True,
     )
     config2 = AgentConfig(
         agent_cmd="claude",
         max_budget_usd=1.0,
-        agent_time_limit_secs=3600,
+        agent_time_limit_seconds=3600,
         agent_in_modal=True,
     )
     # Same config should produce same JSON
@@ -145,7 +145,7 @@ def test_agent_config_cache_key() -> None:
     config3 = AgentConfig(
         agent_cmd="claude",
         max_budget_usd=2.0,  # Different
-        agent_time_limit_secs=3600,
+        agent_time_limit_seconds=3600,
         agent_in_modal=True,
     )
     assert config1.to_cache_key_json() != config3.to_cache_key_json()

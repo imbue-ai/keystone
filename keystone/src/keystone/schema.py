@@ -13,7 +13,7 @@ class AgentConfig(BaseModel):
 
     agent_cmd: str
     max_budget_usd: float
-    agent_time_limit_secs: int
+    agent_time_limit_seconds: int
     agent_in_modal: bool
 
     def to_cache_key_json(self) -> str:

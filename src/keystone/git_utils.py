@@ -1,9 +1,6 @@
 """Git utilities for working with versioned code trees."""
 
-import io
 import subprocess
-import tarfile
-import tempfile
 from pathlib import Path
 
 
@@ -30,23 +27,6 @@ def get_git_tree_hash(repo_path: Path) -> str:
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
         raise GitError(f"Failed to get git tree hash: {e.stderr}") from e
-
-# FIXME: Dead
-def create_git_archive(repo_path: Path, output_path: Path) -> None:
-    """Create a tarball of the repository using git archive.
-
-    Uses HEAD to create a clean archive without untracked files.
-    """
-    try:
-        subprocess.run(
-            ["git", "archive", "--format=tar.gz", "-o", str(output_path), "HEAD"],
-            cwd=repo_path,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-    except subprocess.CalledProcessError as e:
-        raise GitError(f"Failed to create git archive: {e.stderr}") from e
 
 
 def create_git_archive_bytes(repo_path: Path) -> bytes:
@@ -99,17 +79,4 @@ def is_git_dirty(repo_path: Path) -> bool:
     except subprocess.CalledProcessError:
         return False
 
-# FIXME: Dead
-def extract_git_archive_to_temp(repo_path: Path) -> Path:
-    """Create a git archive and extract it to a temporary directory.
 
-    Returns the path to the temporary directory containing the extracted files.
-    The caller is responsible for cleaning up the temporary directory.
-    """
-    archive_bytes = create_git_archive_bytes(repo_path)
-    temp_dir = Path(tempfile.mkdtemp(prefix="git-archive-"))
-
-    with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as tar:
-        tar.extractall(temp_dir)                # FIXME: Should use filter="data" to strip dangerous paths (path traversal)
-
-    return temp_dir

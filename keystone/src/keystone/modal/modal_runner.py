@@ -26,7 +26,7 @@ from keystone.agent_runner import (
 )
 from keystone.modal.image import create_modal_image
 from keystone.prompts import generate_devcontainer_json
-from keystone.schema import VerifyResult
+from keystone.schema import VerificationResult
 
 logger = logging.getLogger(__name__)
 
@@ -429,7 +429,7 @@ exec timeout {time_limit_secs} {shlex.join(cmd_parts)}
         test_artifacts_dir: Path,
         image_build_timeout_secs: int,
         test_timeout_secs: int,
-    ) -> VerifyResult:
+    ) -> VerificationResult:
         """Run verification by building and running docker in the existing sandbox.
 
         Uses docker commands directly instead of Modal's from_dockerfile, which:
@@ -463,7 +463,7 @@ exec timeout {time_limit_secs} {shlex.join(cmd_parts)}
             sb, "test", "-f", "/project/.devcontainer/Dockerfile", name="verify"
         )
         if check_proc.wait() != 0:
-            return VerifyResult(
+            return VerificationResult(
                 success=False,
                 error_message="Build failed: .devcontainer/Dockerfile not found.",
             )
@@ -514,13 +514,13 @@ exec timeout {image_build_timeout_secs} docker build \
         build_exit = build_proc.wait()
         image_build_seconds = time.time() - build_start
         if build_exit == TIMEOUT_EXIT_CODE:
-            return VerifyResult(
+            return VerificationResult(
                 success=False,
                 error_message=f"Image build timed out after {image_build_timeout_secs} seconds",
                 image_build_seconds=image_build_seconds,
             )
         if build_exit != 0:
-            return VerifyResult(
+            return VerificationResult(
                 success=False,
                 error_message=f"Build failed with exit code {build_exit}",
                 image_build_seconds=image_build_seconds,
@@ -581,7 +581,7 @@ exec timeout {image_build_timeout_secs} docker build \
         run_modal_command(sb, "docker", "rm", container_name, name="cleanup").wait()
 
         if test_exit_code == TIMEOUT_EXIT_CODE:
-            return VerifyResult(
+            return VerificationResult(
                 success=False,
                 error_message=f"Test execution timed out after {test_timeout_secs} seconds",
                 image_build_seconds=image_build_seconds,
@@ -589,14 +589,14 @@ exec timeout {image_build_timeout_secs} docker build \
             )
         if test_exit_code == 0:
             logger.info("Verification successful!")
-            return VerifyResult(
+            return VerificationResult(
                 success=True,
                 image_build_seconds=image_build_seconds,
                 test_execution_seconds=test_execution_seconds,
             )
         else:
             logger.error(f"Test run failed with return code {test_exit_code}")
-            return VerifyResult(
+            return VerificationResult(
                 success=False,
                 error_message=f"Test run failed with return code {test_exit_code}",
                 image_build_seconds=image_build_seconds,

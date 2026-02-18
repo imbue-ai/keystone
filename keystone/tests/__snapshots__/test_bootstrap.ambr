@@ -91,20 +91,21 @@
       'status_messages': list([
         'Exploring repository structure to identify file types and test locations.',
         'Creating .devcontainer directory and copying pre-generated files.',
-        'Creating Dockerfile with Python 3.11, uv, and pre-cached dependencies.',
-        'Creating run_all_tests.sh with pytest execution and JUnit XML reporting.',
-        'Building Docker image to verify Dockerfile configuration.',
-        'Lockfile needs updating; removing --locked flag from uv sync commands.',
-        'Rebuilding Docker image with updated Dockerfile.',
-        'Running tests in container to verify setup.',
-        'Removing --no-cov flag from pytest command.',
-        'Rebuilding image with updated test runner script.',
-        'Running tests to verify final setup.',
-        'Verifying test artifacts were created correctly.',
-        'Verifying final .devcontainer structure.',
-        'Running final verification test.',
+        'Creating Dockerfile with Python 3.11, uv package manager, and optimized layer caching.',
+        'Creating run_all_tests.sh script to execute pytest with JUnit XML output.',
+        'Building Docker image to verify configuration.',
+        'Build failed due to outdated uv.lock file; removing --locked flag to allow automatic resolution.',
+        'Retrying Docker image build with updated Dockerfile.',
+        'Running tests in the built container to verify everything works.',
+        'Fixing test runner script to remove --no-cov flag (pytest-cov not installed).',
+        'Rebuilding container with fixed test runner script.',
+        'Running tests in the rebuilt container.',
+        'Verifying test artifacts were generated correctly.',
+        'Verifying final devcontainer structure.',
+        'Running final end-to-end verification test.',
+        'All tests pass successfully! Creating summary of devcontainer configuration.',
       ]),
-      'summary': 'All tests pass successfully. The setup uses Python 3.11 with uv for fast dependency management. Key tip: Remove the --locked flag from uv sync when the lockfile needs updating, and always use --network=host with docker run in Modal/gVisor environments.',
+      'summary': 'Tests pass successfully. Used uv for fast Python dependency management and optimized Dockerfile layer ordering. Removed --locked flag from uv sync since lockfile needed update. Removed --no-cov flag from pytest since pytest-cov not installed. Final devcontainer builds in ~2s (cached) and runs tests successfully.',
       'timed_out': False,
     }),
     'error_message': None,
@@ -125,44 +126,44 @@
   
       ''',
       'dockerfile': '''
-        # Use Python 3.11 slim image as base
+        # Use Python 3.11 as base image
         FROM python:3.11-slim
         
-        # Install perl-base for timestamp helper script
+        # Install perl-base for timestamp script
         RUN apt-get update && apt-get install -y perl-base && rm -rf /var/lib/apt/lists/*
         
-        # Set up timestamp helper script
-        COPY .devcontainer/timestamp_process_output.pl /timestamp_process_output.pl
+        # Set up timestamp helper script.
+        COPY ./.devcontainer/timestamp_process_output.pl /timestamp_process_output.pl
         
-        # Create test artifacts directory
+        # Create test artifacts directory.
         RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
         
-        # Copy uv from official image
+        # Copy uv from official image.
         COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
         
-        # Set up working directory
-        WORKDIR /project_src
-        
-        # Pre-create uv virtual environment and install dependencies
-        # Install dependencies first (without the project itself) to maximize layer caching
+        # Pre-create uv virtual environment and install dependencies.
+        # Install dependencies first (without the project itself) to maximize layer caching.
         # See: https://docs.astral.sh/uv/guides/integration/docker/#caching
         COPY pyproject.toml uv.lock /tmp/deps/
         ENV UV_PROJECT_ENVIRONMENT=/venv
+        # Very important on Modal -- without this, there is a crazy bug that means that some files do not show up in snapshots!
+        # This is because Modal's snapshotting mechanism does not work correctly with symlinks.
+        ENV UV_LINK_MODE=copy
         RUN cd /tmp/deps && \
             uv sync --no-install-project && \
             echo "Python virtual environment created successfully at $UV_PROJECT_ENVIRONMENT"
         
-        # Very important on Modal -- without this, there is a crazy bug that means that some files do not show up in snapshots!
-        # This is because Modal's snapshotting mechanism does not work correctly with symlinks.
-        ENV UV_LINK_MODE=copy
-        
         # Copy source code (these won't change during agent work)
+        WORKDIR /project_src
         COPY app.py ./
         COPY tests/ ./tests/
         COPY pyproject.toml uv.lock ./
         
         # Install the project itself
         RUN uv sync
+        
+        # Add venv to PATH so pytest and other tools are available
+        ENV PATH="/venv/bin:$PATH"
         
         # Copy the test runner script last (this changes often during development)
         COPY .devcontainer/run_all_tests.sh /run_all_tests.sh
@@ -176,14 +177,12 @@
         # Create JUnit XML directory
         mkdir -p /test_artifacts/junit
         
-        # Set PYTHONPATH to ensure imports work correctly
+        # Set PYTHONPATH to include the project source
         export PYTHONPATH=/project_src:${PYTHONPATH:-}
         
-        # Activate the virtual environment
-        export PATH="/venv/bin:$PATH"
-        
-        # Run pytest with JUnit XML output and timestamped logging
-        echo "Running pytest tests..."
+        # Run pytest with JUnit XML output
+        # Using timestamp wrapper for detailed logging
+        echo "Running pytest test suite..."
         /timestamp_process_output.pl --logfile /test_artifacts/pytest.log \
             pytest --junitxml=/test_artifacts/junit/pytest.xml -v tests/
         
@@ -195,7 +194,7 @@
         }
         EOF
         
-        echo "Test run completed successfully!"
+        echo "Test suite completed successfully!"
   
       ''',
     }),

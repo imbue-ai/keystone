@@ -21,16 +21,6 @@ class AgentConfig(BaseModel):
         return self.model_dump_json(indent=None)
 
 
-# FIXME: Is this even used?
-class VerifyResult(BaseModel):
-    """After the agent assembles a devcontainer, we rebuild it and re-run the tests to check the agent's work."""
-
-    success: bool
-    error_message: str | None = None
-    image_build_seconds: float | None = None
-    test_execution_seconds: float | None = None
-
-
 class TokenSpending(BaseModel):
     """Used to track this resource usage by the agent."""
 
@@ -62,7 +52,6 @@ class TestResult(BaseModel):
     skipped: bool = False
 
 
-# FIXME: The similarity of name to VerifyResult is confusing.
 class VerificationResult(BaseModel):
     """Result of verification phase including image build and test execution."""
 

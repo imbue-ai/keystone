@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-keystone = "keystone:main"
+keystone = "keystone.keystone_cli:main"
 
 [build-system]
 requires = ["hatchling"]

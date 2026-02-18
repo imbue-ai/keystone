@@ -6,7 +6,6 @@ JUnit XML is the standard CI/CD test report format. Generate with:
 - Go: `go test -v ./... 2>&1 | go-junit-report > report.xml`
 - Cargo: `cargo nextest run` (writes to target/nextest/default/junit.xml)
 """
-# FIXME: Move this into a src/keystone/junit_report_parser.py
 
 from pathlib import Path
 

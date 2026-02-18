@@ -2,7 +2,6 @@
 
 import json
 import logging
-import subprocess
 import sys
 import time
 from datetime import UTC, datetime
@@ -35,9 +34,10 @@ from keystone.git_utils import (
     is_git_dirty,
     is_git_repo,
 )
+from keystone.junit_report_parser import parse_junit_xml
+from keystone.logging_utils import ISOFormatter
 from keystone.modal.modal_runner import ModalAgentRunner
 from keystone.prompts import build_agent_prompt
-from keystone.report_parsers import parse_junit_xml
 from keystone.schema import (
     AgentConfig,
     AgentExecution,
@@ -49,16 +49,6 @@ from keystone.schema import (
     VerificationResult,
 )
 from keystone.version import get_version_info
-
-
-# FIXME: Move to logging_utils.py.
-class ISOFormatter(logging.Formatter):
-    """Log formatter with ISO 8601 timestamps including milliseconds and timezone."""
-
-    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:  # noqa: ARG002
-        dt = datetime.fromtimestamp(record.created, tz=UTC).astimezone()
-        return dt.strftime("%Y-%m-%dT%H:%M:%S.") + f"{int(record.msecs):03d}{dt.strftime('%z')}"
-
 
 # Configure logging with standard format including timestamp, thread, and source location
 _handler = logging.StreamHandler()
@@ -72,21 +62,6 @@ logging.getLogger("keystone").setLevel(logging.DEBUG)
 
 app = typer.Typer()
 console = Console(stderr=True, force_terminal=True)
-
-
-# FIXME: Move to docker_utils.py.
-def check_docker_available() -> bool:
-    """Check if Docker CLI is installed and daemon is running."""
-    try:
-        result = subprocess.run(
-            ["docker", "ps"],
-            capture_output=True,
-            timeout=10,
-            check=False,
-        )
-        return result.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return False
 
 
 @app.command()

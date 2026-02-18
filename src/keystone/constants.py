@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-DEFAULT_LOG_PATH = Path.home() / ".keystone" / "log.sqlite"
 DEFAULT_TESTING_LOG_PATH = Path.home() / ".keystone" / "testing_log.sqlite"
 
 STATUS_MARKER = "BOOTSTRAP_DEVCONTAINER_STATUS:"

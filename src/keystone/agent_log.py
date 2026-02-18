@@ -64,6 +64,7 @@ Example Usage
 import hashlib
 import io
 import json
+import logging
 import tarfile
 import uuid
 from datetime import datetime
@@ -78,6 +79,8 @@ from sqlalchemy.engine import Engine
 from keystone.git_utils import get_git_tree_hash
 from keystone.schema import AgentConfig
 from keystone.version import VersionInfo, get_version_info
+
+logger = logging.getLogger(__name__)
 
 
 class StreamEvent(BaseModel):
@@ -137,7 +140,7 @@ def compute_cache_key(
 ) -> CacheKey:
     """Compute cache key components from inputs."""
     git_tree_hash = get_git_tree_hash(repo_path)
-    prompt_hash = hashlib.md5(prompt.encode("utf-8")).hexdigest()
+    prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
     return CacheKey(
         git_tree_hash=git_tree_hash,
         prompt_hash=prompt_hash,
@@ -159,6 +162,12 @@ def ensure_column_exists(engine: Engine, table: str, column: str, column_type: s
     """
     with engine.connect() as conn:
         # Check if column exists (works for SQLite and PostgreSQL)
+        # Validate identifiers to prevent SQL injection (PRAGMA and ALTER TABLE
+        # don't support parameter binding for identifiers).
+        for name in (table, column, column_type):
+            if not all(ch.isalnum() or ch == "_" for ch in name):
+                raise ValueError(f"Invalid SQL identifier: {name!r}")
+
         if engine.dialect.name == "sqlite":
             result = conn.execute(text(f"PRAGMA table_info({table})"))
             columns = {row[1] for row in result}
@@ -291,26 +300,27 @@ class AgentLog:
                 result = conn.execute(query, {"cache_hash": cache_hash})
                 row = result.fetchone()
         except Exception:
-            # Table may not exist yet (first run)
+            logger.exception("Cache lookup failed")
             return None
 
         if row is None:
             return None
 
-        events_data = json.loads(row[6])
+        r = row._mapping
+        events_data = json.loads(r["events_json"])
         return AgentRunRecord(
-            cli_run_id=row[0],
-            timestamp=datetime.fromisoformat(row[1]),
+            cli_run_id=r["cli_run_id"],
+            timestamp=datetime.fromisoformat(r["timestamp"]),
             cache_key=CacheKey(
-                git_tree_hash=row[2],
-                prompt_hash=row[3],
-                agent_config_json=row[4],
-                cache_version=row[5],
+                git_tree_hash=r["git_tree_hash"],
+                prompt_hash=r["prompt_hash"],
+                agent_config_json=r["agent_config_json"],
+                cache_version=r["cache_version"],
             ),
             events=[StreamEvent(**e) for e in events_data],
-            devcontainer_tarball=row[7],
-            return_code=row[8],
-            claude_dir_tarball=row[9],
+            devcontainer_tarball=r["devcontainer_tarball"],
+            return_code=r["return_code"],
+            claude_dir_tarball=r["claude_dir_tarball"],
         )
 
 

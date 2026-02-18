@@ -15,7 +15,6 @@ import importlib.metadata
 import json
 import logging
 import subprocess
-from datetime import datetime
 from functools import cache
 from pathlib import Path
 
@@ -117,10 +116,9 @@ def _version_info_from_git() -> VersionInfo:
         subprocess.check_output(["git", "rev-list", "--count", "HEAD"], text=True).strip()
     )
 
-    timestamp_unix = subprocess.check_output(
-        ["git", "log", "-1", "--format=%ct"], text=True
+    commit_timestamp = subprocess.check_output(
+        ["git", "log", "-1", "--format=%cI"], text=True
     ).strip()
-    commit_timestamp = datetime.fromtimestamp(int(timestamp_unix)).isoformat()
 
     return VersionInfo(
         git_hash=git_hash,

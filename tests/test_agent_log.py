@@ -7,14 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from bootstrap_devcontainer.agent_log import (
+from keystone.agent_log import (
     AgentLog,
     AgentRunRecord,
     CacheKey,
     CLIRunRecord,
     StreamEvent,
 )
-from bootstrap_devcontainer.schema import AgentConfig
+from keystone.schema import AgentConfig
 
 
 @pytest.fixture
@@ -49,7 +49,7 @@ def test_cli_run_logging(temp_db: Path) -> None:
         id=run_id,
         timestamp=datetime.now(UTC),
         cwd="/test/path",
-        args=["bootstrap", "--project_root", "/test"],
+        args=["keystone", "--project_root", "/test"],
         cache_hit=False,
         bootstrap_result_json='{"success": true}',
     )

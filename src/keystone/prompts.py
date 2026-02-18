@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from bootstrap_devcontainer.constants import STATUS_MARKER, SUMMARY_MARKER
+from keystone.constants import STATUS_MARKER, SUMMARY_MARKER
 
 
 def generate_devcontainer_json(cache_registry_url: str | None = None) -> str:
@@ -105,7 +105,7 @@ Instructions:
   The Dockerfile MUST contain these lines, ideally early in the file, to create a writable test artifacts directory:
 ```
 # Set up timestamp helper script.
-COPY ./devcontainer/timestamp_process_output.pl /timestamp_process_output.pl
+COPY ./.devcontainer/timestamp_process_output.pl /timestamp_process_output.pl
 
 # Create test artifacts directory.
 RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
@@ -316,7 +316,7 @@ docker run --network host \
   /run_all_tests.sh
 
 # If you want access to the detailed test artifacts from a completed container, you can extract them with:
-docker cp "$CONTAINER_NAME:/test_artifacts" /tmp/test_artifacts.$CONTAINER_NAME"
+docker cp "$CONTAINER_NAME:/test_artifacts" "/tmp/test_artifacts.$CONTAINER_NAME"
 
 # Note: If you run a container in detached mode, make sure to `docker wait $CONTAINER_NAME` before trying to extract the test artifacts.
 

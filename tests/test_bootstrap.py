@@ -4,16 +4,18 @@ import shlex
 import shutil
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 from conftest import SAMPLES_DIR, init_git_repo
 from syrupy.assertion import SnapshotAssertion
 from typer.testing import CliRunner
 
-from bootstrap_devcontainer.bootstrap_devcontainer_cli import app
-from bootstrap_devcontainer.constants import DEFAULT_TESTING_LOG_PATH
-from bootstrap_devcontainer.process_runner import run_process
-from bootstrap_devcontainer.schema import BootstrapResult
+from keystone.constants import DEFAULT_TESTING_LOG_PATH
+from keystone.keystone_cli import app
+from keystone.process_runner import run_process
+from keystone.schema import BootstrapResult
+from keystone.version import _UNKNOWN_VERSION, get_version_info
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +25,85 @@ def test_cli_help() -> None:
     assert result.exit_code == 0
     assert "[OPTIONS]" in result.stdout
     assert "--project_root" in result.stdout
+
+
+@pytest.mark.manual
+def test_cli_runs_from_uvx() -> None:
+    """Test that the CLI can be installed and invoked via uvx from the public repo.
+
+    The uvx command tested here is the one documented in the README:
+        uvx --from 'git+https://github.com/imbue-ai/keystone@prod' keystone --help
+
+    Marked manual because it requires network access and installs from git.
+    """
+    result = run_process(
+        [
+            "uvx",
+            "--from",
+            "git+https://github.com/imbue-ai/keystone@prod",
+            "keystone",
+            "--help",
+        ],
+    )
+    assert result.returncode == 0, f"uvx invocation failed:\n{result.stderr}"
+    assert "--project_root" in result.stdout
+
+
+def test_get_version_info_without_git(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """When CWD is not a git repo and no stamp file exists, get_version_info returns a fallback.
+
+    This simulates the uvx-from-github scenario where the process runs outside
+    any git repository and there is no baked-in version_stamp.json.
+    """
+    # Clear the @cache so we get a fresh call
+    get_version_info.cache_clear()
+
+    # Run from a directory that is not a git repo
+    monkeypatch.chdir(tmp_path)
+
+    result = get_version_info()
+    assert result == _UNKNOWN_VERSION
+    assert result.git_hash is None
+    assert result.branch is None
+    assert result.commit_timestamp is None
+
+    # Clean up cache so other tests aren't affected
+    get_version_info.cache_clear()
+
+
+def test_get_version_info_from_direct_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Simulate uvx installing from a git URL: no local git, but PEP 610 metadata exists.
+
+    uv/pip write a direct_url.json into .dist-info with the resolved commit_id
+    when installing from ``git+https://…@branch``.  We verify that
+    get_version_info picks up the hash and branch from that metadata.
+    """
+    get_version_info.cache_clear()
+    monkeypatch.chdir(tmp_path)
+
+    fake_direct_url = json.dumps(
+        {
+            "url": "https://github.com/imbue-ai/keystone.git",
+            "vcs_info": {
+                "vcs": "git",
+                "requested_revision": "prod",
+                "commit_id": "4dba85a1880214f687d1779e75d06440cc4bb9ef",
+            },
+        }
+    )
+
+    mock_dist = MagicMock()
+    mock_dist.read_text.return_value = fake_direct_url
+
+    with patch("keystone.version.importlib.metadata.distribution", return_value=mock_dist):
+        result = get_version_info()
+
+    assert result.git_hash == "4dba85a1880214f687d1779e75d06440cc4bb9ef"
+    assert result.branch == "prod"
+    assert result.is_dirty is False
+    assert result.commit_timestamp is None
+
+    get_version_info.cache_clear()
 
 
 def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
@@ -49,7 +130,7 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
         shlex.quote(str(fake_agent)),
         "--log_db",
         str(cache_file),
-        "--agent_local",  # Use local runner for fake agent tests
+        "--run_agent_locally_with_dangerously_skip_permissions",  # Use local runner for fake agent tests
     ]
 
     logger.info("Running: %s", " ".join(cmd))
@@ -135,7 +216,7 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
     test_artifacts_dir2 = tmp_path / "test_artifacts2"
 
     cmd2 = [
-        # "bootstrap-devcontainer",
+        # "keystone",
         "--project_root",
         str(project_root2),
         "--test_artifacts_dir",
@@ -144,7 +225,7 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
         shlex.quote(str(fake_agent)),
         "--log_db",
         str(cache_file),
-        "--agent_local",  # Use local runner for fake agent tests
+        "--run_agent_locally_with_dangerously_skip_permissions",  # Use local runner for fake agent tests
     ]
 
     result2 = CliRunner().invoke(app, cmd2)
@@ -173,14 +254,14 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path, project_root: Path
     logger.info("=" * 60)
 
     cmd = [
-        "bootstrap-devcontainer",
+        "keystone",
         "--project_root",
         str(project_root),
         "--test_artifacts_dir",
         str(test_artifacts_dir),
         "--agent_cmd",
         shlex.quote(str(fake_agent)),
-        "--agent_local",  # Use local runner for fake agent tests
+        "--run_agent_locally_with_dangerously_skip_permissions",  # Use local runner for fake agent tests
     ]
 
     logger.info("Running: %s", " ".join(cmd))
@@ -241,7 +322,7 @@ def test_e2e_sample_projects(
 
     # Use -u for unbuffered Python output
     cmd = [
-        "bootstrap-devcontainer",
+        "keystone",
         "--project_root",
         str(project_root),
         "--test_artifacts_dir",
@@ -287,8 +368,7 @@ def test_e2e_sample_projects(
     assert snapshot_data == snapshot
 
 
-
-DOCKER_CACHE_SECRET = "bootstrap-devcontainer-docker-registry-config"
+DOCKER_CACHE_SECRET = "keystone-docker-registry-config"
 
 
 def _parse_bootstrap_result(stdout: str) -> BootstrapResult:
@@ -317,7 +397,7 @@ def test_e2e_docker_build_cache(tmp_path: Path, project_root: Path) -> None:
     cache_file = tmp_path / "test_log.sqlite"
 
     base_cmd = [
-        "bootstrap-devcontainer",
+        "keystone",
         "--project_root",
         str(project_root),
         "--test_artifacts_dir",
@@ -337,12 +417,12 @@ def test_e2e_docker_build_cache(tmp_path: Path, project_root: Path) -> None:
         [*base_cmd, "--no_cache_replay"],
         log_prefix="[run1]",
     )
-    assert run1_result.returncode == 0, (
-        f"Run 1 failed with exit code {run1_result.returncode}"
-    )
+    assert run1_result.returncode == 0, f"Run 1 failed with exit code {run1_result.returncode}"
     output1 = _parse_bootstrap_result(run1_result.stdout)
     assert output1.verification is not None
-    assert output1.verification.success, f"Run 1 verification failed: {output1.verification.error_message}"
+    assert output1.verification.success, (
+        f"Run 1 verification failed: {output1.verification.error_message}"
+    )
     run1_build_secs = output1.verification.image_build_seconds
     assert run1_build_secs is not None, "Run 1 should report image_build_seconds"
     logger.info("Run 1 image build: %.1f seconds", run1_build_secs)
@@ -355,7 +435,7 @@ def test_e2e_docker_build_cache(tmp_path: Path, project_root: Path) -> None:
     # Use a fresh artifacts dir so there's no leftover state
     run2_artifacts = tmp_path / "artifacts_run2"
     run2_cmd = [
-        "bootstrap-devcontainer",
+        "keystone",
         "--project_root",
         str(project_root),
         "--test_artifacts_dir",
@@ -368,12 +448,12 @@ def test_e2e_docker_build_cache(tmp_path: Path, project_root: Path) -> None:
     ]
 
     run2_result = run_process(run2_cmd, log_prefix="[run2]")
-    assert run2_result.returncode == 0, (
-        f"Run 2 failed with exit code {run2_result.returncode}"
-    )
+    assert run2_result.returncode == 0, f"Run 2 failed with exit code {run2_result.returncode}"
     output2 = _parse_bootstrap_result(run2_result.stdout)
     assert output2.verification is not None
-    assert output2.verification.success, f"Run 2 verification failed: {output2.verification.error_message}"
+    assert output2.verification.success, (
+        f"Run 2 verification failed: {output2.verification.error_message}"
+    )
     run2_build_secs = output2.verification.image_build_seconds
     assert run2_build_secs is not None, "Run 2 should report image_build_seconds"
     logger.info("Run 2 image build: %.1f seconds", run2_build_secs)
@@ -452,11 +532,11 @@ def test_max_budget_zero_fails(tmp_path: Path, project_root: Path) -> None:
     logger.info("=" * 60)
 
     cmd = [
-        "bootstrap-devcontainer",
+        "keystone",
         *("--project_root", str(project_root)),
         *("--test_artifacts_dir", str(test_artifacts_dir)),
         *("--max_budget_usd", "0"),
-        "--agent_local",  # Use local runner (budget test uses real claude locally)
+        "--run_agent_locally_with_dangerously_skip_permissions",  # Use local runner (budget test uses real claude locally)
     ]
 
     logger.info("Running: %s", " ".join(cmd))
@@ -508,14 +588,14 @@ print('{"type": "result"}')
     logger.info("=" * 60)
 
     cmd = [
-        "bootstrap-devcontainer",
+        "keystone",
         "--project_root",
         str(project_root),
         "--test_artifacts_dir",
         str(test_artifacts_dir),
         "--agent_cmd",
         str(slow_agent),
-        "--agent_local",
+        "--run_agent_locally_with_dangerously_skip_permissions",
         "--agent_time_limit_secs",
         "1",  # 1 second timeout - agent sleeps for 10s so will timeout
     ]

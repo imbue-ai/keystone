@@ -19,6 +19,8 @@ from keystone.version import _UNKNOWN_VERSION, get_version_info
 
 logger = logging.getLogger(__name__)
 
+DOCKER_CACHE_SECRET = "keystone-docker-registry-config"
+
 
 def test_cli_help() -> None:
     result = CliRunner().invoke(app, ["--help"])
@@ -155,17 +157,50 @@ def test_get_version_info_from_direct_url(tmp_path: Path, monkeypatch: pytest.Mo
     get_version_info.cache_clear()
 
 
-def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
+def _run_fake_agent_cmd(
+    cmd_args: list[str],
+    *,
+    use_modal: bool,
+) -> tuple[int, str, str]:
+    """Run the keystone CLI with the given args, returning (exit_code, stdout, stderr).
+
+    When use_modal is False, runs via CliRunner (in-process).
+    When use_modal is True, runs via subprocess (needed for Modal sandbox).
+    """
+    if use_modal:
+        result = run_process(["keystone", *cmd_args], log_prefix="[fake-agent-modal]")
+        return result.returncode, result.stdout, result.stderr
+    else:
+        result = CliRunner().invoke(app, cmd_args)
+        return result.exit_code, result.stdout, result.stderr or ""
+
+
+@pytest.mark.parametrize(
+    "execution_mode",
+    [
+        pytest.param("local", id="local"),
+        pytest.param(
+            "modal",
+            id="modal",
+            marks=pytest.mark.manual,
+        ),
+    ],
+)
+def test_e2e_fake_agent(tmp_path: Path, project_root: Path, execution_mode: str) -> None:
     """
     Test the full Docker mechanics using a deterministic fake agent.
     This tests the devcontainer build and test execution without LLM dependencies.
+
+    Parameterized to run both locally (--run_agent_locally_with_dangerously_skip_permissions)
+    and on Modal (--agent_in_modal with --docker_cache_secret for registry cache).
     """
+    use_modal = execution_mode == "modal"
     test_artifacts_dir = tmp_path / "test_artifacts"
     fake_agent = Path(__file__).parent / "fake_agent.py"
     cache_file = tmp_path / "cache.sqlite"
 
     logger.info("=" * 60)
-    logger.info("E2E Test with Fake Agent Starting")
+    logger.info("E2E Test with Fake Agent Starting (mode=%s)", execution_mode)
     logger.info("Project root: %s", project_root)
     logger.info("Test artifacts dir: %s", test_artifacts_dir)
     logger.info("=" * 60)
@@ -179,26 +214,27 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
         shlex.quote(str(fake_agent)),
         "--log_db",
         str(cache_file),
-        "--run_agent_locally_with_dangerously_skip_permissions",  # Use local runner for fake agent tests
     ]
+    if use_modal:
+        cmd += ["--agent_in_modal", "--docker_cache_secret", DOCKER_CACHE_SECRET]
+    else:
+        cmd += ["--run_agent_locally_with_dangerously_skip_permissions"]
 
     logger.info("Running: %s", " ".join(cmd))
-    result = CliRunner().invoke(app, cmd)
+    exit_code, stdout, stderr = _run_fake_agent_cmd(cmd, use_modal=use_modal)
 
-    # result = run_process(cmd, log_prefix="[fake-agent]")
-
-    assert result.exit_code == 0, f"Process failed: {result.stderr}"
-    assert "CACHE MISS" in result.stderr, "Expected cache miss on first run"
+    assert exit_code == 0, f"Process failed: {stderr}"
+    assert "CACHE MISS" in stderr, "Expected cache miss on first run"
 
     # Check that status lines were emitted to stdout (rich prints in blue)
-    if "BOOTSTRAP_DEVCONTAINER_STATUS:" not in result.stdout:
-        print(f"STDOUT: {result.stdout}")
-        print(f"STDERR: {result.stderr}")
-    assert "BOOTSTRAP_DEVCONTAINER_STATUS:" in result.stdout, "Expected status lines in stdout"
+    if "BOOTSTRAP_DEVCONTAINER_STATUS:" not in stdout:
+        print(f"STDOUT: {stdout}")
+        print(f"STDERR: {stderr}")
+    assert "BOOTSTRAP_DEVCONTAINER_STATUS:" in stdout, "Expected status lines in stdout"
 
     # Parse the JSON output (last line after status messages)
     # Find the JSON object in stdout (it spans multiple lines)
-    stdout_lines = result.stdout.strip().split("\n")
+    stdout_lines = stdout.strip().split("\n")
     json_start = None
     for i, line in enumerate(stdout_lines):
         if line.strip() == "{":
@@ -265,7 +301,6 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
     test_artifacts_dir2 = tmp_path / "test_artifacts2"
 
     cmd2 = [
-        # "keystone",
         "--project_root",
         str(project_root2),
         "--test_artifacts_dir",
@@ -274,15 +309,16 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path) -> None:
         shlex.quote(str(fake_agent)),
         "--log_db",
         str(cache_file),
-        "--run_agent_locally_with_dangerously_skip_permissions",  # Use local runner for fake agent tests
     ]
+    if use_modal:
+        cmd2 += ["--agent_in_modal", "--docker_cache_secret", DOCKER_CACHE_SECRET]
+    else:
+        cmd2 += ["--run_agent_locally_with_dangerously_skip_permissions"]
 
-    result2 = CliRunner().invoke(app, cmd2)
+    exit_code2, _stdout2, stderr2 = _run_fake_agent_cmd(cmd2, use_modal=use_modal)
 
-    # result2 = run_process(cmd2, log_prefix="[fake-agent-cached]")
-
-    assert result2.exit_code == 0, f"Cached run failed: {result2.stderr}"
-    assert "CACHE HIT" in result2.stderr, "Expected cache hit on second run"
+    assert exit_code2 == 0, f"Cached run failed: {stderr2}"
+    assert "CACHE HIT" in stderr2, "Expected cache hit on second run"
     # Verify devcontainer was restored from cache
     assert (project_root2 / ".devcontainer" / "devcontainer.json").exists()
 
@@ -415,9 +451,6 @@ def test_e2e_sample_projects(
     # Snapshot test - strip non-deterministic fields
     snapshot_data = _strip_nondeterministic_fields(output)
     assert snapshot_data == snapshot
-
-
-DOCKER_CACHE_SECRET = "keystone-docker-registry-config"
 
 
 def _parse_bootstrap_result(stdout: str) -> BootstrapResult:

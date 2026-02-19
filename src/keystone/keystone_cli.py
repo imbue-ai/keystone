@@ -59,6 +59,9 @@ logging.root.addHandler(_handler)
 logging.root.setLevel(logging.INFO)
 # Enable DEBUG for our own modules
 logging.getLogger("keystone").setLevel(logging.DEBUG)
+# Suppress noisy third-party loggers (hpack, httpcore, etc. from Modal's HTTP stack)
+for _noisy_logger in ("hpack", "httpcore", "httpx", "grpc", "h2"):
+    logging.getLogger(_noisy_logger).setLevel(logging.WARNING)
 
 app = typer.Typer()
 console = Console(stderr=True, force_terminal=True)

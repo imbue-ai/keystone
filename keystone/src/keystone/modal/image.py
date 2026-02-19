@@ -8,9 +8,11 @@ from pathlib import Path
 import modal
 
 _MODAL_DIR = Path(__file__).parent
+_REPO_ROOT = _MODAL_DIR.parent.parent.parent.parent  # keystone/src/keystone/modal -> repo root
 START_DOCKERD_SCRIPT_PATH = _MODAL_DIR / "start_dockerd.sh"
 WAIT_FOR_DOCKER_SCRIPT_PATH = _MODAL_DIR / "wait_for_docker.sh"
 TIMESTAMP_SCRIPT_PATH = _MODAL_DIR / "timestamp_process_output.pl"
+FAKE_AGENT_SCRIPT_PATH = _REPO_ROOT / "keystone" / "tests" / "fake_agent.py"
 
 
 def create_modal_image() -> modal.Image:
@@ -78,10 +80,13 @@ def create_modal_image() -> modal.Image:
         .add_local_file(START_DOCKERD_SCRIPT_PATH, "/start-dockerd.sh", copy=True)
         .add_local_file(WAIT_FOR_DOCKER_SCRIPT_PATH, "/wait_for_docker.sh", copy=True)
         .add_local_file(TIMESTAMP_SCRIPT_PATH, "/timestamp_process_output.pl", copy=True)
+        # Fake agent for testing (deterministic, no LLM dependency)
+        .add_local_file(FAKE_AGENT_SCRIPT_PATH, "/usr/local/bin/fake_agent.py", copy=True)
         .run_commands(
             "chmod 4755 /start-dockerd.sh",
             "chmod +x /wait_for_docker.sh",
             "chmod +x /timestamp_process_output.pl",
+            "chmod +x /usr/local/bin/fake_agent.py",
         )
         .run_commands(
             "useradd -m -s /bin/bash agent",

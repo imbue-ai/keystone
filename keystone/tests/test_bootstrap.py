@@ -2,7 +2,6 @@ import json
 import logging
 import shlex
 import shutil
-import subprocess
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -182,20 +181,8 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path, execution_mode: str)
     fake_agent_src = Path(__file__).parent / "fake_agent.py"
     cache_file = tmp_path / "cache.sqlite"
 
-    if use_modal:
-        # Copy fake_agent.py into the project so it's included in the git archive
-        # uploaded to the Modal sandbox. The sandbox path will be /project/fake_agent.py.
-        shutil.copy2(fake_agent_src, project_root / "fake_agent.py")
-        subprocess.run(["git", "add", "-A"], cwd=project_root, check=True, capture_output=True)
-        subprocess.run(
-            ["git", "commit", "-m", "Add fake agent", "--allow-empty"],
-            cwd=project_root,
-            check=True,
-            capture_output=True,
-        )
-        agent_cmd_str = "/project/fake_agent.py"
-    else:
-        agent_cmd_str = str(fake_agent_src)
+    # fake_agent.py is baked into the Modal image at /usr/local/bin/fake_agent.py
+    agent_cmd_str = "fake_agent.py" if use_modal else str(fake_agent_src)
 
     logger.info("=" * 60)
     logger.info("E2E Test with Fake Agent Starting (mode=%s)", execution_mode)
@@ -297,17 +284,6 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path, execution_mode: str)
     shutil.copytree(SAMPLES_DIR / "python_project", project_root2)
     init_git_repo(project_root2)
     test_artifacts_dir2 = tmp_path / "test_artifacts2"
-
-    if use_modal:
-        # Copy fake_agent.py into the fresh project for the cache-hit run too
-        shutil.copy2(fake_agent_src, project_root2 / "fake_agent.py")
-        subprocess.run(["git", "add", "-A"], cwd=project_root2, check=True, capture_output=True)
-        subprocess.run(
-            ["git", "commit", "-m", "Add fake agent", "--allow-empty"],
-            cwd=project_root2,
-            check=True,
-            capture_output=True,
-        )
 
     cmd2 = [
         "--project_root",

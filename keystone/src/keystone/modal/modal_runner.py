@@ -569,7 +569,7 @@ exec timeout {image_build_timeout_seconds} docker build \
                 tarball = f.read()
             test_artifacts_dir.mkdir(parents=True, exist_ok=True)
             with tarfile.open(fileobj=io.BytesIO(tarball), mode="r:gz") as tar:
-                tar.extractall(test_artifacts_dir)
+                tar.extractall(test_artifacts_dir, filter="data")
             logger.info(f"Test artifacts extracted to {test_artifacts_dir}")
         except Exception as e:
             logger.exception("Error extracting artifacts: %s", e)

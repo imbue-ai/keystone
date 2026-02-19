@@ -27,13 +27,14 @@ uv run python -m evals.eval_cli run \
     --output_path ~/eval_output_$(date +"%Y%m%d_%H%M%S").json
 
 # Run on only the first N repos (useful for testing)
-uv run python -m evals.eval_cli \
+DATE="$(date +"%Y%m%d_%H%M%S")" &&  uv run python -m evals.eval_cli \
     --repo_list_path evals/examples/repos.jsonl \
     --clone_dir ~/.cache/keystone_eval/repos \
-    --worktree_dir ~/.cache/keystone_eval/worktrees \
+    --worktree_dir ~/keystone_eval/worktrees_${DATE} \
     --timeout_minutes 60 \
     --max_budget_usd 10.0 \
-    --output_path ~/eval_output_$(date +"%Y%m%d_%H%M%S").json \
+    --output_path ~/keystone_eval/eval_output_${DATE}.json \
+    --no_cache_replay \
     --limit 1
 ```
 

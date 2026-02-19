@@ -68,9 +68,9 @@ Not currently supported:
 - `--cache_version` - String appended to cache key to invalidate old entries
 - `--output_file` - Path to write JSON result (defaults to stdout)
 - `--agent_in_modal/--agent_local` - Run agent in Modal sandbox (default) or locally
-- `--agent_time_limit_secs` - Maximum seconds for agent execution (default: 3600)
-- `--image_build_timeout_secs` - Maximum seconds for building devcontainer image (default: 600)
-- `--test_timeout_secs` - Maximum seconds for running tests (default: 300)
+- `--agent_time_limit_seconds` - Maximum seconds for agent execution (default: 3600)
+- `--image_build_timeout_seconds` - Maximum seconds for building devcontainer image (default: 600)
+- `--test_timeout_seconds` - Maximum seconds for running tests (default: 300)
 
 ---
 

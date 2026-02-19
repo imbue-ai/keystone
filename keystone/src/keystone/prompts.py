@@ -78,7 +78,7 @@ Instructions:
    2026-02-02T17:28:48-0800	1.234	STDOUT	Tests passed!
    ```
 
-   The format is: `ISO_TIMESTAMP<tab>ELAPSED_SECS<tab>STDOUT|STDERR<tab>original_line`
+   The format is: `ISO_TIMESTAMP<tab>ELAPSED_seconds<tab>STDOUT|STDERR<tab>original_line`
    This makes it trivial to filter/parse with grep, cut, awk, etc.
 
    Use it in run_all_tests.sh like this:

@@ -25,12 +25,12 @@ console = Console()
 def run(
     repo_list_path: Path = typer.Option(..., "--repo_list_path", help="Path to repo_list.jsonl"),
     clone_dir: Path = typer.Option(
-        Path("~/.cache/keystone_eval/repos"),
+        ...,
         "--clone_dir",
         help="Directory for pristine repo clones (cached)",
     ),
     worktree_dir: Path = typer.Option(
-        Path("~/.cache/keystone_eval/worktrees"),
+        ...,
         "--worktree_dir",
         help="Directory for repo worktrees",
     ),
@@ -39,7 +39,7 @@ def run(
         1.0, "--max_budget_usd", help="Maximum budget per repo in USD"
     ),
     timeout_minutes: int = typer.Option(
-        30, "--timeout_minutes", help="Timeout per repo in minutes"
+        60, "--timeout_minutes", help="Timeout per repo in minutes"
     ),
     log_db: str = typer.Option(
         str(DEFAULT_LOG_PATH), "--log_db", help="Database for logging/caching"

@@ -72,6 +72,7 @@ import tarfile
 import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import ClassVar
 
 import pandas as pd
 from pydantic import BaseModel
@@ -212,6 +213,35 @@ class AgentLog:
     Thread-safety: This class is NOT thread-safe. Use one instance per thread.
     """
 
+    _CREATE_TABLES_SQL: ClassVar[list[str]] = [
+        """\
+        CREATE TABLE IF NOT EXISTS agent_run (
+            cli_run_id TEXT,
+            timestamp TEXT,
+            git_tree_hash TEXT,
+            prompt_hash TEXT,
+            agent_config_json TEXT,
+            cache_version TEXT,
+            cache_key_hash TEXT,
+            events_json TEXT,
+            devcontainer_tarball BLOB,
+            return_code INTEGER,
+            claude_dir_tarball BLOB,
+            version_info_json TEXT
+        )
+        """,
+        """\
+        CREATE TABLE IF NOT EXISTS cli_run (
+            id TEXT,
+            timestamp TEXT,
+            cwd TEXT,
+            args_json TEXT,
+            cache_hit INTEGER,
+            bootstrap_result_json TEXT
+        )
+        """,
+    ]
+
     def __init__(self, db_url: str) -> None:
         """Open or create the log database.
 
@@ -221,6 +251,13 @@ class AgentLog:
                 - postgresql://...: Connects to PostgreSQL
         """
         self._engine = _create_engine(db_url)
+        self._ensure_tables()
+
+    def _ensure_tables(self) -> None:
+        """Create tables if they don't exist."""
+        with self._engine.begin() as conn:
+            for sql in self._CREATE_TABLES_SQL:
+                conn.execute(text(sql))
 
     def close(self) -> None:
         """Close the database connection."""
@@ -340,4 +377,4 @@ def extract_devcontainer_tarball(tarball: bytes, project_root: Path) -> None:
 
     buf = io.BytesIO(tarball)
     with tarfile.open(fileobj=buf, mode="r:gz") as tar:
-        tar.extractall(project_root)
+        tar.extractall(project_root, filter="data")

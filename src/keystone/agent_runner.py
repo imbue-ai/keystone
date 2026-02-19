@@ -166,7 +166,7 @@ class LocalAgentRunner(AgentRunner):
         )
         self._work_dir = Path(tempfile.mkdtemp(prefix="keystone-agent-"))
         with tarfile.open(fileobj=io.BytesIO(project_archive), mode="r:gz") as tar:
-            tar.extractall(self._work_dir)
+            tar.extractall(self._work_dir, filter="data")
 
         events: list[StreamEvent] = []
 
@@ -231,11 +231,11 @@ class LocalAgentRunner(AgentRunner):
         try:
             # Extract project archive
             with tarfile.open(fileobj=io.BytesIO(project_archive), mode="r:gz") as tar:
-                tar.extractall(work_dir)
+                tar.extractall(work_dir, filter="data")
 
             # Overlay devcontainer
             with tarfile.open(fileobj=io.BytesIO(devcontainer_tarball), mode="r:gz") as tar:
-                tar.extractall(work_dir)
+                tar.extractall(work_dir, filter="data")
 
             # Check if devcontainer.json exists
             devcontainer_json = work_dir / ".devcontainer" / "devcontainer.json"

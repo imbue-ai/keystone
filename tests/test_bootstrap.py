@@ -157,24 +157,6 @@ def test_get_version_info_from_direct_url(tmp_path: Path, monkeypatch: pytest.Mo
     get_version_info.cache_clear()
 
 
-def _run_fake_agent_cmd(
-    cmd_args: list[str],
-    *,
-    use_modal: bool,
-) -> tuple[int, str, str]:
-    """Run the keystone CLI with the given args, returning (exit_code, stdout, stderr).
-
-    When use_modal is False, runs via CliRunner (in-process).
-    When use_modal is True, runs via subprocess (needed for Modal sandbox).
-    """
-    if use_modal:
-        result = run_process(["keystone", *cmd_args], log_prefix="[fake-agent-modal]")
-        return result.returncode, result.stdout, result.stderr
-    else:
-        result = CliRunner().invoke(app, cmd_args)
-        return result.exit_code, result.stdout, result.stderr or ""
-
-
 @pytest.mark.parametrize(
     "execution_mode",
     [
@@ -221,20 +203,20 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path, execution_mode: str)
         cmd += ["--run_agent_locally_with_dangerously_skip_permissions"]
 
     logger.info("Running: %s", " ".join(cmd))
-    exit_code, stdout, stderr = _run_fake_agent_cmd(cmd, use_modal=use_modal)
+    result = CliRunner().invoke(app, cmd)
 
-    assert exit_code == 0, f"Process failed: {stderr}"
-    assert "CACHE MISS" in stderr, "Expected cache miss on first run"
+    assert result.exit_code == 0, f"Process failed: {result.stderr}"
+    assert "CACHE MISS" in result.stderr, "Expected cache miss on first run"
 
     # Check that status lines were emitted to stdout (rich prints in blue)
-    if "BOOTSTRAP_DEVCONTAINER_STATUS:" not in stdout:
-        print(f"STDOUT: {stdout}")
-        print(f"STDERR: {stderr}")
-    assert "BOOTSTRAP_DEVCONTAINER_STATUS:" in stdout, "Expected status lines in stdout"
+    if "BOOTSTRAP_DEVCONTAINER_STATUS:" not in result.stdout:
+        print(f"STDOUT: {result.stdout}")
+        print(f"STDERR: {result.stderr}")
+    assert "BOOTSTRAP_DEVCONTAINER_STATUS:" in result.stdout, "Expected status lines in stdout"
 
     # Parse the JSON output (last line after status messages)
     # Find the JSON object in stdout (it spans multiple lines)
-    stdout_lines = stdout.strip().split("\n")
+    stdout_lines = result.stdout.strip().split("\n")
     json_start = None
     for i, line in enumerate(stdout_lines):
         if line.strip() == "{":
@@ -315,10 +297,10 @@ def test_e2e_fake_agent(tmp_path: Path, project_root: Path, execution_mode: str)
     else:
         cmd2 += ["--run_agent_locally_with_dangerously_skip_permissions"]
 
-    exit_code2, _stdout2, stderr2 = _run_fake_agent_cmd(cmd2, use_modal=use_modal)
+    result2 = CliRunner().invoke(app, cmd2)
 
-    assert exit_code2 == 0, f"Cached run failed: {stderr2}"
-    assert "CACHE HIT" in stderr2, "Expected cache hit on second run"
+    assert result2.exit_code == 0, f"Cached run failed: {result2.stderr}"
+    assert "CACHE HIT" in result2.stderr, "Expected cache hit on second run"
     # Verify devcontainer was restored from cache
     assert (project_root2 / ".devcontainer" / "devcontainer.json").exists()
 

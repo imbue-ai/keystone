@@ -24,17 +24,16 @@ console = Console()
 @app.command()
 def run(
     repo_list_path: Path = typer.Option(..., "--repo_list_path", help="Path to repo_list.jsonl"),
-    clone_dir: Path = typer.Option(
+    s3_output_prefix: str = typer.Option(
         ...,
-        "--clone_dir",
-        help="Directory for pristine repo clones (cached)",
+        "--s3_output_prefix",
+        help="S3 prefix for per-repo results (e.g. s3://bucket/evals/2026-02-20/)",
     ),
-    worktree_dir: Path = typer.Option(
-        ...,
-        "--worktree_dir",
-        help="Directory for repo worktrees",
+    s3_repo_cache_prefix: str = typer.Option(
+        "s3://int8-datasets/keystone/evals/repo-tarballs/",
+        "--s3_repo_cache_prefix",
+        help="S3 prefix for cached repo tarballs",
     ),
-    output_path: Path = typer.Option(None, "--output_path", help="Path to write JSON output"),
     max_budget_usd: float = typer.Option(
         1.0, "--max_budget_usd", help="Maximum budget per repo in USD"
     ),
@@ -67,19 +66,18 @@ def run(
     eval_config = EvalConfig(
         agent_config=agent_config,
         max_workers=max_workers,
+        s3_output_prefix=s3_output_prefix,
+        s3_repo_cache_prefix=s3_repo_cache_prefix,
     )
 
     console.print(f"[bold]Running eval on {repo_list_path}[/bold]")
-    console.print(f"  Clone dir: {clone_dir}")
-    console.print(f"  Worktree dir: {worktree_dir}")
+    console.print(f"  S3 output: {s3_output_prefix}")
+    console.print(f"  S3 repo cache: {s3_repo_cache_prefix}")
     console.print(f"  Max budget: ${max_budget_usd}")
 
     output = eval_flow(
         repo_list_path=str(repo_list_path),
-        clone_dir=str(clone_dir),
-        worktree_dir=str(worktree_dir),
         eval_config=eval_config,
-        output_path=str(output_path) if output_path else None,
         limit=limit,
     )
 
@@ -89,14 +87,12 @@ def run(
 
     for result in output.results:
         status = "[green]✓[/green]" if result.success else "[red]✗[/red]"
-        repo_name = result.repo_entry.repo.split("/")[-1]
-        console.print(f"  {status} {repo_name}")
+        console.print(f"  {status} {result.repo_entry.id}")
         if not result.success and result.error_message:
             for line in result.error_message.strip().split("\n")[:3]:
                 console.print(f"      {line[:100]}")
 
-    if output_path:
-        console.print(f"\nOutput written to: {output_path}")
+    console.print(f"\nResults uploaded to: {s3_output_prefix}")
 
 
 if __name__ == "__main__":

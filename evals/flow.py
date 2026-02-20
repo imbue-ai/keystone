@@ -1,19 +1,23 @@
 """Prefect flow for eval harness.
 
-Clones repos, creates worktrees, and runs keystone CLI on each.
+Clones repos to S3 tarballs, then runs keystone on each.
+Per-repo results are uploaded to S3 as they complete.
 """
 
+import contextlib
 import json
 import logging
-import shutil
 import subprocess
+import tempfile
 import traceback
+from collections import Counter
 from pathlib import Path
+from typing import Any
 
-from config import AgentConfig, EvalConfig, EvalOutput, RepoEntry, RepoResult, resolve_path
+import fsspec
+from config import EvalConfig, EvalOutput, RepoEntry, RepoResult, resolve_path
 from prefect import flow, get_run_logger, task
-from prefect.futures import wait
-from prefect.tasks import task_input_hash
+from prefect.futures import PrefectFuture, wait
 
 from keystone.process_runner import run_process
 from keystone.version import get_version_info
@@ -34,221 +38,300 @@ def _run_git(
     )
 
 
-@task(
-    name="clone_repo",
-    description="Clone a repository to local cache",
-    cache_key_fn=task_input_hash,
-    cache_expiration=None,  # Never expire - repos are immutable at a given URL
-)
-def clone_repo_task(
-    repo_url: str,
-    clone_dir: Path,
-) -> tuple[Path, str]:
-    """Clone a repo to the cache directory.
+def _s3_exists(path: str) -> bool:
+    """Check if an S3 path exists using fsspec."""
+    fs, _ = fsspec.core.url_to_fs(path)
+    return fs.exists(path)  # type: ignore[no-any-return]
 
-    Returns (repo_path, commit_hash).
-    Prefect caches this based on (repo_url, clone_dir).
+
+def _s3_write_bytes(path: str, data: bytes) -> None:
+    """Write bytes to an S3 path using fsspec."""
+    with fsspec.open(path, "wb") as f:
+        f.write(data)  # type: ignore[union-attr]
+
+
+def _s3_write_text(path: str, text: str) -> None:
+    """Write text to an S3 path using fsspec."""
+    with fsspec.open(path, "w") as f:
+        f.write(text)  # type: ignore[union-attr]
+
+
+def _s3_read_bytes(path: str) -> bytes:
+    """Read bytes from an S3 path using fsspec."""
+    with fsspec.open(path, "rb") as f:
+        return f.read()  # type: ignore[union-attr]
+
+
+def _tarball_cache_key(
+    context: object,  # noqa: ARG001
+    parameters: dict[str, Any],
+) -> str | None:
+    """Cache key for archive_repo_task: just the repo URL.
+
+    The tarball is immutable once created (pinned at clone-time HEAD).
+    To re-snapshot a repo, bump the cache_prefix or clear Prefect result cache.
+    """
+    repo_entry: RepoEntry = parameters["repo_entry"]  # type: ignore[assignment]
+    cache_prefix: str = parameters["s3_cache_prefix"]  # type: ignore[assignment]
+    return f"archive_repo:{cache_prefix}:{repo_entry.repo}"
+
+
+@task(
+    name="archive_repo",
+    description="Clone a repo and upload a git archive tarball to S3",
+    cache_key_fn=_tarball_cache_key,
+    cache_expiration=None,  # Never expire - tarballs are immutable
+)
+def archive_repo_task(
+    repo_entry: RepoEntry,
+    s3_cache_prefix: str,
+) -> tuple[str, str]:
+    """Clone a repo, create a git archive tarball, upload to S3.
+
+    Returns (s3_tarball_path, commit_hash).
+    Prefect caches this based on (repo_url, s3_cache_prefix).
     """
     log = get_run_logger()
+    repo_url = repo_entry.repo
+    repo_id = repo_entry.id
 
-    # Derive a directory name from the repo URL
-    # e.g., https://github.com/psf/requests -> psf_requests
-    repo_name = repo_url.rstrip("/").split("/")[-2] + "_" + repo_url.rstrip("/").split("/")[-1]
-    repo_name = repo_name.replace(".git", "")
-    repo_path = clone_dir / repo_name
+    s3_tarball_path = f"{s3_cache_prefix.rstrip('/')}/{repo_id}.tar.gz"
 
-    if repo_path.exists():
-        # Already cloned, just fetch latest and get HEAD
-        log.info(f"Repo already exists at {repo_path}, fetching...")
-        _run_git(["fetch", "--all"], cwd=repo_path)
-    else:
-        # Clone fresh
-        log.info(f"Cloning {repo_url} to {repo_path}")
-        clone_dir.mkdir(parents=True, exist_ok=True)
-        _run_git(["clone", repo_url, str(repo_path)])
+    # Check if tarball already exists on S3
+    if _s3_exists(s3_tarball_path):
+        log.info(f"Tarball already exists at {s3_tarball_path}, skipping clone")
+        # We need the commit hash — store it alongside the tarball
+        meta_path = f"{s3_cache_prefix.rstrip('/')}/{repo_id}.commit"
+        with fsspec.open(meta_path, "r") as f:
+            commit_hash = f.read().strip()  # type: ignore[union-attr]
+        return s3_tarball_path, commit_hash
 
-    # Get current HEAD commit
-    result = _run_git(["rev-parse", "HEAD"], cwd=repo_path)
-    commit_hash = result.stdout.strip()
-    log.info(f"Repo {repo_url} at commit {commit_hash[:12]}")
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        clone_path = Path(tmp_dir) / repo_id
+        log.info(f"Cloning {repo_url}...")
+        _run_git(["clone", "--depth=1", repo_url, str(clone_path)])
 
-    return repo_path, commit_hash
+        # Get HEAD commit
+        result = _run_git(["rev-parse", "HEAD"], cwd=clone_path)
+        commit_hash = result.stdout.strip()
+        log.info(f"{repo_id} at commit {commit_hash[:12]}")
+
+        # Create git archive tarball
+        archive_result = subprocess.run(
+            ["git", "archive", "--format=tar.gz", "-o", str(clone_path / "archive.tar.gz"), "HEAD"],
+            cwd=clone_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        if archive_result.returncode != 0:
+            raise RuntimeError(f"git archive failed: {archive_result.stderr}")
+
+        tarball_bytes = (clone_path / "archive.tar.gz").read_bytes()
+
+        # Upload tarball + commit hash to S3
+        log.info(f"Uploading {len(tarball_bytes)} bytes to {s3_tarball_path}")
+        _s3_write_bytes(s3_tarball_path, tarball_bytes)
+        _s3_write_text(
+            f"{s3_cache_prefix.rstrip('/')}/{repo_id}.commit",
+            commit_hash,
+        )
+
+    return s3_tarball_path, commit_hash
 
 
 def _process_repo_task_name(parameters: dict[str, object]) -> str:
-    """Derive a human-friendly task-run name from the repo URL."""
+    """Derive a human-friendly task-run name from the repo id."""
     repo_entry: RepoEntry = parameters["repo_entry"]  # type: ignore[assignment]
-    short_name = repo_entry.repo.rstrip("/").split("/")[-1].replace(".git", "")
-    return f"process_repo/{short_name}"
+    return f"process_repo/{repo_entry.id}"
 
 
 @task(
     name="process_repo",
-    task_run_name=_process_repo_task_name,  # type: ignore[reportArgumentType]  # prefect resolves callback params at runtime
-    description="Run keystone on a repo worktree",
-    retries=1,
-    retry_delay_seconds=60,
+    task_run_name=_process_repo_task_name,  # type: ignore[reportArgumentType]
+    description="Run keystone on a repo",
+    retries=0,
 )
 def process_repo_task(
     repo_entry: RepoEntry,
-    clone_dir: Path,
-    worktree_dir: Path,
-    agent_config: AgentConfig,
+    s3_tarball_path: str,
+    commit_hash: str,
+    eval_config: EvalConfig,
 ) -> RepoResult:
     """Process a single repo.
 
-    1. Clone/fetch repo to clone_dir (cached)
-    2. Create worktree in worktree_dir
+    1. Download tarball from S3
+    2. Extract to temp dir, init git
     3. Run keystone CLI
-    4. Return result
+    4. Upload result to S3
+    5. Return result
     """
     log = get_run_logger()
-    repo_url = repo_entry.repo
+    repo_id = repo_entry.id
+    agent_config = eval_config.agent_config
+    s3_output_prefix = eval_config.s3_output_prefix.rstrip("/")
+    repo_output_prefix = f"{s3_output_prefix}/{repo_id}"
+
+    repo_entry.commit_hash = commit_hash
 
     try:
-        # Step 1: Clone (cached by Prefect)
-        repo_path, commit_hash = clone_repo_task.fn(repo_url, clone_dir)
-        repo_entry.commit_hash = commit_hash
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            work_path = Path(tmp_dir) / repo_id
 
-        # Step 2: Create worktree
-        # Derive worktree name from repo
-        repo_name = repo_path.name
-        work_path = worktree_dir / f"{repo_name}_{commit_hash[:8]}"
+            # Step 1: Download and extract tarball
+            log.info(f"[{repo_id}] Downloading tarball from {s3_tarball_path}")
+            tarball_bytes = _s3_read_bytes(s3_tarball_path)
+            tarball_file = Path(tmp_dir) / "archive.tar.gz"
+            tarball_file.write_bytes(tarball_bytes)
 
-        if work_path.exists():
-            # Clean up existing worktree
-            shutil.rmtree(work_path, ignore_errors=True)
+            work_path.mkdir()
+            subprocess.run(
+                ["tar", "xzf", str(tarball_file), "-C", str(work_path)],
+                check=True,
+            )
 
-        # Prune stale worktree records (e.g., from deleted directories)
-        _run_git(["worktree", "prune"], cwd=repo_path)
+            # Init as git repo (keystone requires it)
+            _run_git(["init"], cwd=work_path)
+            _run_git(["add", "-A"], cwd=work_path)
+            _run_git(
+                [
+                    "-c",
+                    "user.name=eval",
+                    "-c",
+                    "user.email=eval@eval",
+                    "commit",
+                    "-m",
+                    "Initial commit",
+                ],
+                cwd=work_path,
+            )
 
-        work_path.parent.mkdir(parents=True, exist_ok=True)
-        _run_git(["worktree", "add", str(work_path), "HEAD"], cwd=repo_path)
-        log.info(f"Created worktree at {work_path}")
+            # Step 2: Run keystone CLI
+            test_artifacts_dir = work_path / ".keystone_artifacts"
+            test_artifacts_dir.mkdir(exist_ok=True)
+            result_file = work_path / "keystone_result.json"
 
-        # Step 3: Run CLI
-        test_artifacts_dir = work_path / ".keystone_artifacts"
-        test_artifacts_dir.mkdir(exist_ok=True)
+            cmd = [
+                "uv",
+                "run",
+                "keystone",
+                "--project_root",
+                str(work_path),
+                "--test_artifacts_dir",
+                str(test_artifacts_dir),
+                "--max_budget_usd",
+                str(agent_config.max_budget_usd),
+                "--output_file",
+                str(result_file),
+                "--agent_time_limit_seconds",
+                str(agent_config.timeout_minutes * 60),
+                "--agent_cmd",
+                agent_config.agent_cmd,
+                "--agent_in_modal",
+                "--docker_cache_secret",
+                agent_config.docker_cache_secret,
+            ]
 
-        result_file = work_path / "keystone_result.json"
+            if agent_config.log_db:
+                cmd.extend(["--log_db", str(resolve_path(agent_config.log_db))])
+            if agent_config.require_cache_hit:
+                cmd.append("--require_cache_hit")
+            if agent_config.no_cache_replay:
+                cmd.append("--no_cache_replay")
 
-        cmd = [
-            "uv",
-            "run",
-            "keystone",
-            "--project_root",
-            str(work_path),
-            "--test_artifacts_dir",
-            str(test_artifacts_dir),
-            "--max_budget_usd",
-            str(agent_config.max_budget_usd),
-            "--output_file",
-            str(result_file),
-            "--agent_time_limit_seconds",
-            str(agent_config.timeout_minutes * 60),
-            "--agent_cmd",
-            agent_config.agent_cmd,
-        ]
+            log.info(f"[{repo_id}] Running keystone...")
 
-        cmd.append("--agent_in_modal")
+            # Stream stdout at INFO and stderr at DEBUG to avoid WARNING spam
+            # in the Prefect UI. Only keystone status/summary lines are interesting.
+            def _log_stdout(line: str) -> None:
+                log.info(f"[{repo_id}] {line}")
 
-        if agent_config.log_db:
-            cmd.extend(["--log_db", str(resolve_path(agent_config.log_db))])
+            def _log_stderr(line: str) -> None:
+                log.debug(f"[{repo_id}] {line}")
 
-        if agent_config.require_cache_hit:
-            cmd.append("--require_cache_hit")
+            proc = run_process(
+                cmd,
+                log_prefix=f"[{repo_id}]",
+                stdout_callback=_log_stdout,
+                stderr_callback=_log_stderr,
+            )
 
-        if agent_config.no_cache_replay:
-            cmd.append("--no_cache_replay")
+            # Step 3: Parse result
+            bootstrap_result = None
+            if result_file.exists():
+                try:
+                    bootstrap_result = json.loads(result_file.read_text())
+                except json.JSONDecodeError:
+                    log.warning(f"[{repo_id}] Failed to parse keystone_result.json")
 
-        cmd.extend(["--docker_cache_secret", agent_config.docker_cache_secret])
+            success = proc.returncode == 0
+            error_message = proc.stderr[:1000] if not success else None
 
-        log.info(f"Running: {' '.join(cmd[:8])}...")
+            if not success:
+                log.error(f"[{repo_id}] keystone failed (exit code {proc.returncode})")
 
-        # Use streaming process runner to forward CLI output in real-time
-        # IMPORTANT: Run from our repo root, NOT the target repo's worktree.
-        # If cwd is the target repo, `uv run` sees that repo's pyproject.toml and tries to
-        # create a venv and install its dependencies locally (e.g. compiling pytorch).
-        # The --project_root CLI arg already tells keystone where the target is.
-        repo_name = repo_path.name
+            result = RepoResult(
+                repo_entry=repo_entry,
+                success=success,
+                error_message=error_message,
+                bootstrap_result=bootstrap_result,
+            )
 
-        # Forward all CLI stdout/stderr to the Prefect logger so it appears
-        # on the dashboard (print() alone doesn't show up there).
-        def _log_stdout(line: str) -> None:
-            log.info(f"[{repo_name}] {line}")
-
-        def _log_stderr(line: str) -> None:
-            log.warning(f"[{repo_name}] {line}")
-
-        proc = run_process(
-            cmd,
-            log_prefix=f"[{repo_name}]",
-            stdout_callback=_log_stdout,
-            stderr_callback=_log_stderr,
-        )
-
-        # Step 4: Parse result
-        bootstrap_result = None
-        if result_file.exists():
+            # Step 4: Upload result to S3 (even on failure, for debugging)
             try:
-                bootstrap_result = json.loads(result_file.read_text())
-            except json.JSONDecodeError:
-                log.warning(f"Failed to parse {result_file}")
+                _s3_write_text(
+                    f"{repo_output_prefix}/eval_result.json",
+                    result.model_dump_json(indent=2),
+                )
+                # Upload stderr log separately for debugging
+                if proc.stderr:
+                    _s3_write_text(
+                        f"{repo_output_prefix}/keystone_stderr.log",
+                        proc.stderr,
+                    )
+                log.info(f"[{repo_id}] Uploaded results to {repo_output_prefix}/")
+            except Exception as upload_err:
+                log.warning(f"[{repo_id}] Failed to upload to S3: {upload_err}")
 
-        success = proc.returncode == 0
+            # If keystone failed, raise so Prefect marks the task as Failed
+            if not success:
+                raise RuntimeError(
+                    f"keystone failed for {repo_id} (exit code {proc.returncode}): "
+                    f"{error_message or 'no error message'}"
+                )
 
-        if not success:
-            log.error(f"CLI failed: {proc.stderr[:500]}")
+            return result
 
-        return RepoResult(
-            repo_entry=repo_entry,
-            success=success,
-            error_message=proc.stderr[:1000] if not success else None,
-            bootstrap_result=bootstrap_result,
-        )
-
-    except subprocess.TimeoutExpired:
-        return RepoResult(
-            repo_entry=repo_entry,
-            success=False,
-            error_message=f"Timeout after {agent_config.timeout_minutes} minutes",
-        )
+    except RuntimeError:
+        # Re-raise RuntimeError (keystone failure) — Prefect marks task as Failed
+        raise
     except Exception as e:
-        return RepoResult(
+        error_msg = f"{e}\n{traceback.format_exc()}"
+        result = RepoResult(
             repo_entry=repo_entry,
             success=False,
-            error_message=f"{e}\n{traceback.format_exc()}",
+            error_message=error_msg,
         )
-    finally:
-        # Clean up worktree (but keep the clone)
-        # TODO: Re-enable worktree cleanup after debugging
-        # if "work_path" in locals() and work_path.exists():
-        #     try:
-        #         _run_git(
-        #             ["worktree", "remove", "--force", str(work_path)], cwd=repo_path, check=False
-        #         )
-        #     except Exception:
-        #         shutil.rmtree(work_path, ignore_errors=True)
-        pass
+        # Try to upload failure result
+        with contextlib.suppress(Exception):
+            _s3_write_text(
+                f"{repo_output_prefix}/eval_result.json",
+                result.model_dump_json(indent=2),
+            )
+        raise RuntimeError(f"process_repo failed for {repo_id}: {error_msg}") from e
 
 
 @flow(name="eval_keystone")
 def eval_flow(
     repo_list_path: str,
-    clone_dir: str,
-    worktree_dir: str,
     eval_config: EvalConfig,
-    output_path: str | None = None,
     limit: int | None = None,
 ) -> EvalOutput:
     """Main evaluation flow.
 
     Args:
         repo_list_path: Path to JSONL file with repo entries
-        clone_dir: Directory for pristine repo clones (cached)
-        worktree_dir: Directory for worktrees
         eval_config: Evaluation configuration
-        output_path: Optional path to write JSON output
         limit: Optional limit on number of repos to process
 
     Returns:
@@ -256,41 +339,89 @@ def eval_flow(
     """
     log = get_run_logger()
 
-    # Resolve paths
-    clone_path = resolve_path(clone_dir)
-    worktree_path = resolve_path(worktree_dir)
-    clone_path.mkdir(parents=True, exist_ok=True)
-    worktree_path.mkdir(parents=True, exist_ok=True)
-
     # Load repo list
     repos: list[RepoEntry] = []
     with Path(repo_list_path).open() as f:
-        for line in f:
-            line = line.strip()
-            if line:
-                repos.append(RepoEntry(**json.loads(line)))
+        for line_str in f:
+            line_str = line_str.strip()
+            if line_str:
+                repos.append(RepoEntry(**json.loads(line_str)))
+
+    # Validate unique IDs
+    ids = [r.id for r in repos]
+    if len(ids) != len(set(ids)):
+        dupes = [k for k, v in Counter(ids).items() if v > 1]
+        raise ValueError(f"Duplicate repo IDs found: {dupes}")
 
     log.info(f"Loaded {len(repos)} repos from {repo_list_path}")
 
-    # Apply limit if specified
     if limit is not None:
         repos = repos[:limit]
         log.info(f"Limited to first {limit} repos")
 
-    # Submit all tasks
-    futures = []
+    total = len(repos)
+    s3_cache_prefix = eval_config.s3_repo_cache_prefix
+
+    # Phase 1: Archive all repos to S3 (cached by Prefect)
+    log.info(f"Phase 1: Archiving {total} repos to S3...")
+    archive_futures = []
     for repo_entry in repos:
+        future = archive_repo_task.submit(
+            repo_entry=repo_entry,
+            s3_cache_prefix=s3_cache_prefix,
+        )
+        archive_futures.append((repo_entry, future))
+
+    wait([f for _, f in archive_futures])
+    archives: list[tuple[RepoEntry, str, str]] = []  # (entry, s3_path, commit)
+    for repo_entry, future in archive_futures:
+        s3_path, commit_hash = future.result()
+        archives.append((repo_entry, s3_path, commit_hash))
+
+    log.info(f"Phase 1 complete: {len(archives)} repos archived")
+
+    # Phase 2: Run keystone on each repo
+    log.info(f"Phase 2: Running keystone on {total} repos...")
+    process_futures: list[tuple[RepoEntry, PrefectFuture[RepoResult]]] = []
+    for repo_entry, s3_path, commit_hash in archives:
         future = process_repo_task.submit(
             repo_entry=repo_entry,
-            clone_dir=clone_path,
-            worktree_dir=worktree_path,
-            agent_config=eval_config.agent_config,
+            s3_tarball_path=s3_path,
+            commit_hash=commit_hash,
+            eval_config=eval_config,
         )
-        futures.append(future)
+        process_futures.append((repo_entry, future))
 
-    # Wait and collect
-    wait(futures)
-    results = [f.result() for f in futures]
+    # Collect results as they complete, logging progress
+    wait([f for _, f in process_futures])
+    results: list[RepoResult] = []
+    succeeded = 0
+    failed = 0
+    for repo_entry, future in process_futures:
+        try:
+            result = future.result()
+            results.append(result)
+            succeeded += 1
+            remaining = total - succeeded - failed
+            log.info(
+                f"repo id={repo_entry.id} finished with SUCCESS, "
+                f"{remaining} repos remain in the eval."
+            )
+        except Exception as e:
+            failed += 1
+            remaining = total - succeeded - failed
+            log.info(
+                f"repo id={repo_entry.id} finished with FAILURE, "
+                f"{remaining} repos remain in the eval."
+            )
+            # Create a failure result for the summary
+            results.append(
+                RepoResult(
+                    repo_entry=repo_entry,
+                    success=False,
+                    error_message=str(e),
+                )
+            )
 
     # Build output
     version_info = get_version_info()
@@ -302,15 +433,17 @@ def eval_flow(
         results=results,
     )
 
-    # Write output
-    if output_path:
-        out_path = resolve_path(output_path)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        with out_path.open("w") as f:
-            json.dump(output.model_dump(), f, indent=2)
-        log.info(f"Wrote output to {out_path}")
+    # Upload summary to S3
+    s3_output_prefix = eval_config.s3_output_prefix.rstrip("/")
+    try:
+        _s3_write_text(
+            f"{s3_output_prefix}/eval_summary.json",
+            json.dumps(output.model_dump(), indent=2),
+        )
+        log.info(f"Wrote eval summary to {s3_output_prefix}/eval_summary.json")
+    except Exception as e:
+        log.warning(f"Failed to upload eval summary to S3: {e}")
 
-    success_count = sum(1 for r in results if r.success)
-    log.info(f"Complete: {success_count}/{len(results)} succeeded")
+    log.info(f"Complete: {succeeded}/{total} succeeded, {failed}/{total} failed")
 
     return output

@@ -1,0 +1,24 @@
+# Prefect deployment configuration for the eval harness.
+#
+# Deploy with:
+#   cd evals && prefect deploy
+#
+# This creates a deployment that runs in a Prefect-managed work pool,
+# so the flow executes in the cloud rather than on your laptop.
+
+deployments:
+  - name: eval-keystone
+    entrypoint: flow.py:eval_flow
+    work_pool:
+      name: default
+    parameters:
+      repo_list_path: examples/repos.jsonl
+      eval_config:
+        agent_config:
+          max_budget_usd: 1.0
+          timeout_minutes: 60
+          agent_cmd: claude
+          docker_cache_secret: keystone-docker-registry-config
+        max_workers: 4
+        s3_output_prefix: "s3://int8-datasets/keystone/evals/runs/default/"
+        s3_repo_cache_prefix: "s3://int8-datasets/keystone/evals/repo-tarballs/"

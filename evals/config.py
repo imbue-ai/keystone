@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 class RepoEntry(BaseModel):
     """A single entry from the repo_list JSONL file."""
 
+    id: str = Field(..., description="Unique short identifier (e.g. 'requests')")
     repo: str = Field(..., description="Git URL or local path to the repository")
     # Optional metadata (preserved from input, not used by eval)
     rank: int | None = None
@@ -58,6 +59,14 @@ class EvalConfig(BaseModel):
 
     agent_config: AgentConfig = Field(default_factory=AgentConfig)
     max_workers: int = Field(default=4, description="Max parallel workers")
+    s3_output_prefix: str = Field(
+        ...,
+        description="S3 prefix for per-repo results (e.g. s3://bucket/evals/2026-02-20/)",
+    )
+    s3_repo_cache_prefix: str = Field(
+        default="s3://int8-datasets/keystone/evals/repo-tarballs/",
+        description="S3 prefix for cached repo tarballs",
+    )
 
 
 class RepoResult(BaseModel):

@@ -50,9 +50,9 @@ Deploy the flow to a Prefect-managed work pool so it runs in the cloud instead o
 # 1. Create a managed work pool
 prefect work-pool create keystone-eval --type prefect:managed
 
-# 2. Store AWS credentials as Prefect Secrets
-prefect block create secret/aws-access-key-id --value "AKIA..."
-prefect block create secret/aws-secret-access-key --value "..."
+# 2. Store AWS credentials as Prefect Secrets (pulls from ~/.aws/credentials)
+prefect block create secret/aws-access-key-id --value "$(aws configure get aws_access_key_id)"
+prefect block create secret/aws-secret-access-key --value "$(aws configure get aws_secret_access_key)"
 
 # 3. Deploy the flow
 cd evals

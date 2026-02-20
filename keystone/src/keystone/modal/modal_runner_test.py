@@ -6,7 +6,7 @@ import shlex
 
 import modal
 
-from keystone.agent_runner import build_claude_command
+from keystone.llm_provider.claude import ClaudeProvider
 from keystone.modal.image import create_modal_image
 from keystone.modal.modal_runner import run_modal_command
 
@@ -167,7 +167,9 @@ def test_claude_streaming():
                 f"ANTHROPIC_API_KEY={shlex.quote(api_key)}",
                 "timeout",
                 "60",
-                *build_claude_command("Figure out what OS you are on and provide evidence.", 0.10),
+                *ClaudeProvider().build_command(
+                    "Figure out what OS you are on and provide evidence.", 0.10, "claude"
+                ),
             ]
         )
 

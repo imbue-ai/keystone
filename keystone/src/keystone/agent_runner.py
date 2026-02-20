@@ -1,7 +1,6 @@
 """Agent runner abstraction for local and Modal execution."""
 
 import io
-import shlex
 import shutil
 import subprocess
 import tarfile
@@ -13,7 +12,7 @@ from logging import getLogger
 from pathlib import Path
 
 from keystone.agent_log import create_devcontainer_tarball
-from keystone.llm_provider import LLMProvider
+from keystone.llm_provider import AgentProvider
 from keystone.process_runner import run_process
 from keystone.schema import StreamEvent, VerificationResult
 
@@ -21,23 +20,6 @@ logger = getLogger(__name__)
 
 DEFAULT_AGENT_TIMEOUT = 3600
 TIMEOUT_EXIT_CODE = 124  # Exit code used by GNU timeout command
-
-
-def build_claude_command(
-    prompt: str, max_budget_usd: float, agent_cmd: str = "claude"
-) -> list[str]:
-    """Build the command to run the Claude agent.
-
-    Uses the splat pattern for grouping arguments for better readability.
-    """
-    return [
-        *shlex.split(agent_cmd),
-        "--dangerously-skip-permissions",
-        *("--output-format", "stream-json"),
-        "--verbose",
-        *("--max-budget-usd", str(max_budget_usd)),
-        *("-p", prompt),
-    ]
 
 
 class AgentRunner(ABC):
@@ -51,21 +33,17 @@ class AgentRunner(ABC):
         max_budget_usd: float,
         agent_cmd: str,
         time_limit_secs: int,
-        provider: LLMProvider | None = None,
+        provider: AgentProvider,
     ) -> Iterator[StreamEvent]:
-        # FIXME: It's not clear why this is a generator -- we could just return a result object.
-        # It is important that the intermediate output gets logged in a streaming way, but it needn't be a generator.
-        # That would eliminate the need for the separate exit_code method below.
         """Run the agent and yield output events.
 
         Args:
             prompt: The prompt to send to the agent.
             project_archive: Git archive tarball of the project.
             max_budget_usd: Maximum budget for agent inference.
-            agent_cmd: Base command to run the agent (e.g., "claude").
+            agent_cmd: Base command to run the agent.
             time_limit_secs: Maximum time in seconds for agent execution.
-            provider: LLM provider to use for command building. When *None*,
-                falls back to ``build_claude_command`` (backwards compat).
+            provider: LLM provider for command building and output parsing.
 
         Yields:
             StreamEvent for each line of stdout/stderr.
@@ -154,7 +132,7 @@ class LocalAgentRunner(AgentRunner):
         max_budget_usd: float,
         agent_cmd: str,
         time_limit_secs: int,
-        provider: LLMProvider | None = None,
+        provider: AgentProvider,
     ) -> Iterator[StreamEvent]:
         if not self._check_docker_available():
             yield StreamEvent(
@@ -181,10 +159,7 @@ class LocalAgentRunner(AgentRunner):
         def collect_stderr(line: str) -> None:
             events.append(StreamEvent(stream="stderr", line=line))
 
-        if provider is not None:
-            full_cmd = provider.build_command(prompt, max_budget_usd, agent_cmd)
-        else:
-            full_cmd = build_claude_command(prompt, max_budget_usd, agent_cmd)
+        full_cmd = provider.build_command(prompt, max_budget_usd, agent_cmd)
 
         # Add timeout if available
         try:

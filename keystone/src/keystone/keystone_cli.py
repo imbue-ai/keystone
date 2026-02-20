@@ -11,16 +11,13 @@ from rich.console import Console
 
 from keystone.agent_log import (
     AgentLog,
-    AgentRunRecord,
     CLIRunRecord,
     compute_cache_key,
-    extract_devcontainer_tarball,
 )
-from keystone.agent_runner import TIMEOUT_EXIT_CODE, LocalAgentRunner
+from keystone.agent_runner import LocalAgentRunner
+from keystone.cached_runner import CachedAgentRunner, CacheMissError
 from keystone.constants import (
     ANSI_BLUE,
-    ANSI_GREEN,
-    ANSI_MAGENTA,
     ANSI_RED,
     ANSI_RESET,
     STATUS_MARKER,
@@ -33,7 +30,14 @@ from keystone.git_utils import (
     is_git_repo,
 )
 from keystone.junit_report_parser import parse_junit_xml
-from keystone.llm_provider import ProviderConfig, get_provider
+from keystone.llm_provider import (
+    AgentCostEvent,
+    AgentErrorEvent,
+    AgentTextEvent,
+    AgentToolCallEvent,
+    AgentToolResultEvent,
+    get_provider,
+)
 from keystone.logging_utils import ISOFormatter
 from keystone.modal.modal_runner import ModalAgentRunner
 from keystone.prompts import build_agent_prompt
@@ -44,7 +48,6 @@ from keystone.schema import (
     BootstrapResult,
     GeneratedFiles,
     InferenceCost,
-    StreamEvent,
     TokenSpending,
     VerificationResult,
 )
@@ -181,28 +184,22 @@ def bootstrap(
         else:
             console.print("[dim]Docker build cache: not configured[/dim]")
 
-        runner = ModalAgentRunner(docker_cache_secret=docker_cache_secret)
+        inner_runner = ModalAgentRunner(docker_cache_secret=docker_cache_secret)
     else:
         if docker_cache_secret:
             console.print(
                 "[yellow]Warning:[/yellow] --docker_cache_secret is ignored when running locally"
             )
-        runner = LocalAgentRunner()
+        inner_runner = LocalAgentRunner()
 
     # Instantiate the LLM provider
-    provider_config = ProviderConfig(
-        name=provider_name,
-        agent_cmd=agent_cmd,
-    )
-    provider = get_provider(provider_config)
-    # Use provider's default command if agent_cmd wasn't explicitly changed
+    provider = get_provider(provider_name)
     effective_agent_cmd = agent_cmd if agent_cmd is not None else provider.default_cmd
 
     token_spending = TokenSpending()
     total_cost_usd = 0.0
     model_name = ""
     exit_code = 1
-    agent_timed_out = False
     verification_success = False
     agent_summary: AgentStatusMessage | None = None
     status_messages: list[AgentStatusMessage] = []
@@ -214,31 +211,22 @@ def bootstrap(
             message=message,
         )
 
-    # FIXME: Extract this to claude_agent_output_handling.py.
     def check_and_print_status(text: str) -> bool:
-        """Check for status/summary markers in text and print in blue if found.
-
-        Returns True if a marker was found.
-        """
-        # FIXME: Do not use nonlocal, use a class/object to track state.
+        """Check for status/summary markers in text and print in blue if found."""
         nonlocal agent_summary, status_messages
         found = False
         for line in text.split("\n"):
             if STATUS_MARKER in line:
-                # Extract the status message after the marker
                 idx = line.find(STATUS_MARKER)
                 status_msg = line[idx:].strip()
-                # Extract just the message part after the marker
                 msg_content = status_msg[len(STATUS_MARKER) :].strip()
                 status_messages.append(_make_status_message(msg_content))
                 logging.debug(f"Found status marker, printing: {status_msg}")
                 print(f"{ANSI_BLUE}{status_msg}{ANSI_RESET}", flush=True)
                 found = True
             elif SUMMARY_MARKER in line:
-                # Extract the summary message after the marker
                 idx = line.find(SUMMARY_MARKER)
                 full_marker = line[idx:].strip()
-                # Extract just the message part after the marker
                 msg_content = full_marker[len(SUMMARY_MARKER) :].strip()
                 agent_summary = _make_status_message(msg_content)
                 print(f"{ANSI_BLUE}{full_marker}{ANSI_RESET}", flush=True)
@@ -246,56 +234,40 @@ def bootstrap(
         return found
 
     def process_stdout_line(line: str) -> None:
-        """Process a line of agent stdout via the LLM provider's parser."""
+        """Process a line of agent stdout via the LLM provider's event parser."""
         nonlocal total_cost_usd, model_name
-        parsed = provider.parse_stdout_line(line)
-
-        if parsed.unparsed:
-            logging.debug(f"Agent stdout (non-JSON): {line.strip()}")
-            return
-
-        if parsed.text is not None and not check_and_print_status(parsed.text):
-            logging.info(f"Assistant: {parsed.text}")
-
-        if parsed.tool_call is not None:
-            name, input_data = parsed.tool_call
-            logging.info(f"Tool Call: {name}({input_data})")
-
-        if parsed.cost_usd is not None:
-            total_cost_usd = parsed.cost_usd
-
-        if parsed.model is not None:
-            model_name = parsed.model
-
-        # Accumulate token usage deltas
-        token_spending.input += parsed.input_tokens
-        token_spending.cached += parsed.cached_tokens
-        token_spending.output += parsed.output_tokens
-        token_spending.cache_creation += parsed.cache_creation_tokens
-
-        # Log unhandled message types at debug level
-        if (
-            parsed.raw_type
-            and parsed.text is None
-            and parsed.tool_call is None
-            and parsed.cost_usd is None
-        ):
-            logging.debug(f"Agent message type={parsed.raw_type}: {line[:200]}")
+        for event in provider.parse_stdout_line(line):
+            match event:
+                case AgentTextEvent(text=text):
+                    if not check_and_print_status(text):
+                        logging.info(f"Assistant: {text}")
+                case AgentToolCallEvent(name=name, input=input_data):
+                    logging.info(f"Tool Call: {name}({input_data})")
+                case AgentToolResultEvent(tool_name=name, output=output):
+                    logging.info(f"Tool Result: {name} -> {output[:200]}")
+                case AgentCostEvent() as cost:
+                    if cost.cost_usd is not None:
+                        total_cost_usd = cost.cost_usd
+                    if cost.model is not None:
+                        model_name = cost.model
+                    token_spending.input += cost.input_tokens
+                    token_spending.cached += cost.cached_tokens
+                    token_spending.output += cost.output_tokens
+                    token_spending.cache_creation += cost.cache_creation_tokens
+                case AgentErrorEvent(message=msg):
+                    logging.error(f"Agent error: {msg}")
 
     def process_stderr_line(line: str) -> None:
         """Forward agent stderr to our stderr."""
         print(f"Agent stderr: {line}", file=sys.stderr, flush=True)
 
     try:
-        # Set up logging/caching of agentic runs.
-        # Default to ~/.imbue_keystone/log.sqlite if not specified
-        # FIXME: Don't log if there's no argument provided.
+        # Set up logging/caching
         effective_log_db = log_db or str(Path.home() / ".imbue_keystone" / "log.sqlite")
-
         agent_log = AgentLog(effective_log_db)
         cli_run_id = agent_log.generate_run_id()
 
-        # Build agent config (part of cache key)
+        # Build agent config (part of cache key — only behavioral params)
         assert max_budget_usd is not None
         agent_config = AgentConfig(
             agent_cmd=effective_agent_cmd,
@@ -306,8 +278,6 @@ def bootstrap(
 
         # Compute cache key
         cache_key = compute_cache_key(prompt, project_root, agent_config, cache_version)
-
-        # Print cache key components for debugging
         print(
             f"Cache key - git tree: {cache_key.git_tree_hash}, "
             f"prompt MD5: {cache_key.prompt_hash}, "
@@ -316,109 +286,42 @@ def bootstrap(
             file=sys.stderr,
         )
 
-        # Check cache (unless --no_cache_replay)
-        cached_run: AgentRunRecord | None = None
-        cache_hit = False
-        if not no_cache_replay:
-            cached_run = agent_log.lookup_cache(cache_key)
-            if cached_run is not None:
-                cache_hit = True
-
-        # Handle --require_cache_hit
-        if require_cache_hit and not cache_hit:
-            console.print("[red]Error:[/red] --require_cache_hit specified but cache miss")
-            raise typer.Exit(1)
+        # Wrap the runner with caching (cache hit/miss is transparent)
+        runner = CachedAgentRunner(
+            inner=inner_runner,
+            agent_log=agent_log,
+            cache_key=cache_key,
+            cli_run_id=cli_run_id,
+            project_root=project_root,
+            no_cache_replay=no_cache_replay,
+            require_cache_hit=require_cache_hit,
+        )
 
         # Create project archive once - used for both agent run and verification
         project_archive = create_git_archive_bytes(project_root)
 
-        devcontainer_tarball: bytes = b""
-        collected_events: list[StreamEvent] = []
-
-        if cache_hit and cached_run is not None:
-            # Cache hit - replay events and restore .devcontainer
-            print(
-                f"{ANSI_GREEN}CACHE HIT: Replaying cached agent output from {effective_log_db}{ANSI_RESET}",
-                file=sys.stderr,
-            )
-            print(
-                f"  Cached return_code: {cached_run.return_code}, "
-                f"events: {len(cached_run.events)}, "
-                f"tarball size: {len(cached_run.devcontainer_tarball)} bytes",
-                file=sys.stderr,
-            )
-            for event in cached_run.events:
+        # Run agent (or replay from cache — the caller doesn't need to know)
+        try:
+            for event in runner.run(
+                prompt,
+                project_archive,
+                max_budget_usd,
+                effective_agent_cmd,
+                agent_time_limit_seconds,
+                provider,
+            ):
                 if event.stream == "stdout":
                     process_stdout_line(event.line)
                 else:
                     process_stderr_line(event.line)
-            extract_devcontainer_tarball(cached_run.devcontainer_tarball, project_root)
-            exit_code = cached_run.return_code
-            devcontainer_tarball = cached_run.devcontainer_tarball
-        else:
-            # Cache miss (or --no_cache_replay) - run agent
-            if no_cache_replay:
-                print(
-                    f"{ANSI_MAGENTA}CACHE BYPASS (--no_cache_replay): Running agent{ANSI_RESET}",
-                    file=sys.stderr,
-                )
-            else:
-                print(
-                    f"{ANSI_MAGENTA}CACHE MISS: Running agent (log: {effective_log_db}){ANSI_RESET}",
-                    file=sys.stderr,
-                )
+        except CacheMissError as err:
+            console.print("[red]Error:[/red] --require_cache_hit specified but cache miss")
+            raise typer.Exit(1) from err
 
-            try:
-                # FIXME: This feels a little deeply nested for the core logic.
-                for event in runner.run(
-                    prompt,
-                    project_archive,
-                    max_budget_usd,
-                    effective_agent_cmd,
-                    agent_time_limit_seconds,
-                    provider=provider,
-                ):
-                    # Collect all events for logging
-                    collected_events.append(event)
-                    if event.stream == "stdout":
-                        process_stdout_line(event.line)
-                    else:
-                        process_stderr_line(event.line)
-
-                exit_code = runner.exit_code
-                if exit_code == TIMEOUT_EXIT_CODE:
-                    agent_timed_out = True
-
-                # Extract .devcontainer and log the run
-                try:
-                    devcontainer_tarball = runner.get_devcontainer_tarball()
-                    extract_devcontainer_tarball(devcontainer_tarball, project_root)
-
-                    # Extract ~/.claude tarball if available (Modal only)
-                    claude_dir_tarball = runner.get_claude_dir_tarball()
-
-                    # Log agent run (always, regardless of success - for analytics)
-                    agent_run_record = AgentRunRecord(
-                        cli_run_id=cli_run_id,
-                        timestamp=datetime.now(UTC),
-                        cache_key=cache_key,
-                        events=collected_events,
-                        devcontainer_tarball=devcontainer_tarball,
-                        return_code=exit_code,
-                        claude_dir_tarball=claude_dir_tarball,
-                    )
-                    agent_log.log_agent_run(agent_run_record)
-
-                    if exit_code != 0:
-                        print(
-                            f"Agent failed (exit_code={exit_code}), logged but not cached for replay",
-                            file=sys.stderr,
-                        )
-                except Exception as e:
-                    print(f"Warning: could not extract/log .devcontainer: {e}", file=sys.stderr)
-            except Exception as e:
-                print(f"Error running agent: {e}", file=sys.stderr)
-                exit_code = 1
+        exit_code = runner.exit_code
+        cache_hit = runner.cache_hit
+        agent_timed_out = runner.timed_out
+        devcontainer_tarball = runner.get_devcontainer_tarball()
 
         agent_work_seconds = time.monotonic() - start_time
 

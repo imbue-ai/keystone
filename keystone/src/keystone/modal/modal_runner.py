@@ -21,9 +21,8 @@ import modal
 from keystone.agent_runner import (
     TIMEOUT_EXIT_CODE,
     AgentRunner,
-    build_claude_command,
 )
-from keystone.llm_provider import LLMProvider
+from keystone.llm_provider import AgentProvider
 from keystone.modal.image import create_modal_image
 from keystone.prompts import generate_devcontainer_json
 from keystone.schema import StreamEvent, VerificationResult
@@ -323,7 +322,7 @@ ENDJSON
         max_budget_usd: float,
         agent_cmd: str,
         time_limit_secs: int,
-        provider: LLMProvider | None = None,
+        provider: AgentProvider,
     ) -> Iterator[StreamEvent]:
         """Run the agent in the Modal sandbox."""
         self.ensure_sandbox()
@@ -343,7 +342,7 @@ ENDJSON
         max_budget_usd: float,
         agent_cmd: str,
         time_limit_secs: int,
-        provider: LLMProvider | None = None,
+        provider: AgentProvider,
     ) -> Iterator[StreamEvent]:
         """Execute the agent inside the sandbox (sandbox and project already set up)."""
         assert self._sandbox is not None
@@ -362,23 +361,21 @@ ENDJSON
         else:
             logger.warning("No ANTHROPIC_API_KEY found!")
 
-        env_vars = {}
-        if "ANTHROPIC_API_KEY" in auth_env:
-            env_vars["ANTHROPIC_API_KEY"] = auth_env["ANTHROPIC_API_KEY"]
+        # Merge auth env with provider-specific env vars
+        env_vars: dict[str, str] = {}
+        env_vars.update(auth_env)
+        env_vars.update(provider.env_vars())
 
-        # Build agent command
-        # Note: agent_cmd might be "claude" or a full path
-        if provider is not None:
-            cmd_parts = provider.build_command(prompt, max_budget_usd, agent_cmd)
-        else:
-            cmd_parts = build_claude_command(prompt, max_budget_usd, agent_cmd)
+        # Build agent command via provider
+        cmd_parts = provider.build_command(prompt, max_budget_usd, agent_cmd)
 
         # Run agent in project directory
         # We write a wrapper script to avoid quoting hell with 'su -c'
+        export_lines = "\n".join(f"export {k}={shlex.quote(v)}" for k, v in env_vars.items() if v)
         agent_script_content = f"""#!/bin/bash
 set -e
 cd /project
-{f"export ANTHROPIC_API_KEY={shlex.quote(env_vars['ANTHROPIC_API_KEY'])}" if "ANTHROPIC_API_KEY" in env_vars else ""}
+{export_lines}
 exec timeout {time_limit_secs} {shlex.join(cmd_parts)}
 """
         # Upload script using Modal's native filesystem API

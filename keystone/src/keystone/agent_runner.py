@@ -32,7 +32,7 @@ class AgentRunner(ABC):
         project_archive: bytes,
         max_budget_usd: float,
         agent_cmd: str,
-        time_limit_secs: int,
+        time_limit_seconds: int,
         provider: AgentProvider,
     ) -> Iterator[StreamEvent]:
         """Run the agent and yield output events.
@@ -42,7 +42,7 @@ class AgentRunner(ABC):
             project_archive: Git archive tarball of the project.
             max_budget_usd: Maximum budget for agent inference.
             agent_cmd: Base command to run the agent.
-            time_limit_secs: Maximum time in seconds for agent execution.
+            time_limit_seconds: Maximum time in seconds for agent execution.
             provider: LLM provider for command building and output parsing.
 
         Yields:
@@ -131,7 +131,7 @@ class LocalAgentRunner(AgentRunner):
         project_archive: bytes,
         max_budget_usd: float,
         agent_cmd: str,
-        time_limit_secs: int,
+        time_limit_seconds: int,
         provider: AgentProvider,
     ) -> Iterator[StreamEvent]:
         if not self._check_docker_available():
@@ -164,7 +164,7 @@ class LocalAgentRunner(AgentRunner):
         # Add timeout if available
         try:
             subprocess.run(["timeout", "--version"], capture_output=True, check=False)
-            full_cmd = ["timeout", str(time_limit_secs), *full_cmd]
+            full_cmd = ["timeout", str(time_limit_seconds), *full_cmd]
         except FileNotFoundError:
             pass
 

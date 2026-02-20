@@ -144,7 +144,7 @@ def process_repo_task(
             str(agent_config.max_budget_usd),
             "--output_file",
             str(result_file),
-            "--agent_time_limit_secs",
+            "--agent_time_limit_seconds",
             str(agent_config.timeout_minutes * 60),
             "--agent_cmd",
             agent_config.agent_cmd,

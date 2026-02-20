@@ -24,12 +24,12 @@ uv run eval-harness \
     --s3_output_prefix s3://int8-datasets/keystone/evals/runs/$(date +%Y%m%d_%H%M%S)/ \
     --max_budget_usd 1.0
 
-# Run on only the first 3 repos (useful for testing)
+# Run on only the first 2 repos (useful for testing)
 uv run eval-harness \
     --repo_list_path examples/repos.jsonl \
     --s3_output_prefix s3://int8-datasets/keystone/evals/runs/test/ \
     --max_budget_usd 1.0 \
-    --limit 3
+    --limit 2
 
 # Force fresh execution (skip keystone cache)
 uv run eval-harness \

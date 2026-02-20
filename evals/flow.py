@@ -241,10 +241,16 @@ def process_repo_task(
 
             log.info(f"[{repo_id}] Running keystone...")
 
-            # Stream stdout at INFO and stderr at DEBUG to avoid WARNING spam
-            # in the Prefect UI. Only keystone status/summary lines are interesting.
+            # Stream keystone output: status/summary markers at INFO (visible in
+            # Prefect UI), everything else at DEBUG (available if needed).
             def _log_stdout(line: str) -> None:
-                log.info(f"[{repo_id}] {line}")
+                if (
+                    "BOOTSTRAP_DEVCONTAINER_STATUS:" in line
+                    or "BOOTSTRAP_DEVCONTAINER_SUMMARY:" in line
+                ):
+                    log.info(f"[{repo_id}] {line}")
+                else:
+                    log.debug(f"[{repo_id}] {line}")
 
             def _log_stderr(line: str) -> None:
                 log.debug(f"[{repo_id}] {line}")

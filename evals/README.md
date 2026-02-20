@@ -42,14 +42,26 @@ uv run eval-harness run \
 
 ## Usage — Prefect Cloud
 
-Deploy the flow to a Prefect work pool so it runs in the cloud instead of on your laptop.
+Deploy the flow to a Prefect-managed work pool so it runs in the cloud instead of on your laptop.
+
+### One-time setup
 
 ```bash
+# 1. Create a managed work pool
+prefect work-pool create keystone-eval --type prefect:managed
+
+# 2. Store AWS credentials as Prefect Secrets
+prefect block create secret/aws-access-key-id --value "AKIA..."
+prefect block create secret/aws-secret-access-key --value "..."
+
+# 3. Deploy the flow
 cd evals
-
-# One-time: deploy the flow
 prefect deploy
+```
 
+### Running
+
+```bash
 # Trigger a run (uses defaults from prefect.yaml)
 prefect deployment run eval_keystone/eval-keystone
 

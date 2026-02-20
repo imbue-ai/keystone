@@ -1,16 +1,32 @@
 # Prefect deployment configuration for the eval harness.
 #
-# Deploy with:
-#   cd evals && prefect deploy
+# Setup (one-time):
+#   1. Create a managed work pool in Prefect Cloud:
+#        prefect work-pool create keystone-eval --type prefect:managed
 #
-# This creates a deployment that runs in a Prefect-managed work pool,
-# so the flow executes in the cloud rather than on your laptop.
+#   2. Store AWS credentials as Prefect Secrets:
+#        prefect block create secret/aws-access-key-id --value "AKIA..."
+#        prefect block create secret/aws-secret-access-key --value "..."
+#
+#   3. Deploy:
+#        cd evals && prefect deploy
+#
+# Run:
+#   prefect deployment run eval_keystone/eval-keystone
+#
+#   # With overrides:
+#   prefect deployment run eval_keystone/eval-keystone \
+#       --param limit=5
 
 deployments:
   - name: eval-keystone
     entrypoint: flow.py:eval_flow
     work_pool:
-      name: default
+      name: keystone-eval
+      job_variables:
+        env:
+          AWS_ACCESS_KEY_ID: "{{ prefect.blocks.secret.aws-access-key-id }}"
+          AWS_SECRET_ACCESS_KEY: "{{ prefect.blocks.secret.aws-secret-access-key }}"
     parameters:
       repo_list_path: examples/repos.jsonl
       eval_config:

@@ -174,6 +174,17 @@ def process_repo_task(
 
     repo_entry.commit_hash = commit_hash
 
+    # Skip if result already exists on S3 (enables resuming partial runs)
+    existing_result_path = f"{repo_output_prefix}/eval_result.json"
+    if _s3_exists(existing_result_path):
+        log.info(f"[{repo_id}] Result already exists at {existing_result_path}, skipping")
+        try:
+            existing_bytes = _s3_read_bytes(existing_result_path)
+            existing_data = json.loads(existing_bytes)
+            return RepoResult(**existing_data)
+        except Exception as e:
+            log.warning(f"[{repo_id}] Failed to parse existing result, re-running: {e}")
+
     try:
         with tempfile.TemporaryDirectory() as tmp_dir:
             work_path = Path(tmp_dir) / repo_id
@@ -232,6 +243,8 @@ def process_repo_task(
                 agent_config.docker_cache_secret,
             ]
 
+            if agent_config.model is not None:
+                cmd.extend(["--model", agent_config.model.value])
             if agent_config.log_db:
                 cmd.extend(["--log_db", str(resolve_path(agent_config.log_db))])
             if agent_config.require_cache_hit:
@@ -387,38 +400,66 @@ def eval_flow(
     log.info(f"Phase 1 complete: {len(archives)} repos archived")
 
     # Phase 2: Run keystone on each repo
-    log.info(f"Phase 2: Running keystone on {total} repos...")
-    process_futures: list[tuple[RepoEntry, PrefectFuture[RepoResult]]] = []
-    for repo_entry, s3_path, commit_hash in archives:
-        future = process_repo_task.submit(
-            repo_entry=repo_entry,
-            s3_tarball_path=s3_path,
-            commit_hash=commit_hash,
-            eval_config=eval_config,
+    trials_per_repo = eval_config.trials_per_repo
+
+    # When running multiple trials, force disable caching
+    if trials_per_repo > 1 and not eval_config.agent_config.no_cache_replay:
+        log.info(f"trials_per_repo={trials_per_repo} > 1: forcing --no_cache_replay")
+        eval_config = eval_config.model_copy(
+            update={
+                "agent_config": eval_config.agent_config.model_copy(
+                    update={"no_cache_replay": True}
+                )
+            }
         )
-        process_futures.append((repo_entry, future))
+
+    total_tasks = total * trials_per_repo
+    log.info(
+        f"Phase 2: Running keystone on {total} repos"
+        f" ({trials_per_repo} trial(s) each, {total_tasks} total tasks)..."
+    )
+    process_futures: list[tuple[RepoEntry, int, PrefectFuture[RepoResult]]] = []
+    for repo_entry, s3_path, commit_hash in archives:
+        for trial in range(trials_per_repo):
+            # For multiple trials, use a per-trial subdirectory in the S3 output
+            if trials_per_repo > 1:
+                trial_config = eval_config.model_copy(
+                    update={
+                        "s3_output_prefix": f"{eval_config.s3_output_prefix.rstrip('/')}/trial_{trial}",
+                    }
+                )
+            else:
+                trial_config = eval_config
+            future = process_repo_task.submit(
+                repo_entry=repo_entry,
+                s3_tarball_path=s3_path,
+                commit_hash=commit_hash,
+                eval_config=trial_config,
+            )
+            process_futures.append((repo_entry, trial, future))
 
     # Collect results as they complete, logging progress
-    wait([f for _, f in process_futures])
+    wait([f for _, _, f in process_futures])
     results: list[RepoResult] = []
     succeeded = 0
     failed = 0
-    for repo_entry, future in process_futures:
+    for repo_entry, trial, future in process_futures:
+        trial_label = f" trial={trial}" if trials_per_repo > 1 else ""
         try:
             result = future.result()
             results.append(result)
             succeeded += 1
-            remaining = total - succeeded - failed
+            remaining = total_tasks - succeeded - failed
             log.info(
-                f"repo id={repo_entry.id} finished with SUCCESS, "
-                f"{remaining} repos remain in the eval."
+                f"repo id={repo_entry.id}{trial_label} finished with SUCCESS, "
+                f"{remaining} tasks remain in the eval."
             )
         except Exception as e:
             failed += 1
-            remaining = total - succeeded - failed
+            remaining = total_tasks - succeeded - failed
             log.info(
-                f"repo id={repo_entry.id} finished with FAILURE, "
-                f"{remaining} repos remain in the eval."
+                f"repo id={repo_entry.id}{trial_label} finished with FAILURE, "
+                f"{remaining} tasks remain in the eval."
             )
             # Create a failure result for the summary
             results.append(
@@ -450,6 +491,6 @@ def eval_flow(
     except Exception as e:
         log.warning(f"Failed to upload eval summary to S3: {e}")
 
-    log.info(f"Complete: {succeeded}/{total} succeeded, {failed}/{total} failed")
+    log.info(f"Complete: {succeeded}/{total_tasks} succeeded, {failed}/{total_tasks} failed")
 
     return output

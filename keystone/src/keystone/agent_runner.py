@@ -23,7 +23,10 @@ TIMEOUT_EXIT_CODE = 124  # Exit code used by GNU timeout command
 
 
 def build_claude_command(
-    prompt: str, max_budget_usd: float, agent_cmd: str = "claude"
+    prompt: str,
+    max_budget_usd: float,
+    agent_cmd: str = "claude",
+    model: str | None = None,
 ) -> list[str]:
     """Build the command to run the Claude agent.
 
@@ -35,6 +38,7 @@ def build_claude_command(
         *("--output-format", "stream-json"),
         "--verbose",
         *("--max-budget-usd", str(max_budget_usd)),
+        *(("--model", model) if model else ()),
         *("-p", prompt),
     ]
 
@@ -50,6 +54,7 @@ class AgentRunner(ABC):
         max_budget_usd: float,
         agent_cmd: str,
         time_limit_seconds: int,
+        model: str | None = None,
     ) -> Iterator[StreamEvent]:
         # FIXME: It's not clear why this is a generator -- we could just return a result object.
         # It is important that the intermediate output gets logged in a streaming way, but it needn't be a generator.
@@ -150,6 +155,7 @@ class LocalAgentRunner(AgentRunner):
         max_budget_usd: float,
         agent_cmd: str,
         time_limit_seconds: int,
+        model: str | None = None,
     ) -> Iterator[StreamEvent]:
         if not self._check_docker_available():
             yield StreamEvent(
@@ -176,7 +182,7 @@ class LocalAgentRunner(AgentRunner):
         def collect_stderr(line: str) -> None:
             events.append(StreamEvent(stream="stderr", line=line))
 
-        full_cmd = build_claude_command(prompt, max_budget_usd, agent_cmd)
+        full_cmd = build_claude_command(prompt, max_budget_usd, agent_cmd, model=model)
 
         # Add timeout if available
         try:

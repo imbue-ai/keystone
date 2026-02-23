@@ -42,6 +42,7 @@ from keystone.schema import (
     AgentExecution,
     AgentStatusMessage,
     BootstrapResult,
+    ClaudeModel,
     GeneratedFiles,
     InferenceCost,
     StreamEvent,
@@ -76,6 +77,11 @@ def bootstrap(
         ..., "--test_artifacts_dir", help="Directory for test artifacts"
     ),
     agent_cmd: str | None = typer.Option("claude", "--agent_cmd", help="Agent command to run"),
+    model: ClaudeModel | None = typer.Option(
+        None,
+        "--model",
+        help="Claude model to use (sonnet, opus, haiku, opusplan). Passed as --model to claude CLI.",
+    ),
     max_budget_usd: float | None = typer.Option(
         1.0, "--max_budget_usd", help="Maximum dollar amount to spend on agent inference"
     ),
@@ -293,6 +299,7 @@ def bootstrap(
             max_budget_usd=max_budget_usd,
             agent_time_limit_seconds=agent_time_limit_seconds,
             agent_in_modal=agent_in_modal,
+            model=model,
         )
 
         # Compute cache key
@@ -362,7 +369,12 @@ def bootstrap(
             try:
                 # FIXME: This feels a little deeply nested for the core logic.
                 for event in runner.run(
-                    prompt, project_archive, max_budget_usd, agent_cmd, agent_time_limit_seconds
+                    prompt,
+                    project_archive,
+                    max_budget_usd,
+                    agent_cmd,
+                    agent_time_limit_seconds,
+                    model=model.value if model else None,
                 ):
                     # Collect all events for logging
                     collected_events.append(event)

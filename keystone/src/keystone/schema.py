@@ -14,6 +14,15 @@ class StreamType(str, Enum):
     STDERR = "stderr"
 
 
+class ClaudeModel(str, Enum):
+    """Claude model choices for the agent."""
+
+    SONNET = "sonnet"
+    OPUS = "opus"
+    HAIKU = "haiku"
+    OPUSPLAN = "opusplan"
+
+
 class StreamEvent(BaseModel):
     """A single event from the agent's output stream."""
 
@@ -31,6 +40,7 @@ class AgentConfig(BaseModel):
     max_budget_usd: float
     agent_time_limit_seconds: int
     agent_in_modal: bool
+    model: ClaudeModel | None = None
 
     def to_cache_key_json(self) -> str:
         """Stable JSON representation for cache key computation."""

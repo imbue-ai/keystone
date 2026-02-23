@@ -322,13 +322,16 @@ ENDJSON
         max_budget_usd: float,
         agent_cmd: str,
         time_limit_seconds: int,
+        model: str | None = None,
     ) -> Iterator[StreamEvent]:
         """Run the agent in the Modal sandbox."""
         self.ensure_sandbox()
         self.upload_project(project_archive)
 
         try:
-            yield from self._run_agent(prompt, max_budget_usd, agent_cmd, time_limit_seconds)
+            yield from self._run_agent(
+                prompt, max_budget_usd, agent_cmd, time_limit_seconds, model=model
+            )
         except Exception:
             if self._sandbox:
                 self._sandbox.terminate()
@@ -341,6 +344,7 @@ ENDJSON
         max_budget_usd: float,
         agent_cmd: str,
         time_limit_seconds: int,
+        model: str | None = None,
     ) -> Iterator[StreamEvent]:
         """Execute the agent inside the sandbox (sandbox and project already set up)."""
         assert self._sandbox is not None
@@ -365,7 +369,7 @@ ENDJSON
 
         # Build agent command
         # Note: agent_cmd might be "claude" or a full path
-        cmd_parts = build_claude_command(prompt, max_budget_usd, agent_cmd)
+        cmd_parts = build_claude_command(prompt, max_budget_usd, agent_cmd, model=model)
 
         # Run agent in project directory
         # We write a wrapper script to avoid quoting hell with 'su -c'

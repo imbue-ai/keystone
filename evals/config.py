@@ -1,14 +1,25 @@
 """Configuration schemas for the eval harness."""
 
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
+class ClaudeModel(str, Enum):
+    """Claude model choices for the agent."""
+
+    SONNET = "sonnet"
+    OPUS = "opus"
+    HAIKU = "haiku"
+    OPUSPLAN = "opusplan"
+
+
 class RepoEntry(BaseModel):
     """A single entry from the repo_list JSONL file."""
 
+    id: str = Field(..., description="Unique short identifier (e.g. 'requests')")
     repo: str = Field(..., description="Git URL or local path to the repository")
     # Optional metadata (preserved from input, not used by eval)
     rank: int | None = None
@@ -46,6 +57,12 @@ class AgentConfig(BaseModel):
         default=False, description="Skip cache lookup, force fresh execution"
     )
 
+    # Model selection
+    model: ClaudeModel | None = Field(
+        default=None,
+        description="Claude model to use (sonnet, opus, haiku, opusplan)",
+    )
+
     # Docker build cache (Modal secret name)
     docker_cache_secret: str = Field(
         default="keystone-docker-registry-config",
@@ -56,8 +73,23 @@ class AgentConfig(BaseModel):
 class EvalConfig(BaseModel):
     """Top-level eval configuration."""
 
+    # Optional human-readable name for this eval configuration
+    name: str | None = Field(default=None, description="Name for this eval configuration")
+
     agent_config: AgentConfig = Field(default_factory=AgentConfig)
     max_workers: int = Field(default=4, description="Max parallel workers")
+    trials_per_repo: int = Field(
+        default=1,
+        description="Number of trials per repo. When >1, caching is automatically disabled.",
+    )
+    s3_output_prefix: str = Field(
+        ...,
+        description="S3 prefix for per-repo results (e.g. s3://bucket/evals/2026-02-20/)",
+    )
+    s3_repo_cache_prefix: str = Field(
+        default="s3://int8-datasets/keystone/evals/repo-tarballs/",
+        description="S3 prefix for cached repo tarballs",
+    )
 
 
 class RepoResult(BaseModel):
@@ -75,6 +107,18 @@ class EvalOutput(BaseModel):
     keystone_version: dict[str, Any]
     repos: list[RepoEntry]  # Input repos with commit_hash pinned
     results: list[RepoResult]
+
+
+class EvalRunConfig(BaseModel):
+    """Top-level configuration file supporting multiple eval configurations.
+
+    When running from a config file, this is the root object.
+    Each entry in ``configs`` is an independent eval that will be run.
+    """
+
+    repo_list_path: str = Field(..., description="Path to repo_list.jsonl")
+    configs: list[EvalConfig] = Field(..., description="List of eval configurations to run")
+    limit: int | None = Field(default=None, description="Limit to first N repos")
 
 
 def resolve_path(path: str | Path) -> Path:

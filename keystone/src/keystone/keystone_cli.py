@@ -46,6 +46,7 @@ from keystone.schema import (
     AgentExecution,
     AgentStatusMessage,
     BootstrapResult,
+    ClaudeModel,
     GeneratedFiles,
     InferenceCost,
     TokenSpending,
@@ -274,6 +275,7 @@ def bootstrap(
             max_budget_usd=max_budget_usd,
             agent_time_limit_seconds=agent_time_limit_seconds,
             agent_in_modal=agent_in_modal,
+            model=model,
         )
 
         # Compute cache key

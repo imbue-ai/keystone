@@ -4,6 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
     "ipykernel>=7.1.0",
+    "nbformat>=4.2.0",
     "plotly>=6.5.2",
 ]
 

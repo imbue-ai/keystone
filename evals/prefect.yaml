@@ -1,0 +1,40 @@
+# Prefect deployment configuration for the eval harness.
+#
+# Setup (one-time):
+#   1. Create a managed work pool in Prefect Cloud:
+#        prefect work-pool create keystone-eval --type prefect:managed
+#
+#   2. Store AWS credentials as Prefect Secrets:
+#        prefect block create secret/aws-access-key-id --value "AKIA..."
+#        prefect block create secret/aws-secret-access-key --value "..."
+#
+#   3. Deploy:
+#        cd evals && prefect deploy
+#
+# Run:
+#   prefect deployment run eval_keystone/eval-keystone
+#
+#   # With overrides:
+#   prefect deployment run eval_keystone/eval-keystone \
+#       --param limit=5
+
+deployments:
+  - name: eval-keystone
+    entrypoint: flow.py:eval_flow
+    work_pool:
+      name: keystone-eval
+      job_variables:
+        env:
+          AWS_ACCESS_KEY_ID: "{{ prefect.blocks.secret.aws-access-key-id }}"
+          AWS_SECRET_ACCESS_KEY: "{{ prefect.blocks.secret.aws-secret-access-key }}"
+    parameters:
+      repo_list_path: examples/repos.jsonl
+      eval_config:
+        agent_config:
+          max_budget_usd: 1.0
+          timeout_minutes: 60
+          agent_cmd: claude
+          docker_cache_secret: keystone-docker-registry-config
+        max_workers: 4
+        s3_output_prefix: "s3://int8-datasets/keystone/evals/runs/default/"
+        s3_repo_cache_prefix: "s3://int8-datasets/keystone/evals/repo-tarballs/"

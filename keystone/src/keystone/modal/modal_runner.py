@@ -5,7 +5,6 @@ The sandbox is created once and reused for both agent execution and verification
 
 import io
 import logging
-import os
 import queue
 import shlex
 import sys
@@ -135,16 +134,6 @@ def run_modal_command(
 
 _SCRIPT_DIR = Path(__file__).parent
 
-
-def _read_claude_auth() -> dict[str, str]:
-    """Read Claude authentication from environment."""
-    auth_env: dict[str, str] = {}
-
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if api_key:
-        auth_env["ANTHROPIC_API_KEY"] = api_key
-
-    return auth_env
 
 
 class ModalAgentRunner(AgentRunner):
@@ -348,23 +337,11 @@ ENDJSON
         assert self._sandbox is not None
         sb = self._sandbox
 
-        # Set up Claude auth
-        logger.info("Setting up Claude authentication...")
-        auth_env = _read_claude_auth()
-
-        # 4. Run the agent
-        logger.info("Starting agent...")
-
-        # Debug: check what auth we have
-        if "ANTHROPIC_API_KEY" in auth_env:
-            logger.info("Using ANTHROPIC_API_KEY for authentication")
-        else:
-            logger.warning("No ANTHROPIC_API_KEY found!")
-
-        # Merge auth env with provider-specific env vars
-        env_vars: dict[str, str] = {}
-        env_vars.update(auth_env)
-        env_vars.update(provider.env_vars())
+        # Set up provider-specific env vars (e.g. API keys)
+        logger.info("Starting agent (provider=%s)...", provider.name)
+        env_vars = provider.env_vars()
+        if not env_vars:
+            logger.warning("Provider %s returned no env vars (missing API key?)", provider.name)
 
         # Build agent command via provider
         cmd_parts = provider.build_command(prompt, max_budget_usd, agent_cmd)

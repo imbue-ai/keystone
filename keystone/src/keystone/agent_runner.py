@@ -1,6 +1,7 @@
 """Agent runner abstraction for local and Modal execution."""
 
 import io
+import os
 import shutil
 import subprocess
 import tarfile
@@ -13,7 +14,9 @@ from pathlib import Path
 
 from keystone.agent_log import create_devcontainer_tarball
 from keystone.llm_provider import AgentProvider
+from keystone.modal.image import TIMESTAMP_SCRIPT_PATH
 from keystone.process_runner import run_process
+from keystone.prompts import generate_devcontainer_json
 from keystone.schema import StreamEvent, VerificationResult
 
 logger = getLogger(__name__)
@@ -125,6 +128,15 @@ class LocalAgentRunner(AgentRunner):
         except (FileNotFoundError, subprocess.TimeoutExpired):
             return False
 
+    @staticmethod
+    def _with_timeout(seconds: int, cmd: list[str]) -> list[str]:
+        """Prepend GNU timeout to cmd if available, otherwise return cmd unchanged."""
+        try:
+            subprocess.run(["timeout", "--version"], capture_output=True, check=False)
+            return ["timeout", str(seconds), *cmd]
+        except FileNotFoundError:
+            return cmd
+
     def run(
         self,
         prompt: str,
@@ -151,6 +163,22 @@ class LocalAgentRunner(AgentRunner):
         with tarfile.open(fileobj=io.BytesIO(project_archive), mode="r:gz") as tar:
             tar.extractall(self._work_dir, filter="data")
 
+        # Initialize a git repo so agents that require one (e.g. codex) work correctly.
+        subprocess.run(
+            ["git", "init"],
+            cwd=str(self._work_dir),
+            capture_output=True,
+            check=False,
+        )
+
+        # Seed pre-generated helper files into the work directory.
+        # Modal places these at /devcontainer.json and /timestamp_process_output.pl;
+        # locally we put them in the work dir and the prompt addendum points there.
+        (self._work_dir / "devcontainer.json").write_text(generate_devcontainer_json())
+        dest_pl = self._work_dir / "timestamp_process_output.pl"
+        dest_pl.write_bytes(TIMESTAMP_SCRIPT_PATH.read_bytes())
+        dest_pl.chmod(0o755)
+
         events: list[StreamEvent] = []
 
         def collect_stdout(line: str) -> None:
@@ -160,17 +188,12 @@ class LocalAgentRunner(AgentRunner):
             events.append(StreamEvent(stream="stderr", line=line))
 
         full_cmd = provider.build_command(prompt, max_budget_usd, agent_cmd)
-
-        # Add timeout if available
-        try:
-            subprocess.run(["timeout", "--version"], capture_output=True, check=False)
-            full_cmd = ["timeout", str(time_limit_seconds), *full_cmd]
-        except FileNotFoundError:
-            pass
+        full_cmd = self._with_timeout(time_limit_seconds, full_cmd)
 
         result = run_process(
             full_cmd,
             log_prefix="[local_agent]",
+            env={**os.environ, **provider.env_vars()},
             cwd=str(self._work_dir),
             stdout_callback=collect_stdout,
             stderr_callback=collect_stderr,
@@ -233,16 +256,17 @@ class LocalAgentRunner(AgentRunner):
 
             # 1. Build the image
             build_start = time.time()
-            build_cmd = [
-                "timeout",
-                str(image_build_timeout_seconds),
-                "devcontainer",
-                "build",
-                "--workspace-folder",
-                str(work_dir),
-                "--image-name",
-                image_name,
-            ]
+            build_cmd = self._with_timeout(
+                image_build_timeout_seconds,
+                [
+                    "devcontainer",
+                    "build",
+                    "--workspace-folder",
+                    str(work_dir),
+                    "--image-name",
+                    image_name,
+                ],
+            )
             logger.info("Building image: %s", " ".join(build_cmd))
             build_proc = subprocess.run(build_cmd, capture_output=True, text=True)
             image_build_seconds = time.time() - build_start
@@ -263,16 +287,17 @@ class LocalAgentRunner(AgentRunner):
             test_start = time.time()
             # Remove any existing container
             subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
-            test_cmd = [
-                "timeout",
-                str(test_timeout_seconds),
-                "docker",
-                "run",
-                "--name",
-                container_name,
-                image_name,
-                "/run_all_tests.sh",
-            ]
+            test_cmd = self._with_timeout(
+                test_timeout_seconds,
+                [
+                    "docker",
+                    "run",
+                    "--name",
+                    container_name,
+                    image_name,
+                    "/run_all_tests.sh",
+                ],
+            )
             test_run = subprocess.run(test_cmd, capture_output=True, text=True)
             test_execution_seconds = time.time() - test_start
 

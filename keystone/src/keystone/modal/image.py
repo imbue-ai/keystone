@@ -74,8 +74,8 @@ def create_modal_image() -> modal.Image:
             "curl -fsSL https://deb.nodesource.com/setup_20.x | bash -",
         )
         .apt_install("nodejs")
-        # Install devcontainer CLI and Claude CLI
-        .run_commands("npm install -g @devcontainers/cli @anthropic-ai/claude-code")
+        # Install devcontainer CLI and agent CLIs
+        .run_commands("npm install -g @devcontainers/cli @anthropic-ai/claude-code @openai/codex")
         # Add scripts natively
         .add_local_file(START_DOCKERD_SCRIPT_PATH, "/start-dockerd.sh", copy=True)
         .add_local_file(WAIT_FOR_DOCKER_SCRIPT_PATH, "/wait_for_docker.sh", copy=True)

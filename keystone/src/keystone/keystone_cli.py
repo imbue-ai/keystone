@@ -78,7 +78,7 @@ def bootstrap(
     test_artifacts_dir: Path = typer.Option(
         ..., "--test_artifacts_dir", help="Directory for test artifacts"
     ),
-    agent_cmd: str | None = typer.Option("claude", "--agent_cmd", help="Agent command to run"),
+    agent_cmd: str | None = typer.Option(None, "--agent_cmd", help="Agent command to run (default: inferred from --provider)"),
     provider_name: str = typer.Option(
         "claude",
         "--provider",

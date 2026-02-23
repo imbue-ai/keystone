@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shlex
 
 from keystone.llm_provider.base import (
@@ -77,3 +78,7 @@ class ClaudeProvider(AgentProvider):
             )
 
         return events
+
+    def env_vars(self) -> dict[str, str]:
+        key = os.environ.get("ANTHROPIC_API_KEY", "")
+        return {"ANTHROPIC_API_KEY": key} if key else {}

@@ -331,6 +331,14 @@ Bridge networking does not work in this environment due to gVisor/veth restricti
 When using `docker run`, you MUST use `--network=host` for containers to have network access.
 """
 
+LOCAL_ADDENDUM = """
+
+IMPORTANT: You are running locally (not in a Modal sandbox).
+The pre-generated helper files are in your current working directory, NOT at the filesystem root:
+- Use `cp ./devcontainer.json .devcontainer/devcontainer.json`  (NOT `cp /devcontainer.json`)
+- Use `cp ./timestamp_process_output.pl .devcontainer/`         (NOT `cp /timestamp_process_output.pl`)
+"""
+
 OLD_PART = """
 IMPORTANT: Modal's image builder does not support --chown flags in COPY commands.
 Do NOT use `COPY --chown=user:group` syntax. Instead, use separate RUN commands to change ownership:
@@ -345,4 +353,6 @@ def build_agent_prompt(agent_in_modal: bool) -> str:
     prompt = AGENT_PROMPT_TEMPLATE
     if agent_in_modal:
         prompt = prompt + MODAL_ADDENDUM
+    else:
+        prompt = prompt + LOCAL_ADDENDUM
     return prompt

@@ -7,6 +7,7 @@ import shlex
 import modal
 
 from keystone.llm_provider.claude import ClaudeProvider
+from keystone.llm_provider.codex import CodexProvider
 from keystone.modal.image import create_modal_image
 from keystone.modal.modal_runner import run_modal_command
 
@@ -198,6 +199,70 @@ def test_claude_streaming():
         logger.info(f"\nClaude finished with exit code {exit_code}")
         assert exit_code == 0
         logger.info("\nClaude test successful!")
+
+    finally:
+        sb.terminate()
+
+
+def test_codex_streaming():
+    """
+    Verify that Codex CLI can run and stream its output.
+    """
+    logger.info("\nConnecting to Modal for Codex test...")
+    app = modal.App.lookup("keystone-test", create_if_missing=True)
+    image = create_modal_image()
+
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        logger.info("Skipping Codex test: OPENAI_API_KEY not set in environment.")
+        return
+
+    logger.info("Creating sandbox with OPENAI_API_KEY...")
+    sb = modal.Sandbox.create(
+        app=app,
+        image=image,
+        timeout=300,
+        env={"OPENAI_API_KEY": api_key},
+    )
+    try:
+        logger.info(f"Sandbox created: {sb.object_id}")
+
+        logger.info("Running 'codex exec ...'...")
+        # Run Codex as agent user with explicit env
+        codex_cmd = shlex.join(
+            [
+                f"OPENAI_API_KEY={shlex.quote(api_key)}",
+                "timeout",
+                "60",
+                *CodexProvider().build_command(
+                    "Figure out what OS you are on and provide evidence.", 0.0, "codex"
+                ),
+            ]
+        )
+
+        proc = run_modal_command(
+            sb,
+            "su",
+            "agent",
+            "-c",
+            codex_cmd,
+            name="codex",
+            capture=True,
+            pty=True,
+        )
+
+        logger.info("\nStreaming Codex output:")
+        found_content = False
+        for e in proc.stream():
+            logger.info(f"[{e.stream}] {e.line}")
+            if e.line.strip():
+                found_content = True
+
+        assert found_content, "Codex produced no output"
+        exit_code = proc.wait()
+        logger.info(f"\nCodex finished with exit code {exit_code}")
+        assert exit_code == 0
+        logger.info("\nCodex test successful!")
 
     finally:
         sb.terminate()

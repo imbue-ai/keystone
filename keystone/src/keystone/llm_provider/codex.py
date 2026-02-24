@@ -43,17 +43,12 @@ class CodexProvider(AgentProvider):
             *shlex.split(agent_cmd),
             *((f"--model={self.model}",) if self.model else ()),
             "exec",
+            "--sandbox",
+            "danger-full-access",
+            "--skip-git-repo-check",
+            "--json",
+            prompt,
         ]
-        if self.model:
-            cmd.extend(("--model", self.model))
-        cmd.extend(
-            (
-                "--sandbox",
-                "danger-full-access",
-                "--json",
-                prompt,
-            )
-        )
         return cmd
 
     def parse_stdout_line(self, line: str) -> list[AgentEvent]:

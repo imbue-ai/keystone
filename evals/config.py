@@ -42,8 +42,11 @@ class AgentConfig(BaseModel):
     max_budget_usd: float = Field(default=1.0, description="Maximum budget per repo")
     timeout_minutes: int = Field(default=30, description="Timeout per repo in minutes")
 
-    # Agent command (use fake_agent.py for testing)
-    agent_cmd: str = Field(default="claude", description="Agent command to run")
+    # Provider and agent command
+    provider: str = Field(default="claude", description="LLM provider name (claude or codex)")
+    agent_cmd: str | None = Field(
+        default=None, description="Agent command override (default: inferred from provider)"
+    )
 
     # Log database (shared with CLI)
     log_db: str | None = Field(

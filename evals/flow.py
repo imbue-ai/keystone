@@ -236,13 +236,15 @@ def process_repo_task(
                 str(result_file),
                 "--agent_time_limit_seconds",
                 str(agent_config.timeout_minutes * 60),
-                "--agent_cmd",
-                agent_config.agent_cmd,
+                "--provider",
+                agent_config.provider,
                 "--agent_in_modal",
                 "--docker_cache_secret",
                 agent_config.docker_cache_secret,
             ]
 
+            if agent_config.agent_cmd is not None:
+                cmd.extend(["--agent_cmd", agent_config.agent_cmd])
             if agent_config.model is not None:
                 cmd.extend(["--model", agent_config.model.value])
             if agent_config.log_db:

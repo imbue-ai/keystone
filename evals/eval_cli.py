@@ -33,6 +33,7 @@ def _run_single_eval(
     console.print(f"\n[bold]Running eval{label}[/bold]")
     console.print(f"  S3 output: {eval_config.s3_output_prefix}")
     console.print(f"  S3 repo cache: {eval_config.s3_repo_cache_prefix}")
+    console.print(f"  Provider: {eval_config.agent_config.provider}")
     console.print(f"  Max budget: ${eval_config.agent_config.max_budget_usd}")
     if eval_config.agent_config.model:
         console.print(f"  Model: {eval_config.agent_config.model.value}")
@@ -78,6 +79,9 @@ def run(
         "s3://int8-datasets/keystone/evals/repo-tarballs/",
         "--s3_repo_cache_prefix",
         help="S3 prefix for cached repo tarballs",
+    ),
+    provider: str = typer.Option(
+        "claude", "--provider", help="LLM provider name (claude or codex)"
     ),
     max_budget_usd: float = typer.Option(
         1.0, "--max_budget_usd", help="Maximum budget per repo in USD"
@@ -136,6 +140,7 @@ def run(
         raise typer.Exit(1)
 
     agent_config = AgentConfig(
+        provider=provider,
         max_budget_usd=max_budget_usd,
         timeout_minutes=timeout_minutes,
         log_db=log_db,

@@ -1,17 +1,17 @@
 {
   "repo_list_path": "evals/examples/repos.jsonl",
+  "s3_output_prefix": "s3://int8-datasets/keystone/evals/2026-02-24/",
+  "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs/",
   "configs": [
     {
-      "name": "claude-opus-4-6",
+      "name": "claude-opus",
       "agent_config": {
         "provider": "claude",
         "model": "claude-opus-4-6",
         "max_budget_usd": 10.0,
         "timeout_minutes": 45
       },
-      "max_workers": 8,
-      "s3_output_prefix": "s3://int8-datasets/keystone/evals/2026-02-24/claude-opus/",
-      "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs/"
+      "max_workers": 8
     },
     {
       "name": "claude-haiku",
@@ -21,33 +21,27 @@
         "max_budget_usd": 10.0,
         "timeout_minutes": 45
       },
-      "max_workers": 8,
-      "s3_output_prefix": "s3://int8-datasets/keystone/evals/2026-02-24/claude-haiku/",
-      "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs/"
+      "max_workers": 8
     },
     {
-      "name": "codex-gpt-gpt-5.2-codex",
+      "name": "codex-premium",
       "agent_config": {
         "provider": "codex",
         "model": "gpt-5.2-codex",
         "max_budget_usd": 10.0,
         "timeout_minutes": 45
       },
-      "max_workers": 8,
-      "s3_output_prefix": "s3://int8-datasets/keystone/evals/2026-02-24/codex-premium/",
-      "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs/"
+      "max_workers": 8
     },
     {
-      "name": "codex-gpt-5.1-codex-mini",
+      "name": "codex-mini",
       "agent_config": {
         "provider": "codex",
         "model": "gpt-5.1-codex-mini",
         "max_budget_usd": 10.0,
         "timeout_minutes": 45
       },
-      "max_workers": 8,
-      "s3_output_prefix": "s3://int8-datasets/keystone/evals/2026-02-24/codex-mini/",
-      "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs/"
+      "max_workers": 8
     }
   ]
 }

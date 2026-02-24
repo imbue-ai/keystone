@@ -104,38 +104,34 @@ def test_eval_cli_fake_agents_config_file(
     repo_list_path, _repo_paths = sample_repo
     runner = CliRunner()
 
-    # Build 4 EvalConfig entries
+    # Global output dirs (shared repo cache, per-config output subdirs)
+    s3_output_dir = tmp_path / "s3_output"
+    s3_cache_dir = tmp_path / "s3_cache"
+    s3_output_dir.mkdir()
+    s3_cache_dir.mkdir()
+
+    # Build 4 EvalConfig entries (s3 prefixes resolved from globals)
     configs: list[EvalConfig] = []
-    output_dirs: dict[str, Path] = {}
-
     for name, agent_cmd, provider, model in FAKE_AGENT_CONFIGS:
-        s3_output_dir = tmp_path / f"s3_output_{name}"
-        s3_cache_dir = tmp_path / f"s3_cache_{name}"
-        s3_output_dir.mkdir()
-        s3_cache_dir.mkdir()
-        output_dirs[name] = s3_output_dir
-
-        agent_config = AgentConfig(
-            max_budget_usd=1.0,
-            timeout_minutes=1,
-            agent_cmd=agent_cmd,
-            provider=provider,
-            model=model,
-        )
-
         configs.append(
             EvalConfig(
                 name=name,
-                agent_config=agent_config,
+                agent_config=AgentConfig(
+                    max_budget_usd=1.0,
+                    timeout_minutes=1,
+                    agent_cmd=agent_cmd,
+                    provider=provider,
+                    model=model,
+                ),
                 max_workers=1,
-                s3_output_prefix=s3_output_dir.as_uri() + "/",
-                s3_repo_cache_prefix=s3_cache_dir.as_uri() + "/",
             )
         )
 
     # Write the EvalRunConfig JSON
     run_config = EvalRunConfig(
         repo_list_path=str(repo_list_path),
+        s3_output_prefix=s3_output_dir.as_uri() + "/",
+        s3_repo_cache_prefix=s3_cache_dir.as_uri() + "/",
         configs=configs,
     )
     config_file = tmp_path / "eval_config.json"
@@ -153,18 +149,18 @@ def test_eval_cli_fake_agents_config_file(
 
     assert result.exit_code == 0, f"CLI exited with code {result.exit_code}:\n{result.output}"
 
-    # Verify we got 4 distinct output directories
-    assert len(output_dirs) == len(FAKE_AGENT_CONFIGS), "Expected one output dir per config"
-    assert len(set(output_dirs.values())) == len(FAKE_AGENT_CONFIGS), (
+    # Verify we got 4 distinct output subdirectories (one per config name)
+    config_output_dirs = [s3_output_dir / name for name, _, _, _ in FAKE_AGENT_CONFIGS]
+    assert len(set(config_output_dirs)) == len(FAKE_AGENT_CONFIGS), (
         "Output directories should all be distinct"
     )
 
     # Verify each configuration produced results with the correct model embedded
-    for name, _agent_path, _provider, model in FAKE_AGENT_CONFIGS:
-        s3_output_dir = output_dirs[name]
+    for name, _agent_cmd, _provider, model in FAKE_AGENT_CONFIGS:
+        config_dir = s3_output_dir / name
 
         # Check eval_summary.json was written
-        summary_file = s3_output_dir / "eval_summary.json"
+        summary_file = config_dir / "eval_summary.json"
         assert summary_file.exists(), f"Missing eval_summary.json for {name}"
 
         with summary_file.open() as f:
@@ -179,7 +175,7 @@ def test_eval_cli_fake_agents_config_file(
         )
 
         # Verify per-repo result file exists
-        repo_output_dir = s3_output_dir / "python_project"
+        repo_output_dir = config_dir / "python_project"
         result_file = repo_output_dir / "eval_result.json"
         assert result_file.exists(), f"Missing eval_result.json for {name}/python_project"
 

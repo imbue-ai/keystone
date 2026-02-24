@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 
 import typer
-from config import AgentConfig, EvalConfig, EvalRunConfig, LLMModel
+from config import AgentConfig, EvalConfig, EvalOutput, EvalRunConfig, LLMModel
 from flow import eval_flow
 from rich.console import Console
 
@@ -25,42 +25,23 @@ app = typer.Typer(help="Eval harness for keystone")
 console = Console()
 
 
-def _run_single_eval(
-    eval_config: EvalConfig,
-    repo_list_path: str,
-    limit: int | None,
-    config_label: str = "",
-) -> None:
-    """Run a single eval configuration and print results."""
-    label = f" [{config_label}]" if config_label else ""
-    console.print(f"\n[bold]Running eval{label}[/bold]")
-    console.print(f"  S3 output: {eval_config.s3_output_prefix}")
-    console.print(f"  S3 repo cache: {eval_config.s3_repo_cache_prefix}")
-    console.print(f"  Provider: {eval_config.agent_config.provider}")
-    console.print(f"  Max budget: ${eval_config.agent_config.max_budget_usd}")
-    if eval_config.agent_config.model:
-        console.print(f"  Model: {eval_config.agent_config.model.value}")
-    if eval_config.trials_per_repo > 1:
-        console.print(f"  Trials per repo: {eval_config.trials_per_repo}")
+def _print_results(outputs: list[EvalOutput], eval_configs: list[EvalConfig]) -> None:
+    """Print a summary of results for each eval config."""
+    for output, eval_config in zip(outputs, eval_configs, strict=True):
+        label = eval_config.name or "unnamed"
+        success_count = sum(1 for r in output.results if r.success)
+        console.print(
+            f"\n[bold]Results [{label}]: {success_count}/{len(output.results)} succeeded[/bold]"
+        )
 
-    output = eval_flow(
-        repo_list_path=repo_list_path,
-        eval_config=eval_config,
-        limit=limit,
-    )
+        for result in output.results:
+            status = "[green]✓[/green]" if result.success else "[red]✗[/red]"
+            console.print(f"  {status} {result.repo_entry.id}")
+            if not result.success and result.error_message:
+                for line in result.error_message.strip().split("\n")[:3]:
+                    console.print(f"      {line[:100]}")
 
-    # Print summary
-    success_count = sum(1 for r in output.results if r.success)
-    console.print(f"\n[bold]Results{label}: {success_count}/{len(output.results)} succeeded[/bold]")
-
-    for result in output.results:
-        status = "[green]✓[/green]" if result.success else "[red]✗[/red]"
-        console.print(f"  {status} {result.repo_entry.id}")
-        if not result.success and result.error_message:
-            for line in result.error_message.strip().split("\n")[:3]:
-                console.print(f"      {line[:100]}")
-
-    console.print(f"\nResults uploaded to: {eval_config.s3_output_prefix}")
+        console.print(f"  Results uploaded to: {eval_config.s3_output_prefix}")
 
 
 @app.command()
@@ -68,7 +49,7 @@ def run(
     config_file: Path | None = typer.Option(
         None,
         "--config_file",
-        help="Path to JSON config file (EvalRunConfig). When provided, most other CLI flags are ignored.",
+        help="Path to JSON config file (EvalRunConfig).",
     ),
     repo_list_path: Path | None = typer.Option(
         None, "--repo_list_path", help="Path to repo_list.jsonl"
@@ -102,7 +83,7 @@ def run(
     model: LLMModel | None = typer.Option(
         None,
         "--model",
-        help="LLM model to use (claude-haiku-4-5-20251001, claude-opus-4-6, gpt-5.1-codex-mini, gpt-5.2-codex)",
+        help="LLM model to use",
     ),
     require_cache_hit: bool = typer.Option(False, "--require_cache_hit", help="Fail if cache miss"),
     no_cache_replay: bool = typer.Option(False, "--no_cache_replay", help="Force fresh execution"),
@@ -118,23 +99,41 @@ def run(
     There are two modes:
 
     1. **Config file mode** (``--config_file``): Load an ``EvalRunConfig`` JSON
-       file that specifies one or more ``EvalConfig`` entries. Each config is
-       run sequentially.
+       file. Repos are archived once and shared across all eval configs.
 
-    2. **CLI flag mode** (legacy): Build a single ``EvalConfig`` from the
-       individual CLI flags.
+    2. **CLI flag mode**: Build a single ``EvalConfig`` from CLI flags.
     """
     if config_file is not None:
-        # Config file mode: load and run each config
         raw = json.loads(config_file.read_text())
         run_config = EvalRunConfig(**raw)
         effective_limit = limit if limit is not None else run_config.limit
-        for i, eval_cfg in enumerate(run_config.configs):
-            label = eval_cfg.name or f"config {i}"
-            _run_single_eval(eval_cfg, run_config.repo_list_path, effective_limit, label)
+
+        resolved_configs = [
+            run_config.resolve_config(cfg, i) for i, cfg in enumerate(run_config.configs)
+        ]
+
+        # Print plan
+        console.print(f"\n[bold]Eval run: {len(resolved_configs)} configs[/bold]")
+        console.print(f"  Repos: {run_config.repo_list_path}")
+        console.print(f"  S3 output: {run_config.s3_output_prefix}")
+        console.print(f"  S3 repo cache: {run_config.s3_repo_cache_prefix}")
+        for cfg in resolved_configs:
+            console.print(
+                f"  - {cfg.name}: provider={cfg.agent_config.provider}, "
+                f"model={cfg.agent_config.model.value if cfg.agent_config.model else 'default'}"
+            )
+
+        outputs = eval_flow(
+            repo_list_path=run_config.repo_list_path,
+            eval_configs=resolved_configs,
+            s3_repo_cache_prefix=run_config.s3_repo_cache_prefix,
+            limit=effective_limit,
+        )
+
+        _print_results(outputs, resolved_configs)
         return
 
-    # Legacy CLI flag mode
+    # CLI flag mode
     if repo_list_path is None:
         console.print("[red]Error:[/red] --repo_list_path is required (or use --config_file)")
         raise typer.Exit(1)
@@ -154,6 +153,7 @@ def run(
     )
 
     eval_config = EvalConfig(
+        name="cli",
         agent_config=agent_config,
         max_workers=max_workers,
         trials_per_repo=trials_per_repo,
@@ -161,7 +161,14 @@ def run(
         s3_repo_cache_prefix=s3_repo_cache_prefix,
     )
 
-    _run_single_eval(eval_config, str(repo_list_path), limit)
+    outputs = eval_flow(
+        repo_list_path=str(repo_list_path),
+        eval_configs=[eval_config],
+        s3_repo_cache_prefix=s3_repo_cache_prefix,
+        limit=limit,
+    )
+
+    _print_results(outputs, [eval_config])
 
 
 if __name__ == "__main__":

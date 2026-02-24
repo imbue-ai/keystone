@@ -93,13 +93,14 @@ class EvalConfig(BaseModel):
         default=1,
         description="Number of trials per repo. When >1, caching is automatically disabled.",
     )
+    # These are computed from EvalRunConfig globals; not set directly in config files.
     s3_output_prefix: str = Field(
-        ...,
-        description="S3 prefix for per-repo results (e.g. s3://bucket/evals/2026-02-20/)",
+        default="",
+        description="S3 prefix for per-repo results (set by EvalRunConfig, not manually).",
     )
     s3_repo_cache_prefix: str = Field(
-        default="s3://int8-datasets/keystone/evals/repo-tarballs/",
-        description="S3 prefix for cached repo tarballs",
+        default="",
+        description="S3 prefix for cached repo tarballs (set by EvalRunConfig, not manually).",
     )
 
 
@@ -125,11 +126,36 @@ class EvalRunConfig(BaseModel):
 
     When running from a config file, this is the root object.
     Each entry in ``configs`` is an independent eval that will be run.
+
+    ``s3_output_prefix`` and ``s3_repo_cache_prefix`` set defaults for all
+    configs.  Per-config ``s3_output_prefix`` is derived by appending the
+    config name (e.g. ``s3://bucket/evals/run1/`` + ``claude-opus/``).
+    Per-config ``s3_repo_cache_prefix`` is shared across all configs (repos
+    are agent-independent).  Individual configs can still override either.
     """
 
     repo_list_path: str = Field(..., description="Path to repo_list.jsonl")
     configs: list[EvalConfig] = Field(..., description="List of eval configurations to run")
     limit: int | None = Field(default=None, description="Limit to first N repos")
+    s3_output_prefix: str = Field(
+        ...,
+        description="Global S3 output prefix. Each config gets a subdirectory named after the config.",
+    )
+    s3_repo_cache_prefix: str = Field(
+        default="s3://int8-datasets/keystone/evals/repo-tarballs/",
+        description="Global S3 prefix for cached repo tarballs (shared across all configs).",
+    )
+
+    def resolve_config(self, eval_config: EvalConfig, index: int) -> EvalConfig:
+        """Return a copy with s3 prefixes built from the global values."""
+        name = eval_config.name or f"config-{index}"
+        base = self.s3_output_prefix.rstrip("/")
+        return eval_config.model_copy(
+            update={
+                "s3_output_prefix": f"{base}/{name}/",
+                "s3_repo_cache_prefix": self.s3_repo_cache_prefix,
+            }
+        )
 
 
 def resolve_path(path: str | Path) -> Path:

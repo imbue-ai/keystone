@@ -354,25 +354,11 @@ def process_repo_task(
         raise RuntimeError(f"process_repo failed for {repo_id}: {error_msg}") from e
 
 
-@flow(name="eval_keystone")
-def eval_flow(
+def _load_repos(
     repo_list_path: str,
-    eval_config: EvalConfig,
     limit: int | None = None,
-) -> EvalOutput:
-    """Main evaluation flow.
-
-    Args:
-        repo_list_path: Path to JSONL file with repo entries
-        eval_config: Evaluation configuration
-        limit: Optional limit on number of repos to process
-
-    Returns:
-        EvalOutput with version info, pinned repos, and results
-    """
-    log = get_run_logger()
-
-    # Load repo list
+) -> list[RepoEntry]:
+    """Load and validate repo entries from a JSONL file."""
     repos: list[RepoEntry] = []
     with Path(repo_list_path).open() as f:
         for line_str in f:
@@ -380,23 +366,24 @@ def eval_flow(
             if line_str:
                 repos.append(RepoEntry(**json.loads(line_str)))
 
-    # Validate unique IDs
     ids = [r.id for r in repos]
     if len(ids) != len(set(ids)):
         dupes = [k for k, v in Counter(ids).items() if v > 1]
         raise ValueError(f"Duplicate repo IDs found: {dupes}")
 
-    log.info(f"Loaded {len(repos)} repos from {repo_list_path}")
-
     if limit is not None:
         repos = repos[:limit]
-        log.info(f"Limited to first {limit} repos")
 
-    total = len(repos)
-    s3_cache_prefix = eval_config.s3_repo_cache_prefix
+    return repos
 
-    # Phase 1: Archive all repos to S3 (cached by Prefect)
-    log.info(f"Phase 1: Archiving {total} repos to S3...")
+
+def _archive_repos(
+    repos: list[RepoEntry],
+    s3_cache_prefix: str,
+    log: Any,
+) -> list[tuple[RepoEntry, str, str]]:
+    """Archive repos to S3 and return (entry, s3_path, commit_hash) tuples."""
+    log.info(f"Archiving {len(repos)} repos to S3...")
     archive_futures = []
     for repo_entry in repos:
         future = archive_repo_task.submit(
@@ -406,14 +393,22 @@ def eval_flow(
         archive_futures.append((repo_entry, future))
 
     wait([f for _, f in archive_futures])
-    archives: list[tuple[RepoEntry, str, str]] = []  # (entry, s3_path, commit)
+    archives: list[tuple[RepoEntry, str, str]] = []
     for repo_entry, future in archive_futures:
         s3_path, commit_hash = future.result()
         archives.append((repo_entry, s3_path, commit_hash))
 
-    log.info(f"Phase 1 complete: {len(archives)} repos archived")
+    log.info(f"Archiving complete: {len(archives)} repos archived")
+    return archives
 
-    # Phase 2: Run keystone on each repo
+
+def _run_eval_phase(
+    archives: list[tuple[RepoEntry, str, str]],
+    eval_config: EvalConfig,
+    log: Any,
+) -> EvalOutput:
+    """Run keystone on archived repos and return results."""
+    total = len(archives)
     trials_per_repo = eval_config.trials_per_repo
 
     # When running multiple trials, force disable caching
@@ -429,7 +424,7 @@ def eval_flow(
 
     total_tasks = total * trials_per_repo
     log.info(
-        f"Phase 2: Running keystone on {total} repos"
+        f"Running keystone on {total} repos"
         f" ({trials_per_repo} trial(s) each, {total_tasks} total tasks)..."
     )
     process_futures: list[tuple[RepoEntry, int, PrefectFuture[RepoResult]]] = []
@@ -444,7 +439,7 @@ def eval_flow(
             )
             process_futures.append((repo_entry, trial, future))
 
-    # Collect results as they complete, logging progress
+    # Collect results as they complete
     wait([f for _, _, f in process_futures])
     results: list[RepoResult] = []
     succeeded = 0
@@ -467,7 +462,6 @@ def eval_flow(
                 f"repo id={repo_entry.id}{trial_label} finished with FAILURE, "
                 f"{remaining} tasks remain in the eval."
             )
-            # Create a failure result for the summary
             results.append(
                 RepoResult(
                     repo_entry=repo_entry,
@@ -498,5 +492,35 @@ def eval_flow(
         log.warning(f"Failed to upload eval summary to S3: {e}")
 
     log.info(f"Complete: {succeeded}/{total_tasks} succeeded, {failed}/{total_tasks} failed")
+    return output
+
+
+@flow(name="eval_keystone")
+def eval_flow(
+    repo_list_path: str,
+    eval_configs: list[EvalConfig],
+    s3_repo_cache_prefix: str,
+    limit: int | None = None,
+) -> list[EvalOutput]:
+    """Main evaluation flow.
+
+    Archives repos once, then runs each eval config against the same archives.
+    """
+    log = get_run_logger()
+    repos = _load_repos(repo_list_path, limit)
+    log.info(f"Loaded {len(repos)} repos from {repo_list_path}")
+
+    # Phase 1: Archive repos once (shared across all configs)
+    archives = _archive_repos(repos, s3_repo_cache_prefix, log)
+
+    # Phase 2: Run each config against the same archives
+    outputs: list[EvalOutput] = []
+    for i, eval_config in enumerate(eval_configs):
+        label = eval_config.name or f"config-{i}"
+        log.info(f"--- Starting eval [{label}] ---")
+        output = _run_eval_phase(archives, eval_config, log)
+        outputs.append(output)
+
+    return outputs
 
     return output

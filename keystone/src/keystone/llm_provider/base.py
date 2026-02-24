@@ -65,8 +65,8 @@ class AgentErrorEvent(AgentEvent):
 class AgentProvider(ABC):
     """Interface that each LLM backend must implement."""
 
-    # Model ID to pass via --model flag. Set by caller before build_command().
-    model: str | None = None
+    def __init__(self, model: str | None = None) -> None:
+        self.model = model
 
     @property
     @abstractmethod

@@ -201,9 +201,7 @@ def bootstrap(
         inner_runner = LocalAgentRunner()
 
     # Instantiate the LLM provider
-    provider = get_provider(provider_name)
-    if model is not None:
-        provider.model = model.value
+    provider = get_provider(provider_name, model=model.value if model else None)
     effective_agent_cmd = agent_cmd if agent_cmd is not None else provider.default_cmd
 
     token_spending = TokenSpending()

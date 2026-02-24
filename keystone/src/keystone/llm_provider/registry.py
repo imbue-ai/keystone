@@ -16,7 +16,7 @@ PROVIDER_REGISTRY: dict[str, type[AgentProvider]] = {
 }
 
 
-def get_provider(name: str) -> AgentProvider:
+def get_provider(name: str, model: str | None = None) -> AgentProvider:
     """Instantiate a provider by name.
 
     Raises ``ValueError`` if the name is not registered.
@@ -25,4 +25,4 @@ def get_provider(name: str) -> AgentProvider:
     if cls is None:
         available = ", ".join(sorted(PROVIDER_REGISTRY.keys()))
         raise ValueError(f"Unknown LLM provider {name!r}. Available: {available}")
-    return cls()
+    return cls(model=model)

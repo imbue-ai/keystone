@@ -157,6 +157,7 @@ def process_repo_task(
     s3_tarball_path: str,
     commit_hash: str,
     eval_config: EvalConfig,
+    trial: int | None = None,
 ) -> RepoResult:
     """Process a single repo.
 
@@ -170,7 +171,10 @@ def process_repo_task(
     repo_id = repo_entry.id
     agent_config = eval_config.agent_config
     s3_output_prefix = eval_config.s3_output_prefix.rstrip("/")
+    # {prefix}/{repo_id}/ for single-trial, {prefix}/{repo_id}/trial_{n}/ for multi-trial
     repo_output_prefix = f"{s3_output_prefix}/{repo_id}"
+    if trial is not None:
+        repo_output_prefix = f"{repo_output_prefix}/trial_{trial}"
 
     repo_entry.commit_hash = commit_hash
 
@@ -423,20 +427,12 @@ def eval_flow(
     process_futures: list[tuple[RepoEntry, int, PrefectFuture[RepoResult]]] = []
     for repo_entry, s3_path, commit_hash in archives:
         for trial in range(trials_per_repo):
-            # For multiple trials, use a per-trial subdirectory in the S3 output
-            if trials_per_repo > 1:
-                trial_config = eval_config.model_copy(
-                    update={
-                        "s3_output_prefix": f"{eval_config.s3_output_prefix.rstrip('/')}/trial_{trial}",
-                    }
-                )
-            else:
-                trial_config = eval_config
             future = process_repo_task.submit(
                 repo_entry=repo_entry,
                 s3_tarball_path=s3_path,
                 commit_hash=commit_hash,
-                eval_config=trial_config,
+                eval_config=eval_config,
+                trial=trial if trials_per_repo > 1 else None,
             )
             process_futures.append((repo_entry, trial, future))
 

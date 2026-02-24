@@ -180,11 +180,11 @@ def test_e2e_fake_agent(
     """
     use_modal = execution_mode == "modal"
     test_artifacts_dir = tmp_path / "test_artifacts"
-    fake_agent_src = Path(__file__).parent / "fake_agent.py"
+    fake_agent_src = Path(__file__).parent / "fake_claude_agent.py"
     cache_file = tmp_path / "cache.sqlite"
 
-    # fake_agent.py is baked into the Modal image at /usr/local/bin/fake_agent.py
-    agent_cmd_str = "fake_agent.py" if use_modal else str(fake_agent_src)
+    # fake_claude_agent.py is baked into the Modal image at /usr/local/bin/fake_claude_agent.py
+    agent_cmd_str = "fake_claude_agent.py" if use_modal else str(fake_agent_src)
 
     logger.info("=" * 60)
     logger.info("E2E Test with Fake Agent Starting (mode=%s)", execution_mode)
@@ -328,7 +328,7 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path, project_root: Path
     when used against a Rust project, demonstrating proper failure detection.
     """
     test_artifacts_dir = tmp_path / "test_artifacts"
-    fake_agent = Path(__file__).parent / "fake_agent.py"
+    fake_agent = Path(__file__).parent / "fake_claude_agent.py"
 
     logger.info("=" * 60)
     logger.info("E2E Test: Fake Agent on Rust Project (Expected Failure)")

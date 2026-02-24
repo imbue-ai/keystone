@@ -8,12 +8,19 @@ from pydantic import BaseModel, Field
 
 
 class ClaudeModel(str, Enum):
-    """Claude model choices for the agent."""
+    """Model choices for the agent.
+
+    Despite the name (kept for backwards compatibility), this enum includes
+    models from all supported providers.
+    """
 
     SONNET = "sonnet"
     OPUS = "opus"
     HAIKU = "haiku"
     OPUSPLAN = "opusplan"
+    # Codex models
+    GPT_5_CODEX = "gpt-5-codex"
+    O3 = "o3"
 
 
 class RepoEntry(BaseModel):
@@ -40,8 +47,19 @@ class AgentConfig(BaseModel):
     max_budget_usd: float = Field(default=1.0, description="Maximum budget per repo")
     timeout_minutes: int = Field(default=30, description="Timeout per repo in minutes")
 
-    # Agent command (use fake_agent.py for testing)
+    # Agent command (use fake_claude_agent.py / fake_codex_agent.py for testing)
     agent_cmd: str = Field(default="claude", description="Agent command to run")
+
+    # LLM provider name (must match keystone.llm_provider.PROVIDER_REGISTRY)
+    provider: str = Field(
+        default="claude", description="LLM provider name (e.g. 'claude', 'codex')"
+    )
+
+    # When True, run the agent locally instead of on Modal
+    run_agent_locally: bool = Field(
+        default=False,
+        description="Run agent locally with --run_agent_locally_with_dangerously_skip_permissions",
+    )
 
     # Log database (shared with CLI)
     log_db: str | None = Field(

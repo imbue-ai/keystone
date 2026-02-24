@@ -15,12 +15,19 @@ class StreamType(str, Enum):
 
 
 class ClaudeModel(str, Enum):
-    """Claude model choices for the agent."""
+    """Model choices for the agent.
+
+    Despite the name (kept for backwards compatibility), this enum includes
+    models from all supported providers.
+    """
 
     SONNET = "sonnet"
     OPUS = "opus"
     HAIKU = "haiku"
     OPUSPLAN = "opusplan"
+    # Codex models
+    GPT_5_CODEX = "gpt-5-codex"
+    O3 = "o3"
 
 
 class StreamEvent(BaseModel):

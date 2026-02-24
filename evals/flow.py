@@ -242,10 +242,20 @@ def process_repo_task(
                 str(agent_config.timeout_minutes * 60),
                 "--agent_cmd",
                 agent_config.agent_cmd,
-                "--agent_in_modal",
-                "--docker_cache_secret",
-                agent_config.docker_cache_secret,
+                "--provider",
+                agent_config.provider,
             ]
+
+            if agent_config.run_agent_locally:
+                cmd.append("--run_agent_locally_with_dangerously_skip_permissions")
+            else:
+                cmd.extend(
+                    [
+                        "--agent_in_modal",
+                        "--docker_cache_secret",
+                        agent_config.docker_cache_secret,
+                    ]
+                )
 
             if agent_config.model is not None:
                 cmd.extend(["--model", agent_config.model.value])

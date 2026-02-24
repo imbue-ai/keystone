@@ -17,7 +17,7 @@ from flow import eval_flow
 from keystone.constants import DEFAULT_TESTING_LOG_PATH
 
 SAMPLES_DIR = Path(__file__).parent.parent / "samples"
-FAKE_AGENT = Path(__file__).parent.parent / "keystone" / "tests" / "fake_agent.py"
+FAKE_CLAUDE_AGENT = Path(__file__).parent.parent / "keystone" / "tests" / "fake_claude_agent.py"
 
 
 def init_git_repo(path: Path) -> None:
@@ -96,7 +96,7 @@ def test_eval_flow_fake_agent(sample_repos: tuple[Path, list[str]], tmp_path: Pa
     agent_config = AgentConfig(
         max_budget_usd=1.0,
         timeout_minutes=5,
-        agent_cmd=f"python {FAKE_AGENT}",
+        agent_cmd=f"python {FAKE_CLAUDE_AGENT}",
     )
 
     eval_config = EvalConfig(

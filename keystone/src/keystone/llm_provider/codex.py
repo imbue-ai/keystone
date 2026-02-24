@@ -41,6 +41,7 @@ class CodexProvider(AgentProvider):
     ) -> list[str]:
         return [
             *shlex.split(agent_cmd),
+            *((f"--model={self.model}",) if self.model else ()),
             "exec",
             "--sandbox",
             "danger-full-access",

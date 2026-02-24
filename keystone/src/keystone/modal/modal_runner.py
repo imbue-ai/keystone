@@ -147,9 +147,11 @@ class ModalAgentRunner(AgentRunner):
         self,
         timeout_seconds: int = 3600,
         docker_cache_secret: str | None = None,
+        llm_api_secret: str | None = None,
     ) -> None:
         self._timeout_seconds = timeout_seconds
         self._docker_cache_secret = docker_cache_secret
+        self._llm_api_secret = llm_api_secret
         self._exit_code: int = 1
         self._devcontainer_tarball: bytes = b""
         self._sandbox: modal.Sandbox | None = None
@@ -170,6 +172,8 @@ class ModalAgentRunner(AgentRunner):
         secrets: list[modal.Secret] = []
         if self._docker_cache_secret:
             secrets.append(modal.Secret.from_name(self._docker_cache_secret))
+        if self._llm_api_secret:
+            secrets.append(modal.Secret.from_name(self._llm_api_secret))
 
         self._sandbox = modal.Sandbox.create(
             app=app,
@@ -326,6 +330,33 @@ ENDJSON
                 self._sandbox = None
             raise
 
+    def _read_provider_env_from_sandbox(
+        self,
+        sb: modal.Sandbox,
+        provider: AgentProvider,
+    ) -> dict[str, str]:
+        """Read provider-required env vars from the sandbox environment.
+
+        When an ``--llm_api_secret`` Modal secret is attached, its values are
+        injected into the sandbox but not available on the host.  This method
+        uses ``printenv`` inside the sandbox to retrieve the values so they can
+        be forwarded into the agent wrapper script (which runs under ``su``
+        and therefore loses the inherited environment).
+        """
+        env_vars: dict[str, str] = {}
+        for name in provider.required_env_var_names():
+            proc = sb.exec("printenv", name)
+            try:
+                value = proc.stdout.read().strip()
+                if proc.wait() == 0 and value:
+                    env_vars[name] = value
+                    logger.info("Read %s from sandbox (%d chars)", name, len(value))
+                else:
+                    logger.warning("Env var %s not found in sandbox", name)
+            except Exception:
+                logger.warning("Failed to read env var %s from sandbox", name, exc_info=True)
+        return env_vars
+
     def _run_agent(
         self,
         prompt: str,
@@ -338,9 +369,18 @@ ENDJSON
         assert self._sandbox is not None
         sb = self._sandbox
 
-        # Set up provider-specific env vars (e.g. API keys)
+        # Set up provider-specific env vars (e.g. API keys).
+        # First try reading from the host environment (provider.env_vars()).
+        # If empty and an LLM API secret is attached, read the expected env var
+        # names from the sandbox (where Modal injects secret values).
         logger.info("Starting agent (provider=%s)...", provider.name)
         env_vars = provider.env_vars()
+        if not env_vars and self._llm_api_secret:
+            logger.info(
+                "No provider env vars from host; reading from sandbox (secret=%s)",
+                self._llm_api_secret,
+            )
+            env_vars = self._read_provider_env_from_sandbox(sb, provider)
         if not env_vars:
             logger.warning("Provider %s returned no env vars (missing API key?)", provider.name)
 

@@ -147,6 +147,15 @@ def bootstrap(
             "Enables registry-based Docker build caching when running in Modal."
         ),
     ),
+    llm_api_secret: str | None = typer.Option(
+        None,
+        "--llm_api_secret",
+        help=(
+            "Name of a Modal secret containing the LLM provider's API key "
+            "(e.g. OPENAI_API_KEY or ANTHROPIC_API_KEY). "
+            "Used when the host environment does not have the key set."
+        ),
+    ),
 ) -> None:
     """Bootstrap a devcontainer for a project."""
     assert project_root is not None, "--project_root is required"
@@ -192,7 +201,10 @@ def bootstrap(
         else:
             console.print("[dim]Docker build cache: not configured[/dim]")
 
-        inner_runner = ModalAgentRunner(docker_cache_secret=docker_cache_secret)
+        inner_runner = ModalAgentRunner(
+            docker_cache_secret=docker_cache_secret,
+            llm_api_secret=llm_api_secret,
+        )
     else:
         if docker_cache_secret:
             console.print(

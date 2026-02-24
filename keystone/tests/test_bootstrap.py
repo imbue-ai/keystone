@@ -20,6 +20,7 @@ from keystone.version import _UNKNOWN_VERSION, get_version_info
 logger = logging.getLogger(__name__)
 
 DOCKER_CACHE_SECRET = "keystone-docker-registry-config"
+OPENAI_API_SECRET = "openai-api-key"
 
 
 def test_cli_help() -> None:
@@ -375,6 +376,72 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path, project_root: Path
     # Verify the devcontainer was created (agent ran successfully)
     assert (project_root / ".devcontainer" / "devcontainer.json").exists()
     assert (project_root / ".devcontainer" / "Dockerfile").exists()
+
+
+@pytest.mark.manual
+@pytest.mark.parametrize("project_root", ["python_project"], indirect=True)
+def test_e2e_codex_on_modal(tmp_path: Path, project_root: Path) -> None:
+    """E2E test: run the real Codex provider on Modal against python_project.
+
+    This verifies that OPENAI_API_KEY is correctly forwarded into the Modal
+    sandbox (via --llm_api_secret) and that the codex CLI can authenticate
+    and produce a working devcontainer.
+
+    Requires:
+      - Modal credentials configured
+      - Modal secret 'openai-api-key' with OPENAI_API_KEY set
+        (create with: modal secret create openai-api-key OPENAI_API_KEY=sk-...)
+    """
+    test_artifacts_dir = tmp_path / "test_artifacts"
+    cache_file = tmp_path / "codex_modal_cache.sqlite"
+
+    logger.info("=" * 60)
+    logger.info("E2E Test: Codex on Modal")
+    logger.info("Project root: %s", project_root)
+    logger.info("=" * 60)
+
+    cmd = [
+        "keystone",
+        "--project_root",
+        str(project_root),
+        "--test_artifacts_dir",
+        str(test_artifacts_dir),
+        "--log_db",
+        str(cache_file),
+        "--provider",
+        "codex",
+        "--agent_in_modal",
+        "--docker_cache_secret",
+        DOCKER_CACHE_SECRET,
+        "--llm_api_secret",
+        OPENAI_API_SECRET,
+        "--no_cache_replay",
+    ]
+
+    logger.info("Running: %s", " ".join(cmd))
+    result = run_process(cmd, log_prefix="[codex-modal]")
+
+    # Parse output
+    output = _parse_bootstrap_result(result.stdout)
+
+    assert result.returncode == 0, (
+        f"Codex on Modal failed (exit {result.returncode}):\n"
+        f"stderr: {result.stderr[-2000:]}\n"
+        f"error: {output.error_message}"
+    )
+    assert output.success, f"Bootstrap failed: {output.error_message}"
+
+    # Verify devcontainer files were created
+    assert (project_root / ".devcontainer" / "devcontainer.json").exists()
+    assert (project_root / ".devcontainer" / "Dockerfile").exists()
+    assert (project_root / ".devcontainer" / "run_all_tests.sh").exists()
+
+    # Verify test artifacts were extracted
+    assert (test_artifacts_dir / "junit").exists(), "Expected junit test artifacts"
+
+    # Verify verification passed with actual test results
+    assert output.verification is not None
+    assert output.verification.success, f"Verification failed: {output.verification.error_message}"
 
 
 @pytest.mark.manual

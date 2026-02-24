@@ -136,3 +136,6 @@ class CodexProvider(AgentProvider):
     def env_vars(self) -> dict[str, str]:
         key = os.environ.get("OPENAI_API_KEY", "")
         return {"OPENAI_API_KEY": key} if key else {}
+
+    def required_env_var_names(self) -> list[str]:
+        return ["OPENAI_API_KEY"]

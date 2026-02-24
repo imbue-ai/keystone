@@ -34,6 +34,13 @@ class TestClaudeProvider:
         assert "5.0" in cmd
         assert "Fix the bug" in cmd
 
+    def test_build_command_with_model(self) -> None:
+        self.provider.model = "claude-opus-4-6"
+        cmd = self.provider.build_command("Fix the bug", 5.0, "claude")
+        assert "--model" in cmd
+        model_idx = cmd.index("--model")
+        assert cmd[model_idx + 1] == "claude-opus-4-6"
+
     def test_parse_assistant_text(self) -> None:
         line = json.dumps(
             {
@@ -121,6 +128,17 @@ class TestCodexProvider:
         assert "--json" in cmd
         assert "danger-full-access" in cmd
         assert "Fix the bug" in cmd
+
+    def test_build_command_with_model(self) -> None:
+        self.provider.model = "gpt-5.2-codex"
+        cmd = self.provider.build_command("Fix the bug", 5.0, "codex")
+        assert "--model" in cmd
+        model_idx = cmd.index("--model")
+        assert cmd[model_idx + 1] == "gpt-5.2-codex"
+        # --model should come after exec but before --sandbox
+        exec_idx = cmd.index("exec")
+        sandbox_idx = cmd.index("--sandbox")
+        assert exec_idx < model_idx < sandbox_idx
 
     def test_parse_turn_completed(self) -> None:
         line = json.dumps(

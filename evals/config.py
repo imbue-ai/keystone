@@ -7,13 +7,15 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
-class ClaudeModel(str, Enum):
-    """Claude model choices for the agent."""
+class LLMModel(str, Enum):
+    """LLM model choices for the agent (Claude and Codex)."""
 
-    SONNET = "sonnet"
-    OPUS = "opus"
-    HAIKU = "haiku"
-    OPUSPLAN = "opusplan"
+    # Claude models
+    HAIKU = "claude-haiku-4-5-20251001"
+    OPUS = "claude-opus-4-6"
+    # Codex models
+    CODEX_MINI = "gpt-5.1-codex-mini"
+    CODEX = "gpt-5.2-codex"
 
 
 class RepoEntry(BaseModel):
@@ -58,9 +60,9 @@ class AgentConfig(BaseModel):
     )
 
     # Model selection
-    model: ClaudeModel | None = Field(
+    model: LLMModel | None = Field(
         default=None,
-        description="Claude model to use (sonnet, opus, haiku, opusplan)",
+        description="LLM model to use (claude-haiku-4-5-20251001, claude-opus-4-6, gpt-5.1-codex-mini, gpt-5.2-codex)",
     )
 
     # Docker build cache (Modal secret name)

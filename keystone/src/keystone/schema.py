@@ -14,13 +14,15 @@ class StreamType(str, Enum):
     STDERR = "stderr"
 
 
-class ClaudeModel(str, Enum):
-    """Claude model choices for the agent."""
+class LLMModel(str, Enum):
+    """LLM model choices for the agent (Claude and Codex)."""
 
-    SONNET = "sonnet"
-    OPUS = "opus"
-    HAIKU = "haiku"
-    OPUSPLAN = "opusplan"
+    # Claude models
+    HAIKU = "claude-haiku-4-5-20251001"
+    OPUS = "claude-opus-4-6"
+    # Codex models
+    CODEX_MINI = "gpt-5.1-codex-mini"
+    CODEX = "gpt-5.2-codex"
 
 
 class StreamEvent(BaseModel):
@@ -40,7 +42,7 @@ class AgentConfig(BaseModel):
     max_budget_usd: float
     agent_time_limit_seconds: int
     agent_in_modal: bool
-    model: ClaudeModel | None = None
+    model: LLMModel | None = None
 
     def to_cache_key_json(self) -> str:
         """Stable JSON representation for cache key computation."""

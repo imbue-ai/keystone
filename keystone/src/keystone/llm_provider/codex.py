@@ -39,14 +39,21 @@ class CodexProvider(AgentProvider):
         max_budget_usd: float,  # noqa: ARG002  # required by interface
         agent_cmd: str,
     ) -> list[str]:
-        return [
+        cmd = [
             *shlex.split(agent_cmd),
             "exec",
-            "--sandbox",
-            "danger-full-access",
-            "--json",
-            prompt,
         ]
+        if self.model:
+            cmd.extend(("--model", self.model))
+        cmd.extend(
+            (
+                "--sandbox",
+                "danger-full-access",
+                "--json",
+                prompt,
+            )
+        )
+        return cmd
 
     def parse_stdout_line(self, line: str) -> list[AgentEvent]:
         try:

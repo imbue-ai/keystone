@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 
 import typer
-from config import AgentConfig, ClaudeModel, EvalConfig, EvalRunConfig
+from config import AgentConfig, EvalConfig, EvalRunConfig, LLMModel
 from flow import eval_flow
 from rich.console import Console
 
@@ -92,8 +92,10 @@ def run(
     trials_per_repo: int = typer.Option(
         1, "--trials_per_repo", help="Number of trials per repo (>1 disables caching)"
     ),
-    model: ClaudeModel | None = typer.Option(
-        None, "--model", help="Claude model to use (sonnet, opus, haiku, opusplan)"
+    model: LLMModel | None = typer.Option(
+        None,
+        "--model",
+        help="LLM model to use (claude-haiku-4-5-20251001, claude-opus-4-6, gpt-5.1-codex-mini, gpt-5.2-codex)",
     ),
     require_cache_hit: bool = typer.Option(False, "--require_cache_hit", help="Fail if cache miss"),
     no_cache_replay: bool = typer.Option(False, "--no_cache_replay", help="Force fresh execution"),

@@ -32,14 +32,17 @@ class ClaudeProvider(AgentProvider):
         max_budget_usd: float,
         agent_cmd: str,
     ) -> list[str]:
-        return [
+        cmd = [
             *shlex.split(agent_cmd),
             "--dangerously-skip-permissions",
             *("--output-format", "stream-json"),
             "--verbose",
             *("--max-budget-usd", str(max_budget_usd)),
-            *("-p", prompt),
         ]
+        if self.model:
+            cmd.extend(("--model", self.model))
+        cmd.extend(("-p", prompt))
+        return cmd
 
     def parse_stdout_line(self, line: str) -> list[AgentEvent]:
         try:

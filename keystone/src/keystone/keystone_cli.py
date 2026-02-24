@@ -46,9 +46,9 @@ from keystone.schema import (
     AgentExecution,
     AgentStatusMessage,
     BootstrapResult,
-    ClaudeModel,
     GeneratedFiles,
     InferenceCost,
+    LLMModel,
     TokenSpending,
     VerificationResult,
 )
@@ -79,11 +79,18 @@ def bootstrap(
     test_artifacts_dir: Path = typer.Option(
         ..., "--test_artifacts_dir", help="Directory for test artifacts"
     ),
-    agent_cmd: str | None = typer.Option(None, "--agent_cmd", help="Agent command to run (default: inferred from --provider)"),
+    agent_cmd: str | None = typer.Option(
+        None, "--agent_cmd", help="Agent command to run (default: inferred from --provider)"
+    ),
     provider_name: str = typer.Option(
         "claude",
         "--provider",
         help="LLM provider name (e.g. 'claude'). See keystone.llm_provider.PROVIDER_REGISTRY.",
+    ),
+    model: LLMModel | None = typer.Option(
+        None,
+        "--model",
+        help="LLM model to use (e.g. claude-opus-4-6, gpt-5.2-codex)",
     ),
     max_budget_usd: float | None = typer.Option(
         1.0, "--max_budget_usd", help="Maximum dollar amount to spend on agent inference"
@@ -195,6 +202,8 @@ def bootstrap(
 
     # Instantiate the LLM provider
     provider = get_provider(provider_name)
+    if model is not None:
+        provider.model = model.value
     effective_agent_cmd = agent_cmd if agent_cmd is not None else provider.default_cmd
 
     token_spending = TokenSpending()

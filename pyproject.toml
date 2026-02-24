@@ -11,8 +11,8 @@ dependencies = [
 [tool.uv.workspace]
 members = ["keystone", "evals", "modal_registry"]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "ruff>=0.9.0",
     "pyright>=1.1.390",
     "pre-commit>=4.0.0",

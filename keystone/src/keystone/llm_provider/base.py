@@ -106,11 +106,3 @@ class AgentProvider(ABC):
         Returns an empty dict by default.
         """
         return {}
-
-    def required_env_var_names(self) -> list[str]:
-        """Names of environment variables this provider needs (e.g. ``['OPENAI_API_KEY']``).
-
-        Used by the Modal runner to read secret values from the sandbox when the
-        host environment doesn't have them.  Returns an empty list by default.
-        """
-        return []

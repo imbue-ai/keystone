@@ -85,6 +85,3 @@ class ClaudeProvider(AgentProvider):
     def env_vars(self) -> dict[str, str]:
         key = os.environ.get("ANTHROPIC_API_KEY", "")
         return {"ANTHROPIC_API_KEY": key} if key else {}
-
-    def required_env_var_names(self) -> list[str]:
-        return ["ANTHROPIC_API_KEY"]

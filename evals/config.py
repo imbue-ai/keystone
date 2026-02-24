@@ -7,20 +7,15 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
-class ClaudeModel(str, Enum):
-    """Model choices for the agent.
+class LLMModel(str, Enum):
+    """LLM model choices for the agent (Claude and Codex)."""
 
-    Despite the name (kept for backwards compatibility), this enum includes
-    models from all supported providers.
-    """
-
-    SONNET = "sonnet"
-    OPUS = "opus"
-    HAIKU = "haiku"
-    OPUSPLAN = "opusplan"
+    # Claude models
+    HAIKU = "claude-haiku-4-5-20251001"
+    OPUS = "claude-opus-4-6"
     # Codex models
-    GPT_5_CODEX = "gpt-5-codex"
-    O3 = "o3"
+    CODEX_MINI = "gpt-5.1-codex-mini"
+    CODEX = "gpt-5.2-codex"
 
 
 class RepoEntry(BaseModel):
@@ -47,18 +42,10 @@ class AgentConfig(BaseModel):
     max_budget_usd: float = Field(default=1.0, description="Maximum budget per repo")
     timeout_minutes: int = Field(default=30, description="Timeout per repo in minutes")
 
-    # Agent command (use fake_claude_agent.py / fake_codex_agent.py for testing)
-    agent_cmd: str = Field(default="claude", description="Agent command to run")
-
-    # LLM provider name (must match keystone.llm_provider.PROVIDER_REGISTRY)
-    provider: str = Field(
-        default="claude", description="LLM provider name (e.g. 'claude', 'codex')"
-    )
-
-    # When True, run the agent locally instead of on Modal
-    run_agent_locally: bool = Field(
-        default=False,
-        description="Run agent locally with --run_agent_locally_with_dangerously_skip_permissions",
+    # Provider and agent command
+    provider: str = Field(default="claude", description="LLM provider name (claude or codex)")
+    agent_cmd: str | None = Field(
+        default=None, description="Agent command override (default: inferred from provider)"
     )
 
     # Log database (shared with CLI)
@@ -76,9 +63,15 @@ class AgentConfig(BaseModel):
     )
 
     # Model selection
-    model: ClaudeModel | None = Field(
+    model: LLMModel | None = Field(
         default=None,
-        description="Claude model to use (sonnet, opus, haiku, opusplan)",
+        description="LLM model to use (claude-haiku-4-5-20251001, claude-opus-4-6, gpt-5.1-codex-mini, gpt-5.2-codex)",
+    )
+
+    # When True, run the agent locally instead of on Modal
+    run_agent_locally: bool = Field(
+        default=False,
+        description="Run agent locally with --run_agent_locally_with_dangerously_skip_permissions",
     )
 
     # Docker build cache (Modal secret name)

@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 
 import typer
-from config import AgentConfig, ClaudeModel, EvalConfig, EvalRunConfig
+from config import AgentConfig, EvalConfig, EvalRunConfig, LLMModel
 from flow import eval_flow
 from rich.console import Console
 
@@ -33,6 +33,7 @@ def _run_single_eval(
     console.print(f"\n[bold]Running eval{label}[/bold]")
     console.print(f"  S3 output: {eval_config.s3_output_prefix}")
     console.print(f"  S3 repo cache: {eval_config.s3_repo_cache_prefix}")
+    console.print(f"  Provider: {eval_config.agent_config.provider}")
     console.print(f"  Max budget: ${eval_config.agent_config.max_budget_usd}")
     if eval_config.agent_config.model:
         console.print(f"  Model: {eval_config.agent_config.model.value}")
@@ -79,6 +80,9 @@ def run(
         "--s3_repo_cache_prefix",
         help="S3 prefix for cached repo tarballs",
     ),
+    provider: str = typer.Option(
+        "claude", "--provider", help="LLM provider name (claude or codex)"
+    ),
     max_budget_usd: float = typer.Option(
         1.0, "--max_budget_usd", help="Maximum budget per repo in USD"
     ),
@@ -92,8 +96,10 @@ def run(
     trials_per_repo: int = typer.Option(
         1, "--trials_per_repo", help="Number of trials per repo (>1 disables caching)"
     ),
-    model: ClaudeModel | None = typer.Option(
-        None, "--model", help="Claude model to use (sonnet, opus, haiku, opusplan)"
+    model: LLMModel | None = typer.Option(
+        None,
+        "--model",
+        help="LLM model to use (claude-haiku-4-5-20251001, claude-opus-4-6, gpt-5.1-codex-mini, gpt-5.2-codex)",
     ),
     require_cache_hit: bool = typer.Option(False, "--require_cache_hit", help="Fail if cache miss"),
     no_cache_replay: bool = typer.Option(False, "--no_cache_replay", help="Force fresh execution"),
@@ -134,6 +140,7 @@ def run(
         raise typer.Exit(1)
 
     agent_config = AgentConfig(
+        provider=provider,
         max_budget_usd=max_budget_usd,
         timeout_minutes=timeout_minutes,
         log_db=log_db,

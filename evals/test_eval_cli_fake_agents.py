@@ -18,7 +18,7 @@ import traceback
 from pathlib import Path
 
 import pytest
-from config import AgentConfig, ClaudeModel, EvalConfig, EvalRunConfig
+from config import AgentConfig, EvalConfig, EvalRunConfig, LLMModel
 from eval_cli import app
 from typer.testing import CliRunner
 
@@ -82,10 +82,10 @@ def sample_repo(tmp_path: Path) -> tuple[Path, list[str]]:
 
 # The 4 agent/model/provider combinations to test
 FAKE_AGENT_CONFIGS = [
-    ("claude-sonnet", FAKE_CLAUDE_AGENT, "claude", ClaudeModel.SONNET),
-    ("claude-haiku", FAKE_CLAUDE_AGENT, "claude", ClaudeModel.HAIKU),
-    ("codex-gpt5", FAKE_CODEX_AGENT, "codex", ClaudeModel.GPT_5_CODEX),
-    ("codex-o3", FAKE_CODEX_AGENT, "codex", ClaudeModel.O3),
+    ("claude-haiku", FAKE_CLAUDE_AGENT, "claude", LLMModel.HAIKU),
+    ("claude-opus", FAKE_CLAUDE_AGENT, "claude", LLMModel.OPUS),
+    ("codex-mini", FAKE_CODEX_AGENT, "codex", LLMModel.CODEX_MINI),
+    ("codex", FAKE_CODEX_AGENT, "codex", LLMModel.CODEX),
 ]
 
 

@@ -11,7 +11,6 @@ Only python_project is expected to succeed with the fake agents.
 """
 
 import json
-import shlex
 import shutil
 import subprocess
 import traceback
@@ -23,8 +22,9 @@ from eval_cli import app
 from typer.testing import CliRunner
 
 SAMPLES_DIR = Path(__file__).parent.parent / "samples"
-FAKE_CLAUDE_AGENT = Path(__file__).parent.parent / "keystone" / "tests" / "fake_claude_agent.py"
-FAKE_CODEX_AGENT = Path(__file__).parent.parent / "keystone" / "tests" / "fake_codex_agent.py"
+# On Modal, fake agents are baked into the image at /usr/local/bin/
+FAKE_CLAUDE_AGENT_CMD = "fake_claude_agent.py"
+FAKE_CODEX_AGENT_CMD = "fake_codex_agent.py"
 
 
 def init_git_repo(path: Path) -> None:
@@ -82,14 +82,15 @@ def sample_repo(tmp_path: Path) -> tuple[Path, list[str]]:
 
 # The 4 agent/model/provider combinations to test
 FAKE_AGENT_CONFIGS = [
-    ("claude-haiku", FAKE_CLAUDE_AGENT, "claude", LLMModel.HAIKU),
-    ("claude-opus", FAKE_CLAUDE_AGENT, "claude", LLMModel.OPUS),
-    ("codex-mini", FAKE_CODEX_AGENT, "codex", LLMModel.CODEX_MINI),
-    ("codex", FAKE_CODEX_AGENT, "codex", LLMModel.CODEX),
+    ("claude-haiku", FAKE_CLAUDE_AGENT_CMD, "claude", LLMModel.HAIKU),
+    ("claude-opus", FAKE_CLAUDE_AGENT_CMD, "claude", LLMModel.OPUS),
+    ("codex-mini", FAKE_CODEX_AGENT_CMD, "codex", LLMModel.CODEX_MINI),
+    ("codex", FAKE_CODEX_AGENT_CMD, "codex", LLMModel.CODEX),
 ]
 
 
 @pytest.mark.slow
+@pytest.mark.modal
 def test_eval_cli_fake_agents_config_file(
     sample_repo: tuple[Path, list[str]],
     tmp_path: Path,
@@ -98,7 +99,7 @@ def test_eval_cli_fake_agents_config_file(
 
     Uses the Typer CliRunner to invoke the eval CLI with an EvalRunConfig
     JSON file that defines 4 configurations (2 agents x 2 models).
-    Each runs locally (no Modal) against python_project.
+    Each runs on Modal against python_project.
     """
     repo_list_path, _repo_paths = sample_repo
     runner = CliRunner()
@@ -107,7 +108,7 @@ def test_eval_cli_fake_agents_config_file(
     configs: list[EvalConfig] = []
     output_dirs: dict[str, Path] = {}
 
-    for name, agent_path, provider, model in FAKE_AGENT_CONFIGS:
+    for name, agent_cmd, provider, model in FAKE_AGENT_CONFIGS:
         s3_output_dir = tmp_path / f"s3_output_{name}"
         s3_cache_dir = tmp_path / f"s3_cache_{name}"
         s3_output_dir.mkdir()
@@ -116,11 +117,10 @@ def test_eval_cli_fake_agents_config_file(
 
         agent_config = AgentConfig(
             max_budget_usd=1.0,
-            timeout_minutes=5,
-            agent_cmd=f"python {shlex.quote(str(agent_path))}",
+            timeout_minutes=1,
+            agent_cmd=agent_cmd,
             provider=provider,
             model=model,
-            run_agent_locally=True,
         )
 
         configs.append(

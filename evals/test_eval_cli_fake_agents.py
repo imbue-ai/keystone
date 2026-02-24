@@ -153,7 +153,13 @@ def test_eval_cli_fake_agents_config_file(
 
     assert result.exit_code == 0, f"CLI exited with code {result.exit_code}:\n{result.output}"
 
-    # Verify each configuration produced results
+    # Verify we got 4 distinct output directories
+    assert len(output_dirs) == len(FAKE_AGENT_CONFIGS), "Expected one output dir per config"
+    assert len(set(output_dirs.values())) == len(FAKE_AGENT_CONFIGS), (
+        "Output directories should all be distinct"
+    )
+
+    # Verify each configuration produced results with the correct model embedded
     for name, _agent_path, _provider, model in FAKE_AGENT_CONFIGS:
         s3_output_dir = output_dirs[name]
 
@@ -177,4 +183,13 @@ def test_eval_cli_fake_agents_config_file(
         result_file = repo_output_dir / "eval_result.json"
         assert result_file.exists(), f"Missing eval_result.json for {name}/python_project"
 
-        print(f"\n✓ {name} (model={model.value}): python_project succeeded")
+        # Verify the model name is embedded in the eval_result (bootstrap_result
+        # captures the keystone JSON output which includes the Dockerfile content
+        # and agent status messages containing the model label).
+        result_data = json.loads(result_file.read_text())
+        result_text = json.dumps(result_data)
+        assert model.value in result_text, (
+            f"{name}: expected model '{model.value}' to appear in eval_result.json"
+        )
+
+        print(f"\n✓ {name} (model={model.value}): python_project succeeded, model found in output")

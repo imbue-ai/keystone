@@ -18,36 +18,36 @@ Run the flow directly on your laptop. The Prefect orchestrator runs in-process; 
 
 ```bash
 # Quick smoke test: run on just 1 repo
-cd evals
-uv run eval-harness \
-    --repo_list_path examples/repos.jsonl \
+uv run --package evals eval-harness \
+    --repo_list_path evals/examples/repos.jsonl \
     --s3_output_prefix s3://int8-datasets/keystone/evals/runs/test/ \
     --max_budget_usd 1.0 \
     --limit 1
 
 # Run on only the first 2 repos
-uv run eval-harness \
-    --repo_list_path examples/repos.jsonl \
+uv run --package evals eval-harness \
+    --repo_list_path evals/examples/repos.jsonl \
     --s3_output_prefix s3://int8-datasets/keystone/evals/runs/test/ \
     --max_budget_usd 1.0 \
     --limit 2
 
 # Run on all repos
-uv run eval-harness \
-    --repo_list_path examples/repos.jsonl \
+uv run --package evals eval-harness \
+    --repo_list_path evals/examples/repos.jsonl \
     --s3_output_prefix s3://int8-datasets/keystone/evals/runs/$(date +%Y%m%d_%H%M%S)/ \
     --max_budget_usd 1.0
 
 # Force fresh execution (skip keystone cache)
-uv run eval-harness \
-    --repo_list_path examples/repos.jsonl \
+uv run --package evals eval-harness \
+    --repo_list_path evals/examples/repos.jsonl \
     --s3_output_prefix s3://int8-datasets/keystone/evals/runs/$(date +%Y%m%d_%H%M%S)/ \
     --no_cache_replay \
     --timeout_minutes 60 \
     --max_budget_usd 10.0
 
 # Multi-model comparison from a config file
-uv run eval-harness --config_file examples/tiny_two_model_test.json
+uv run --package evals eval-harness \
+    --config_file evals/examples/tiny_two_model_test.json
 ```
 
 ## Usage — Prefect Cloud
@@ -66,9 +66,8 @@ prefect work-pool create keystone-eval --type prefect:managed
 prefect block create secret/aws-access-key-id --value "$(aws configure get aws_access_key_id)"
 prefect block create secret/aws-secret-access-key --value "$(aws configure get aws_secret_access_key)"
 
-# 3. Deploy the flow
-cd evals
-prefect deploy
+# 3. Deploy the flow (run from evals/)
+cd evals && prefect deploy
 ```
 
 ### Running
@@ -140,6 +139,5 @@ Uses Prefect for task orchestration and fsspec for S3 storage.
 
 ```bash
 # Run the integration test (requires Modal)
-cd evals
-uv run pytest test_eval_flow.py -v -m "slow and modal"
+uv run --package evals pytest evals/test_eval_flow.py -v -m "slow and modal"
 ```

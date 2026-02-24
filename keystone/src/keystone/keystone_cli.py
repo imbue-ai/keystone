@@ -328,6 +328,7 @@ def bootstrap(
             raise typer.Exit(1) from err
 
         exit_code = runner.exit_code
+        logging.info(f"Agent exited with code {exit_code}")
         cache_hit = runner.cache_hit
         agent_timed_out = runner.timed_out
         devcontainer_tarball = runner.get_devcontainer_tarball()

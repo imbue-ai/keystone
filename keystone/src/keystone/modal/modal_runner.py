@@ -350,12 +350,10 @@ ENDJSON
         # Run agent in project directory
         # We write a wrapper script to avoid quoting hell with 'su -c'
         export_lines = "\n".join(f"export {k}={shlex.quote(v)}" for k, v in env_vars.items() if v)
-        setup_lines = "\n".join(provider.setup_commands())
         agent_script_content = f"""#!/bin/bash
 set -e
 cd /project
 {export_lines}
-{setup_lines}
 exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
 """
         # Upload script using Modal's native filesystem API

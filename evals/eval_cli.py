@@ -17,9 +17,11 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
-# Allow INFO from our own modules and prefect (flow progress)
-for _logger_name in ("flow", "eval_cli", "prefect.flow_runs", "prefect.task_runs"):
+# Allow INFO from our own modules; DEBUG for prefect task runs so keystone
+# stderr lines (logged at DEBUG) appear in the Prefect UI.
+for _logger_name in ("flow", "eval_cli", "prefect.flow_runs"):
     logging.getLogger(_logger_name).setLevel(logging.INFO)
+logging.getLogger("prefect.task_runs").setLevel(logging.DEBUG)
 
 app = typer.Typer(help="Eval harness for keystone")
 console = Console()

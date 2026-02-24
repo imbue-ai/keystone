@@ -81,7 +81,7 @@ def _tarball_cache_key(
     description="Clone a repo and upload a git archive tarball to S3",
     cache_key_fn=_tarball_cache_key,
     cache_expiration=None,  # Never expire - tarballs are immutable
-    retries=2,
+    retries=4,
     retry_delay_seconds=10,
 )
 def archive_repo_task(

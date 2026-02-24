@@ -136,3 +136,12 @@ class CodexProvider(AgentProvider):
     def env_vars(self) -> dict[str, str]:
         key = os.environ.get("OPENAI_API_KEY", "")
         return {"OPENAI_API_KEY": key} if key else {}
+
+    def setup_commands(self) -> list[str]:
+        """Authenticate the codex CLI using the OPENAI_API_KEY env var.
+
+        The codex CLI does not automatically read OPENAI_API_KEY from the
+        environment; it requires an explicit ``codex login --with-api-key``
+        step with the key piped to stdin.
+        """
+        return ['echo "$OPENAI_API_KEY" | codex login --with-api-key']

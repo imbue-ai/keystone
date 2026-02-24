@@ -378,6 +378,63 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path, project_root: Path
 
 
 @pytest.mark.manual
+@pytest.mark.parametrize("project_root", ["python_project"], indirect=True)
+def test_e2e_codex_on_modal(tmp_path: Path, project_root: Path) -> None:
+    """E2E test: run the real Codex provider on Modal against python_project.
+
+    Verifies that OPENAI_API_KEY is forwarded into the Modal sandbox and
+    that codex can authenticate and produce a working devcontainer.
+
+    Requires OPENAI_API_KEY in the environment and Modal credentials configured.
+    """
+    test_artifacts_dir = tmp_path / "test_artifacts"
+    cache_file = tmp_path / "codex_modal_cache.sqlite"
+
+    logger.info("=" * 60)
+    logger.info("E2E Test: Codex on Modal")
+    logger.info("Project root: %s", project_root)
+    logger.info("=" * 60)
+
+    cmd = [
+        "keystone",
+        "--project_root",
+        str(project_root),
+        "--test_artifacts_dir",
+        str(test_artifacts_dir),
+        "--log_db",
+        str(cache_file),
+        "--provider",
+        "codex",
+        "--agent_in_modal",
+        "--docker_cache_secret",
+        DOCKER_CACHE_SECRET,
+        "--no_cache_replay",
+    ]
+
+    logger.info("Running: %s", " ".join(cmd))
+    result = run_process(cmd, log_prefix="[codex-modal]")
+
+    output = _parse_bootstrap_result(result.stdout)
+
+    assert result.returncode == 0, (
+        f"Codex on Modal failed (exit {result.returncode}):\nerror: {output.error_message}"
+    )
+    assert output.success, f"Bootstrap failed: {output.error_message}"
+
+    # Verify devcontainer files were created
+    assert (project_root / ".devcontainer" / "devcontainer.json").exists()
+    assert (project_root / ".devcontainer" / "Dockerfile").exists()
+    assert (project_root / ".devcontainer" / "run_all_tests.sh").exists()
+
+    # Verify test artifacts were extracted
+    assert (test_artifacts_dir / "junit").exists(), "Expected junit test artifacts"
+
+    # Verify verification passed with actual test results
+    assert output.verification is not None
+    assert output.verification.success, f"Verification failed: {output.verification.error_message}"
+
+
+@pytest.mark.manual
 @pytest.mark.parametrize(
     "project_root",
     [

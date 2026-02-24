@@ -106,3 +106,12 @@ class AgentProvider(ABC):
         Returns an empty dict by default.
         """
         return {}
+
+    def setup_commands(self) -> list[str]:
+        """Shell commands to run inside the sandbox before the agent command.
+
+        For example, a provider may need to authenticate a CLI tool using
+        an API key that has already been exported into the environment.
+        Returns an empty list by default.
+        """
+        return []

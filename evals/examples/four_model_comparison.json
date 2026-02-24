@@ -2,7 +2,7 @@
   "repo_list_path": "evals/examples/repos.jsonl",
   "configs": [
     {
-      "name": "claude-opus",
+      "name": "claude-opus-4-6",
       "agent_config": {
         "provider": "claude",
         "model": "claude-opus-4-6",
@@ -26,7 +26,7 @@
       "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs/"
     },
     {
-      "name": "codex-premium",
+      "name": "codex-gpt-gpt-5.2-codex",
       "agent_config": {
         "provider": "codex",
         "model": "gpt-5.2-codex",
@@ -38,7 +38,7 @@
       "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs/"
     },
     {
-      "name": "codex-mini",
+      "name": "codex-gpt-5.1-codex-mini",
       "agent_config": {
         "provider": "codex",
         "model": "gpt-5.1-codex-mini",

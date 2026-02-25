@@ -379,8 +379,19 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
 
         # 5. Extract .devcontainer directory
         logger.info("Extracting .devcontainer from sandbox...")
+
+        # List what the agent produced for diagnostics
+        ls_proc = run_modal_command(
+            sb, "find", "/project/.devcontainer", "-type", "f", name="extract-ls"
+        )
+        ls_exit = ls_proc.wait()
+        if ls_exit != 0:
+            logger.warning(
+                "Agent did not create /project/.devcontainer (find exit code %d)", ls_exit
+            )
+
         # Create tarball in sandbox, then read it using Modal's native filesystem API
-        run_modal_command(
+        tar_proc = run_modal_command(
             sb,
             "tar",
             "-czf",
@@ -389,9 +400,17 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
             "/project",
             ".devcontainer",
             name="extract",
-        ).wait()
+        )
+        tar_exit = tar_proc.wait()
+        if tar_exit != 0:
+            logger.error(
+                "Failed to create devcontainer tarball (tar exit code %d). "
+                "The agent may not have created a .devcontainer directory.",
+                tar_exit,
+            )
         with sb.open("/tmp/devcontainer.tar.gz", "rb") as f:
             self._devcontainer_tarball = f.read()
+        logger.info("Captured devcontainer tarball: %d bytes", len(self._devcontainer_tarball))
 
     @property
     def exit_code(self) -> int:
@@ -429,18 +448,33 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
         ).wait()
 
         # Overlay devcontainer
-        logger.info("Uploading .devcontainer for verification...")
+        logger.info(
+            "Uploading .devcontainer for verification (%d bytes)...",
+            len(devcontainer_tarball),
+        )
         with sb.open("/tmp/devcontainer.tar.gz", "wb") as f:
             f.write(devcontainer_tarball)
         run_modal_command(
             sb, "tar", "-xzf", "/tmp/devcontainer.tar.gz", "-C", "/project", name="verify-setup"
         ).wait()
 
+        # List what ended up in .devcontainer for diagnostics
+        ls_proc = run_modal_command(
+            sb, "find", "/project/.devcontainer", "-type", "f", name="verify-ls"
+        )
+        ls_proc.wait()
+
         # Check Dockerfile exists
         check_proc = run_modal_command(
             sb, "test", "-f", "/project/.devcontainer/Dockerfile", name="verify"
         )
         if check_proc.wait() != 0:
+            # List what's actually there for debugging
+            logger.error(
+                "Dockerfile not found after overlay. Tarball was %d bytes. "
+                "Listing /project/.devcontainer/ contents above.",
+                len(devcontainer_tarball),
+            )
             return VerificationResult(
                 success=False,
                 error_message="Build failed: .devcontainer/Dockerfile not found.",

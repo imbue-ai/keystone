@@ -149,6 +149,9 @@ def bootstrap(
     ),
 ) -> None:
     """Bootstrap a devcontainer for a project."""
+    logging.info(
+        f"Starting keystone CLI, version: {Path.cwd()=}, {project_root=}, {test_artifacts_dir=}, {agent_cmd=}, {provider_name=}, {model=}, {max_budget_usd=}, {log_db=}, {require_cache_hit=}, {no_cache_replay=}, {cache_version=}, {output_file=}, {agent_in_modal=}, {agent_time_limit_seconds=}, {image_build_timeout_seconds=}, {test_timeout_seconds=}, {docker_cache_secret=}, {get_version_info()=}"
+    )
     assert project_root is not None, "--project_root is required"
     project_root = project_root.resolve()
 
@@ -332,6 +335,7 @@ def bootstrap(
         cache_hit = runner.cache_hit
         agent_timed_out = runner.timed_out
         devcontainer_tarball = runner.get_devcontainer_tarball()
+        logging.info(f"Devcontainer tarball size: {len(devcontainer_tarball)} bytes")
 
         agent_work_seconds = time.monotonic() - start_time
 
@@ -462,6 +466,9 @@ def bootstrap(
         print(output.model_dump_json(indent=2), flush=True)
 
     if not overall_success:
+        devcontainer_dir = project_root / ".devcontainer"
+        if devcontainer_dir.exists():
+            logging.info(f"Failed devcontainer output preserved at: {devcontainer_dir}")
         logging.error(f"Keystone failed: {error_message or 'unknown error'}")
         raise typer.Exit(code=1)
 

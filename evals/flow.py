@@ -315,7 +315,7 @@ def process_repo_task(
                 bootstrap_result=bootstrap_result,
             )
 
-            # Step 4: Upload result to S3 (even on failure, for debugging)
+            # Step 4: Upload result and artifacts to S3 (even on failure, for debugging)
             try:
                 _s3_write_text(
                     f"{repo_output_prefix}/eval_result.json",
@@ -327,6 +327,27 @@ def process_repo_task(
                         f"{repo_output_prefix}/keystone_stderr.log",
                         proc.stderr,
                     )
+                # Upload devcontainer artifacts for debugging (preserved even on failure)
+                devcontainer_dir = work_path / ".devcontainer"
+                if devcontainer_dir.exists():
+                    for artifact_file in devcontainer_dir.iterdir():
+                        if artifact_file.is_file():
+                            try:
+                                _s3_write_bytes(
+                                    f"{repo_output_prefix}/devcontainer/{artifact_file.name}",
+                                    artifact_file.read_bytes(),
+                                )
+                            except Exception as art_err:
+                                log.warning(
+                                    f"[{repo_id}] Failed to upload devcontainer artifact "
+                                    f"{artifact_file.name}: {art_err}"
+                                )
+                    log.info(
+                        f"[{repo_id}] Uploaded devcontainer artifacts to "
+                        f"{repo_output_prefix}/devcontainer/"
+                    )
+                else:
+                    log.warning(f"[{repo_id}] No .devcontainer directory found to upload")
                 log.info(f"[{repo_id}] Uploaded results to {repo_output_prefix}/")
             except Exception as upload_err:
                 log.warning(f"[{repo_id}] Failed to upload to S3: {upload_err}")

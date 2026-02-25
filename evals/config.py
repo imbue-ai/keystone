@@ -118,6 +118,8 @@ class RepoResult(BaseModel):
     success: bool
     error_message: str | None = None
     bootstrap_result: dict[str, Any] | None = None
+    agent_config: AgentConfig | None = None
+    trial_index: int | None = None
 
 
 class EvalOutput(BaseModel):

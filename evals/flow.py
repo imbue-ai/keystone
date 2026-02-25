@@ -314,6 +314,8 @@ def process_repo_task(
                 success=success,
                 error_message=error_message,
                 bootstrap_result=bootstrap_result,
+                agent_config=agent_config,
+                trial_index=trial,
             )
 
             # Step 4: Upload result and artifacts to S3 (even on failure, for debugging)
@@ -365,6 +367,8 @@ def process_repo_task(
             repo_entry=repo_entry,
             success=False,
             error_message=error_msg,
+            agent_config=eval_config.agent_config,
+            trial_index=trial,
         )
         # Try to upload failure result
         with contextlib.suppress(Exception):
@@ -488,6 +492,8 @@ def _run_eval_phase(
                     repo_entry=repo_entry,
                     success=False,
                     error_message=str(e),
+                    agent_config=eval_config.agent_config,
+                    trial_index=trial,
                 )
             )
 
@@ -550,6 +556,8 @@ def _collect_eval_results(
                     repo_entry=repo_entry,
                     success=False,
                     error_message=str(e),
+                    agent_config=eval_config.agent_config,
+                    trial_index=trial,
                 )
             )
 

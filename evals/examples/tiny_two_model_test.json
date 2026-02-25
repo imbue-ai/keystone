@@ -1,7 +1,7 @@
 {
   // Minimal eval: 2 cheap models × 2 repos × 2 trials
   "repo_list_path": "evals/examples/repos_tiny.jsonl",
-  "s3_output_prefix": "s3://int8-datasets/keystone/evals/tiny-test/",
+  "s3_output_prefix": "s3://int8-datasets/keystone/evals/tiny-test_thad_2026-02-25/",
   "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs/",
   "configs": [
     {
@@ -12,7 +12,7 @@
         "max_budget_usd": 5.0,
         "timeout_minutes": 20
       },
-      "trials_per_repo": 2,
+      "trials_per_repo": 1,
       "max_workers": 4
     },
     {
@@ -23,7 +23,7 @@
         "max_budget_usd": 5.0,
         "timeout_minutes": 20
       },
-      "trials_per_repo": 2,
+      "trials_per_repo": 1,
       "max_workers": 4
     }
   ]

@@ -132,3 +132,6 @@ class BootstrapResult(BaseModel):
     verification: VerificationResult | None = None
 
     generated_files: GeneratedFiles | None = None
+
+    # CLI arguments used to invoke keystone, for reproducibility.
+    cli_args: list[str] | None = None

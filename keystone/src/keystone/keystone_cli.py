@@ -398,6 +398,19 @@ def bootstrap(
     for xml_file in test_artifacts_dir.glob("junit/*.xml"):
         test_results.extend(parse_junit_xml(xml_file))
 
+    # Print test result summary counts
+    if test_results:
+        n_passed = sum(1 for t in test_results if t.passed and not t.skipped)
+        n_failed = sum(1 for t in test_results if not t.passed and not t.skipped)
+        n_skipped = sum(1 for t in test_results if t.skipped)
+        console.print(
+            f"[bold]Test summary:[/bold] "
+            f"[green]{n_passed} passed[/green], "
+            f"[red]{n_failed} failed[/red], "
+            f"[yellow]{n_skipped} skipped[/yellow] "
+            f"({len(test_results)} total)"
+        )
+
     # Build verification result
     verification = VerificationResult(
         success=verification_success,
@@ -451,6 +464,7 @@ def bootstrap(
     output = BootstrapResult(
         success=overall_success,
         error_message=error_message,
+        cli_args=sys.argv,
         agent=AgentExecution(
             start_time=start_datetime,
             end_time=datetime.now(UTC),

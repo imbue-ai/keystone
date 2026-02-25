@@ -19,6 +19,7 @@ from config import EvalConfig, EvalOutput, RepoEntry, RepoResult, resolve_path
 from prefect import flow, get_run_logger, task
 from prefect.futures import PrefectFuture, wait
 
+from keystone.agent_log import create_devcontainer_tarball
 from keystone.process_runner import run_process
 from keystone.version import get_version_info
 
@@ -327,25 +328,19 @@ def process_repo_task(
                         f"{repo_output_prefix}/keystone_stderr.log",
                         proc.stderr,
                     )
-                # Upload devcontainer artifacts for debugging (preserved even on failure)
+                # Upload devcontainer artifacts as tarball (same format used for Modal verification)
                 devcontainer_dir = work_path / ".devcontainer"
                 if devcontainer_dir.exists():
-                    for artifact_file in devcontainer_dir.iterdir():
-                        if artifact_file.is_file():
-                            try:
-                                _s3_write_bytes(
-                                    f"{repo_output_prefix}/devcontainer/{artifact_file.name}",
-                                    artifact_file.read_bytes(),
-                                )
-                            except Exception as art_err:
-                                log.warning(
-                                    f"[{repo_id}] Failed to upload devcontainer artifact "
-                                    f"{artifact_file.name}: {art_err}"
-                                )
-                    log.info(
-                        f"[{repo_id}] Uploaded devcontainer artifacts to "
-                        f"{repo_output_prefix}/devcontainer/"
-                    )
+                    tarball = create_devcontainer_tarball(work_path)
+                    if tarball:
+                        _s3_write_bytes(
+                            f"{repo_output_prefix}/devcontainer.tar.gz",
+                            tarball,
+                        )
+                        log.info(
+                            f"[{repo_id}] Uploaded devcontainer tarball to "
+                            f"{repo_output_prefix}/devcontainer.tar.gz"
+                        )
                 else:
                     log.warning(f"[{repo_id}] No .devcontainer directory found to upload")
                 log.info(f"[{repo_id}] Uploaded results to {repo_output_prefix}/")

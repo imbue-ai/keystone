@@ -255,14 +255,6 @@ Tips and Notes:
 * If the tests have code coverage enabled by default, disable it in run_all_tests.sh to speed things up.
   (e.g., `pytest --no-cov` or `coverage run` flags) - coverage reports are slow and not needed.
 
-* If the project does docker operations (e.g., runs containers as part of tests), ensure the docker CLI
-  is installed in the image and run the container with the docker socket exposed. Example:
-  ```
-  docker run --rm -it \\
-    -v /var/run/docker.sock:/var/run/docker.sock \\
-    docker:cli ps
-  ```
-
 * For polyglot projects (e.g., Python backend + Node frontend), ensure ALL test suites are run.
   This may require installing multiple runtimes (Python, Node, Go, etc.) in the Dockerfile.
   Frontend projects may need Xvfb or Playwright dependencies for browser-based tests.

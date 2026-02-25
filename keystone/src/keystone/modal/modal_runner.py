@@ -301,6 +301,19 @@ ENDJSON
                 f.write(devcontainer_json)
         logger.info("Wrote /devcontainer.json to sandbox")
 
+        # Also place helpers inside /project/ so agents that restrict CWD access
+        # (e.g. opencode) can reach them via relative paths.
+        run_modal_command(
+            sb, "cp", "/devcontainer.json", "/project/devcontainer.json", name="upload"
+        ).wait()
+        run_modal_command(
+            sb,
+            "cp",
+            "/timestamp_process_output.pl",
+            "/project/timestamp_process_output.pl",
+            name="upload",
+        ).wait()
+
         run_modal_command(sb, "chown", "-R", "agent:agent", "/project", name="upload").wait()
 
     def run(

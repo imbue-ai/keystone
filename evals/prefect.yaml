@@ -2,39 +2,79 @@
 #
 # Setup (one-time):
 #   1. Create a managed work pool in Prefect Cloud:
-#        prefect work-pool create keystone-eval --type prefect:managed
+#        cd evals && uv run prefect work-pool create keystone-eval --type prefect:managed
 #
-#   2. Store AWS credentials as Prefect Secrets:
-#        prefect block create secret/aws-access-key-id --value "AKIA..."
-#        prefect block create secret/aws-secret-access-key --value "..."
+#   2. Store credentials as Prefect Secrets:
+#        (see setup script in evals/scripts/store_prefect_secrets.py)
 #
 #   3. Deploy:
-#        cd evals && prefect deploy
+#        cd evals && uv run prefect deploy
 #
 # Run:
-#   prefect deployment run eval_keystone/eval-keystone
-#
-#   # With overrides:
-#   prefect deployment run eval_keystone/eval-keystone \
-#       --param limit=5
+#   uv run prefect deployment run "eval_keystone/eval-keystone"
+
+name: bootstrap_devcontainer
+prefect-version: 3.4.6
+
+pull:
+  - prefect.deployments.steps.git_clone:
+      repository: https://github.com/imbue-ai/bootstrap_devcontainer.git
+      branch: main
+      directory: .
+  - prefect.deployments.steps.run_shell_script:
+      script: "uv sync --all-packages"
+      directory: "."
 
 deployments:
   - name: eval-keystone
-    entrypoint: flow.py:eval_flow
+    entrypoint: evals/flow.py:eval_flow
     work_pool:
       name: keystone-eval
       job_variables:
         env:
           AWS_ACCESS_KEY_ID: "{{ prefect.blocks.secret.aws-access-key-id }}"
           AWS_SECRET_ACCESS_KEY: "{{ prefect.blocks.secret.aws-secret-access-key }}"
+          MODAL_TOKEN_ID: "{{ prefect.blocks.secret.modal-token-id }}"
+          MODAL_TOKEN_SECRET: "{{ prefect.blocks.secret.modal-token-secret }}"
+          ANTHROPIC_API_KEY: "{{ prefect.blocks.secret.anthropic-api-key }}"
+          OPENAI_API_KEY: "{{ prefect.blocks.secret.openai-api-key }}"
     parameters:
-      repo_list_path: examples/repos.jsonl
-      eval_config:
-        agent_config:
-          max_budget_usd: 1.0
-          timeout_minutes: 60
-          agent_cmd: claude
-          docker_cache_secret: keystone-docker-registry-config
-        max_workers: 4
-        s3_output_prefix: "s3://int8-datasets/keystone/evals/runs/default/"
-        s3_repo_cache_prefix: "s3://int8-datasets/keystone/evals/repo-tarballs/"
+      repo_list_path: bootstrap_devcontainer/evals/examples/repos_tiny.jsonl
+      s3_repo_cache_prefix: "s3://int8-datasets/keystone/evals/repo-tarballs/"
+      eval_configs:
+        - name: opencode-haiku
+          agent_config:
+            provider: opencode
+            model: anthropic/claude-haiku-4-5
+            max_budget_usd: 5.0
+            timeout_minutes: 20
+          s3_output_prefix: "s3://int8-datasets/keystone/evals/opencode-prefect-2026-02-25/opencode-haiku/"
+          s3_repo_cache_prefix: "s3://int8-datasets/keystone/evals/repo-tarballs/"
+          max_workers: 2
+        - name: opencode-opus
+          agent_config:
+            provider: opencode
+            model: anthropic/claude-opus-4-6
+            max_budget_usd: 5.0
+            timeout_minutes: 20
+          s3_output_prefix: "s3://int8-datasets/keystone/evals/opencode-prefect-2026-02-25/opencode-opus/"
+          s3_repo_cache_prefix: "s3://int8-datasets/keystone/evals/repo-tarballs/"
+          max_workers: 2
+        - name: opencode-codex-mini
+          agent_config:
+            provider: opencode
+            model: openai/gpt-5.1-codex-mini
+            max_budget_usd: 5.0
+            timeout_minutes: 20
+          s3_output_prefix: "s3://int8-datasets/keystone/evals/opencode-prefect-2026-02-25/opencode-codex-mini/"
+          s3_repo_cache_prefix: "s3://int8-datasets/keystone/evals/repo-tarballs/"
+          max_workers: 2
+        - name: opencode-codex
+          agent_config:
+            provider: opencode
+            model: openai/gpt-5.2-codex
+            max_budget_usd: 5.0
+            timeout_minutes: 20
+          s3_output_prefix: "s3://int8-datasets/keystone/evals/opencode-prefect-2026-02-25/opencode-codex/"
+          s3_repo_cache_prefix: "s3://int8-datasets/keystone/evals/repo-tarballs/"
+          max_workers: 2

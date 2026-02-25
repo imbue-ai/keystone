@@ -53,7 +53,7 @@ Instructions:
 
 1. Copy the pre-generated devcontainer.json into the .devcontainer/ directory:
    ```bash
-   cp /devcontainer.json .devcontainer/devcontainer.json
+   cp ./devcontainer.json .devcontainer/devcontainer.json
    ```
    This file is already configured with the correct build context, Dockerfile path,
    network settings, and build cache options. Do NOT modify it.
@@ -279,8 +279,6 @@ When using `docker run`, you MUST use `--network=host` for containers to have ne
 LOCAL_ADDENDUM = """
 
 IMPORTANT: You are running locally (not in a Modal sandbox).
-The pre-generated helper files are in your current working directory, NOT at the filesystem root:
-- Use `cp ./devcontainer.json .devcontainer/devcontainer.json`  (NOT `cp /devcontainer.json`)
 """
 
 OLD_PART = """

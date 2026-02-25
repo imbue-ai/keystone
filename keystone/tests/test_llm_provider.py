@@ -563,8 +563,8 @@ class TestLLMModel:
         assert LLMModel.CODEX == "gpt-5.2-codex"
 
     def test_opencode_models(self) -> None:
-        assert LLMModel.OPENCODE_HAIKU == "anthropic/claude-haiku-4.5"
-        assert LLMModel.OPENCODE_OPUS == "anthropic/claude-opus-4.6"
+        assert LLMModel.OPENCODE_HAIKU == "anthropic/claude-haiku-4-5"
+        assert LLMModel.OPENCODE_OPUS == "anthropic/claude-opus-4-6"
         assert LLMModel.OPENCODE_CODEX_MINI == "openai/gpt-5.1-codex-mini"
         assert LLMModel.OPENCODE_CODEX == "openai/gpt-5.2-codex"
 

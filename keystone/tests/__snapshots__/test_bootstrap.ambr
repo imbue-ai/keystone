@@ -260,18 +260,26 @@
 # name: test_e2e_sample_projects[python_project]
   dict({
     'agent': dict({
+      'error_messages': list([
+      ]),
       'exit_code': 0,
       'model': '',
       'status_messages': list([
         'Exploring repository structure to identify file types and test locations.',
-        'Creating .devcontainer directory and copying required files.',
-        'Creating Dockerfile for Python project with uv.',
-        'Building the Docker image to verify configuration.',
-        'Running the test suite in the container.',
+        'Simple Python project with pytest. Creating .devcontainer setup.',
+        'Building the devcontainer image.',
+        'Build succeeded. Running the test container.',
       ]),
-      'summary': "Everything worked. The project is a simple Python app with pytest tests. Key fix needed: `PYTHONPATH=/project_src` must be set in run_all_tests.sh since `app.py` is at the project root and tests use `from app import ...`. Also remove `--no-cov` flag since pytest-cov isn't installed. Used uv for fast dependency management with layer caching.",
+      'summary': 'Everything worked on the first try. Simple Python 3.11 project with pytest; used uv for fast dependency installation into /venv, copied only app.py and tests/ explicitly (not the whole source tree), and the two tests pass cleanly in under a second.',
       'timed_out': False,
     }),
+    'cli_args': list([
+      '/Users/thad/.cursor/extensions/ms-python.python-2025.6.1-darwin-arm64/python_files/vscode_pytest/run_pytest_script.py',
+      '-sv',
+      '--log-cli-level=DEBUG',
+      '--snapshot-update',
+      '--rootdir=/Users/thad/Imbue Dropbox/Thad Hughes/src/bootstrap_devcontainer',
+    ]),
     'error_message': None,
     'generated_files': dict({
       'devcontainer_json': '''
@@ -292,14 +300,6 @@
       'dockerfile': '''
         FROM python:3.11-slim
         
-        # Install system dependencies including perl for timestamp helper
-        RUN apt-get update && apt-get install -y --no-install-recommends \
-            perl-base \
-            && rm -rf /var/lib/apt/lists/*
-        
-        # Set up timestamp helper script.
-        COPY ./.devcontainer/timestamp_process_output.pl /timestamp_process_output.pl
-        
         # Create test artifacts directory.
         RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
         
@@ -310,26 +310,16 @@
         # This is because Modal's snapshotting mechanism does not work correctly with symlinks.
         ENV UV_LINK_MODE=copy
         
-        # Set up virtual environment location
-        ENV UV_PROJECT_ENVIRONMENT=/venv
-        
-        # Pre-install dependencies (before copying project source for better caching)
+        # Pre-create uv virtual environment and install dependencies.
+        # Install dependencies first (without the project itself) to maximize layer caching.
         COPY pyproject.toml uv.lock /tmp/deps/
-        RUN cd /tmp/deps && \
-            uv sync --locked --no-install-project && \
-            echo "Python virtual environment created successfully at $UV_PROJECT_ENVIRONMENT"
+        ENV UV_PROJECT_ENVIRONMENT=/venv
+        RUN cd /tmp/deps && uv sync --locked --no-install-project && echo "Python virtual environment created successfully at $UV_PROJECT_ENVIRONMENT"
         
         # Copy source code
         WORKDIR /project_src
         COPY app.py ./
         COPY tests/ ./tests/
-        COPY pyproject.toml uv.lock ./
-        
-        # Install the project itself
-        RUN cd /project_src && uv sync --locked
-        
-        # Add virtual environment to PATH
-        ENV PATH="/venv/bin:$PATH"
         
         # Copy the test runner script last (this changes often during development)
         COPY .devcontainer/run_all_tests.sh /run_all_tests.sh
@@ -340,30 +330,22 @@
         #!/usr/bin/env bash
         set -euo pipefail
         
-        # Create output directories
         mkdir -p /test_artifacts/junit
         
-        echo "Running tests for sample-python-project..."
-        
-        cd /project_src
         export PYTHONPATH=/project_src:${PYTHONPATH:-}
         
-        # Run pytest with JUnit XML output and timestamp logging
-        /timestamp_process_output.pl --logfile /test_artifacts/pytest.log \
-            pytest \
+        echo "Running pytest..."
+        /venv/bin/pytest /project_src/tests/ \
             --junitxml=/test_artifacts/junit/pytest.xml \
-            tests/
+            --no-header \
+            -v 2>&1
         
-        # Capture exit code
         EXIT_CODE=$?
         
-        # Write final result JSON
         if [ $EXIT_CODE -eq 0 ]; then
             echo '{"success": true}' > /test_artifacts/final_result.json
-            echo "All tests passed!"
         else
             echo '{"success": false}' > /test_artifacts/final_result.json
-            echo "Some tests failed!"
         fi
         
         exit $EXIT_CODE

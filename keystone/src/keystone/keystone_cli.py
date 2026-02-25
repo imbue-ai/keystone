@@ -214,6 +214,8 @@ def bootstrap(
     verification_success = False
     agent_summary: AgentStatusMessage | None = None
     status_messages: list[AgentStatusMessage] = []
+    agent_errors: list[str] = []
+    agent_stderr_lines: list[str] = []
 
     def _make_status_message(message: str) -> AgentStatusMessage:
         """Create an AgentStatusMessage with current timestamp."""
@@ -267,10 +269,12 @@ def bootstrap(
                     token_spending.cache_creation += cost.cache_creation_tokens
                 case AgentErrorEvent(message=msg):
                     logging.error(f"Agent error: {msg}")
+                    agent_errors.append(msg)
 
     def process_stderr_line(line: str) -> None:
-        """Forward agent stderr to our stderr."""
+        """Forward agent stderr to our stderr and capture for error reporting."""
         print(f"Agent stderr: {line}", file=sys.stderr, flush=True)
+        agent_stderr_lines.append(line)
 
     try:
         # Set up logging/caching
@@ -407,9 +411,28 @@ def bootstrap(
     # exit non-zero (e.g. timeout code 124) yet still produce correct output.
     overall_success = verification_success
     error_message: str | None = None
+
+    # Build agent error context from structured errors and stderr (if agent failed
+    # and wasn't just a timeout, since timeouts are already reported separately).
+    agent_error_context: str | None = None
+    if exit_code != 0 and not agent_timed_out:
+        parts: list[str] = []
+        if agent_errors:
+            parts.append("Agent errors: " + "; ".join(agent_errors))
+        if agent_stderr_lines:
+            # Include last 20 lines of stderr for context
+            tail = agent_stderr_lines[-20:]
+            parts.append("Agent stderr (last lines):\n" + "\n".join(tail))
+        if parts:
+            agent_error_context = "\n".join(parts)
+
     if not overall_success:
-        if verification_error:
+        if verification_error and agent_error_context:
+            error_message = f"{verification_error}\n\nRoot cause — {agent_error_context}"
+        elif verification_error:
             error_message = verification_error
+        elif agent_error_context:
+            error_message = agent_error_context
         elif exit_code != 0:
             error_message = f"Agent exited with code {exit_code}"
     elif exit_code != 0:
@@ -437,6 +460,7 @@ def bootstrap(
             model=model_name,
             summary=agent_summary,
             status_messages=status_messages,
+            error_messages=agent_errors,
             cost=InferenceCost(
                 cost_usd=total_cost_usd,
                 token_spending=token_spending,

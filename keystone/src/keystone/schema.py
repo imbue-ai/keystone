@@ -104,6 +104,7 @@ class AgentExecution(BaseModel):
     model: str = ""
     summary: AgentStatusMessage | None = None
     status_messages: list[AgentStatusMessage] = []
+    error_messages: list[str] = []
     cost: InferenceCost
 
 

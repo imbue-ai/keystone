@@ -436,20 +436,24 @@ def test_e2e_codex_on_modal(tmp_path: Path, project_root: Path) -> None:
 
 @pytest.mark.manual
 @pytest.mark.parametrize("project_root", ["python_project"], indirect=True)
-def test_e2e_codex_mini_prompt_rejection(tmp_path: Path, project_root: Path) -> None:
-    """Verify that gpt-5.1-codex-mini rejects the prompt and the error propagates correctly.
+def test_e2e_agent_error_propagation(tmp_path: Path, project_root: Path) -> None:
+    """Verify that agent errors (e.g. prompt rejection) propagate into BootstrapResult.
 
-    The gpt-5.1-codex-mini model triggers OpenAI's content filter on the keystone
-    prompt, producing a turn.failed event. This test verifies that:
+    Uses the fake_codex_agent.py with --model=fake-error-model to deterministically
+    simulate a turn.failed event (like OpenAI's content filter rejection). Verifies:
     1. The CLI exits with non-zero exit code.
     2. The BootstrapResult JSON has success=False.
-    3. The error_message contains useful information about the failure.
+    3. The error_message includes both the verification failure AND the agent error.
+    4. agent.error_messages contains the structured error from the agent.
     """
     test_artifacts_dir = tmp_path / "test_artifacts"
-    cache_file = tmp_path / "codex_mini_cache.sqlite"
+    cache_file = tmp_path / "codex_error_cache.sqlite"
+
+    # fake_codex_agent.py is baked into the Modal image at /usr/local/bin/
+    agent_cmd = "fake_codex_agent.py --model=fake-error-model"
 
     logger.info("=" * 60)
-    logger.info("E2E Test: Codex-mini prompt rejection")
+    logger.info("E2E Test: Agent error propagation")
     logger.info("Project root: %s", project_root)
     logger.info("=" * 60)
 
@@ -463,8 +467,8 @@ def test_e2e_codex_mini_prompt_rejection(tmp_path: Path, project_root: Path) -> 
         str(cache_file),
         "--provider",
         "codex",
-        "--model",
-        "gpt-5.1-codex-mini",
+        "--agent_cmd",
+        agent_cmd,
         "--agent_in_modal",
         "--docker_cache_secret",
         DOCKER_CACHE_SECRET,
@@ -472,25 +476,42 @@ def test_e2e_codex_mini_prompt_rejection(tmp_path: Path, project_root: Path) -> 
     ]
 
     logger.info("Running: %s", " ".join(cmd))
-    result = run_process(cmd, log_prefix="[codex-mini-rejection]")
+    result = run_process(cmd, log_prefix="[agent-error-propagation]")
 
     output = _parse_bootstrap_result(result.stdout)
 
     # The CLI should exit with non-zero code
-    assert result.returncode != 0, (
-        f"Expected non-zero exit code for codex-mini prompt rejection, got {result.returncode}"
-    )
+    assert result.returncode != 0, f"Expected non-zero exit code, got {result.returncode}"
 
     # The result should indicate failure
-    assert not output.success, "Expected success=False for codex-mini prompt rejection"
+    assert not output.success, "Expected success=False"
 
-    # The error message should contain something useful
-    assert output.error_message is not None, "Expected an error_message for prompt rejection"
-    assert len(output.error_message) > 0, "error_message should not be empty"
+    # The agent should have exited non-zero
+    assert output.agent.exit_code != 0, (
+        f"Expected non-zero agent exit code, got {output.agent.exit_code}"
+    )
 
-    logger.info("Codex-mini prompt rejection test passed:")
+    # Agent structured errors should be captured
+    assert output.agent.error_messages, "Expected agent.error_messages to be populated"
+    assert any("usage policy" in msg for msg in output.agent.error_messages), (
+        f"Expected content filter error in agent.error_messages, got: {output.agent.error_messages}"
+    )
+
+    # The top-level error_message should include both verification failure AND root cause
+    assert output.error_message is not None, "Expected an error_message"
+    assert "Root cause" in output.error_message, (
+        f"Expected 'Root cause' in error_message, got: {output.error_message}"
+    )
+    # The agent's structured error should be in the error message
+    assert "usage policy" in output.error_message, (
+        f"Expected agent error text in error_message, got: {output.error_message}"
+    )
+
+    logger.info("Agent error propagation test passed:")
     logger.info("  exit code: %d", result.returncode)
+    logger.info("  agent exit code: %d", output.agent.exit_code)
     logger.info("  error_message: %s", output.error_message)
+    logger.info("  agent.error_messages: %s", output.agent.error_messages)
 
 
 @pytest.mark.manual

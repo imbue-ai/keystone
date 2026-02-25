@@ -10,6 +10,7 @@ Outputs Codex-style JSON events (item.started, item.completed, turn.completed).
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 # The devcontainer files to generate (following the format required by prompts.py)
@@ -88,11 +89,37 @@ def main() -> None:
     parser.add_argument("--model", type=str, default=None)
     parser.add_argument("command", nargs="?", default="exec", help="Subcommand (exec)")
     parser.add_argument("--sandbox", type=str, default="danger-full-access")
+    parser.add_argument("--skip-git-repo-check", action="store_true")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("prompt", nargs="?", default="")
-    args = parser.parse_args()
+    # Use parse_known_args to be forward-compatible with new codex CLI flags
+    args, _unknown = parser.parse_known_args()
 
     model_label = args.model or "unknown-model"
+    print(
+        f"fake_codex_agent.py built=2026-02-25T19:10 model={model_label}",
+        file=sys.stderr,
+        flush=True,
+    )
+
+    # Special model name triggers a simulated content filter rejection
+    if model_label == "fake-error-model":
+        emit({"type": "thread.started"})
+        emit(
+            {
+                "type": "turn.failed",
+                "error": {
+                    "message": (
+                        "Invalid prompt: your prompt was flagged as potentially "
+                        "violating our usage policy. Please try again with a "
+                        "different prompt: "
+                        "https://platform.openai.com/docs/guides/reasoning#advice-on-prompting"
+                    ),
+                },
+            }
+        )
+        print("Error: prompt rejected by content filter", file=sys.stderr, flush=True)
+        sys.exit(1)
 
     # Create .devcontainer directory
     devcontainer_dir = Path(".devcontainer")

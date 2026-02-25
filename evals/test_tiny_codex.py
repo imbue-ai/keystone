@@ -1,13 +1,16 @@
-"""Integration test: run codex-mini eval on the requests repo.
+"""Integration test: run codex eval on the requests repo.
 
-This test runs the actual eval harness with the codex-mini model against
-the psf/requests repo. It requires Modal credentials, an OpenAI API key,
-and network access. It's expensive (~$5 + Modal compute) so it's marked
-as slow and modal.
+This test runs the actual eval harness with the codex provider (default model)
+against the psf/requests repo. It uses the same configuration as the passing
+keystone test (test_e2e_codex_on_modal) — provider=codex with no explicit model,
+letting codex CLI pick its default.
+
+Requires Modal credentials, an OpenAI API key, and network access.
+Expensive (~$5 + Modal compute) so it's marked as slow and modal.
 
 Usage:
     cd evals
-    uv run pytest test_data/tiny_codex/test_tiny_codex.py -v -s --timeout=2400
+    uv run pytest test_tiny_codex.py -v -s --timeout=2400
 """
 
 import json
@@ -15,7 +18,7 @@ import traceback
 from pathlib import Path
 
 import pytest
-from config import AgentConfig, EvalConfig, EvalRunConfig, LLMModel
+from config import AgentConfig, EvalConfig, EvalRunConfig
 from eval_cli import app
 from typer.testing import CliRunner
 
@@ -25,7 +28,7 @@ REPOS_JSONL = Path(__file__).parent / "test_data" / "tiny_codex" / "repos.jsonl"
 @pytest.mark.slow
 @pytest.mark.modal
 def test_tiny_codex_eval(tmp_path: Path) -> None:
-    """Run the codex-mini eval on requests repo and check it succeeds."""
+    """Run the codex eval (default model) on requests repo and check it succeeds."""
     runner = CliRunner()
 
     output_dir = tmp_path / "output"
@@ -37,10 +40,9 @@ def test_tiny_codex_eval(tmp_path: Path) -> None:
         s3_repo_cache_prefix=(tmp_path / "repo_cache").as_uri() + "/",
         configs=[
             EvalConfig(
-                name="codex-mini",
+                name="codex-default",
                 agent_config=AgentConfig(
                     provider="codex",
-                    model=LLMModel.CODEX_MINI,
                     max_budget_usd=5.0,
                     timeout_minutes=20,
                 ),
@@ -65,7 +67,7 @@ def test_tiny_codex_eval(tmp_path: Path) -> None:
     assert result.exit_code == 0, f"CLI exited with code {result.exit_code}:\n{result.output}"
 
     # Check output structure
-    config_dir = output_dir / "codex-mini"
+    config_dir = output_dir / "codex-default"
     summary_file = config_dir / "eval_summary.json"
     assert summary_file.exists(), f"Missing eval_summary.json at {summary_file}"
 
@@ -88,7 +90,7 @@ def test_tiny_codex_eval(tmp_path: Path) -> None:
     result_file = repo_output_dir / "eval_result.json"
     assert result_file.exists(), f"Missing eval_result.json at {result_file}"
 
-    print("\n✓ codex-mini: requests repo succeeded")
+    print("\n✓ codex (default model): requests repo succeeded")
     print(f"  Output at: {config_dir}")
     if devcontainer_artifact_dir.exists():
         for f in devcontainer_artifact_dir.iterdir():

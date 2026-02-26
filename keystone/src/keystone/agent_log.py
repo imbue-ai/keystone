@@ -172,22 +172,14 @@ def ensure_column_exists(engine: Engine, table: str, column: str, column_type: s
             if not columns:
                 # Table doesn't exist yet
                 return
+            if column not in columns:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}"))
+                conn.commit()
         else:
-            # PostgreSQL
-            result = conn.execute(
-                text(
-                    "SELECT column_name FROM information_schema.columns WHERE table_name = :table"
-                ),
-                {"table": table},
+            # PostgreSQL supports ADD COLUMN IF NOT EXISTS directly
+            conn.execute(
+                text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {column_type}")
             )
-            columns = {row[0] for row in result}
-            if not columns:
-                # Table doesn't exist yet
-                return
-
-        if column not in columns:
-            # FIXME: Could we simplify this and delete above code with some "IF NOT EXISTS" syntax here?
-            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}"))
             conn.commit()
 
 

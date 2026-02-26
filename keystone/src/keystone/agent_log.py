@@ -343,9 +343,12 @@ class AgentLog:
             return None
 
         r = row._mapping
-        # FIXME: json.loads and StreamEvent(**e) can both throw if the cache row is
-        # corrupted — should catch and return None (treat as cache miss) instead of crashing.
-        events_data = json.loads(r["events_json"])
+        try:
+            events_data = json.loads(r["events_json"])
+            events = [StreamEvent(**e) for e in events_data]
+        except Exception:
+            logger.exception("Corrupted cache row for hash %s — treating as cache miss", cache_hash)
+            return None
         return AgentRunRecord(
             cli_run_id=r["cli_run_id"],
             timestamp=datetime.fromisoformat(r["timestamp"]),
@@ -355,7 +358,7 @@ class AgentLog:
                 agent_config_json=r["agent_config_json"],
                 cache_version=r["cache_version"],
             ),
-            events=[StreamEvent(**e) for e in events_data],
+            events=events,
             devcontainer_tarball=r["devcontainer_tarball"],
             return_code=r["return_code"],
             claude_dir_tarball=r["claude_dir_tarball"],

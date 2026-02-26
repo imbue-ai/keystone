@@ -251,16 +251,13 @@ def test_e2e_fake_agent(
     ), f"Expected agent.summary to be captured, got: {output.agent.summary}"
 
     # Verify status_messages were captured in order
-    status_msgs = [m.message for m in output.agent.status_messages]
-    assert status_msgs[:3] == [
+    assert [m.message for m in output.agent.status_messages] == [
         "[fake_claude_agent/unknown-model] Exploring repository structure.",
         "[fake_claude_agent/unknown-model] Creating devcontainer.json and Dockerfile.",
         "[fake_claude_agent/unknown-model] Completed setup of devcontainer files.",
+        "[fake_claude_agent/unknown-model] Running guardrail.sh self-check.",
+        "[fake_claude_agent/unknown-model] Guardrail self-check passed.",
     ], f"Expected status_messages to be captured, got: {output.agent.status_messages}"
-    # The fake agent also runs guardrail.sh, which emits additional status messages
-    if len(status_msgs) > 3:
-        assert "[fake_claude_agent/unknown-model] Running guardrail.sh self-check." in status_msgs
-        assert "[fake_claude_agent/unknown-model] Guardrail self-check passed." in status_msgs
 
     # Verify test_results contents (now nested in verification)
     assert output.verification is not None

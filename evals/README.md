@@ -16,39 +16,23 @@ Requires AWS credentials in your environment for S3 access (`AWS_ACCESS_KEY_ID`/
 
 Run the flow directly on your laptop. The Prefect orchestrator runs in-process; keystone tasks run on Modal. **This always uses your current code tree — no deploy step needed.** Best for iterating on code changes.
 
+All runs require a JSON config file (`EvalRunConfig`). See `evals/examples/` for templates.
+
 ```bash
-# Quick smoke test: run on just 1 repo
-uv run eval-harness \
-    --repo_list_path evals/examples/repos.jsonl \
-    --s3_output_prefix s3://int8-datasets/keystone/evals/runs/test/ \
-    --max_budget_usd 1.0 \
-    --limit 1
+# Quick smoke test (2 cheap models × 2 repos)
+uv run eval-harness --config_file evals/examples/tiny_two_model_test.json
 
-# Run on only the first 2 repos
-uv run eval-harness \
-    --repo_list_path evals/examples/repos.jsonl \
-    --s3_output_prefix s3://int8-datasets/keystone/evals/runs/test/ \
-    --max_budget_usd 1.0 \
-    --limit 2
-
-# Run on all repos
-uv run eval-harness \
-    --repo_list_path evals/examples/repos.jsonl \
-    --s3_output_prefix s3://int8-datasets/keystone/evals/runs/$(date +%Y%m%d_%H%M%S)/ \
-    --max_budget_usd 1.0
+# Limit to first N repos
+uv run eval-harness --config_file evals/examples/tiny_two_model_test.json --limit 1
 
 # Force fresh execution (skip keystone cache)
-uv run eval-harness \
-    --repo_list_path evals/examples/repos.jsonl \
-    --s3_output_prefix s3://int8-datasets/keystone/evals/runs/$(date +%Y%m%d_%H%M%S)/ \
-    --no_cache_replay \
-    --timeout_minutes 60 \
-    --max_budget_usd 10.0
+uv run eval-harness --config_file evals/examples/tiny_two_model_test.json --no_cache_replay
 
-# Multi-model comparison from a config file
-uv run eval-harness \
-    --config_file evals/examples/tiny_two_model_test.json
+# Full four-model comparison
+uv run eval-harness --config_file evals/examples/four_model_comparison.json
 ```
+
+CLI overrides available: `--limit N`, `--no_cache_replay`, `--require_cache_hit`.
 
 ## Usage — Prefect Cloud
 
@@ -91,7 +75,7 @@ The deployment is configured in `prefect.yaml`. Edit it to change default parame
 
 | Scenario | Command | Redeploy needed? |
 |---|---|---|
-| Ad hoc / iterating on code | `uv run eval-harness --limit 1 ...` | No — always uses current tree |
+| Ad hoc / iterating on code | `uv run eval-harness --config_file ... --limit 1` | No — always uses current tree |
 | Push code to Prefect Cloud | `cd evals && prefect deploy` | Yes — every code change |
 | Change only parameters | `prefect deployment run ... --param limit=1` | No — params are runtime |
 
@@ -110,7 +94,7 @@ Optional metadata fields (preserved in output): `rank`, `language`, `build_syste
 
 ## Output
 
-Results are written to S3 under the `--s3_output_prefix`:
+Results are written to S3 under the `s3_output_prefix` specified in the config file:
 
 ```
 s3://int8-datasets/keystone/evals/runs/20260220_143000/
@@ -124,7 +108,7 @@ s3://int8-datasets/keystone/evals/runs/20260220_143000/
 └── ...
 ```
 
-Repo tarballs are cached separately at `--s3_repo_cache_prefix` (default: `s3://int8-datasets/keystone/evals/repo-tarballs/`).
+Repo tarballs are cached separately at `s3_repo_cache_prefix` (default: `s3://int8-datasets/keystone/evals/repo-tarballs/`).
 
 ## Architecture
 

@@ -76,3 +76,4 @@ known-first-party = ["keystone"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "dataclasses" = {msg = "Use pydantic.BaseModel instead of @dataclass."}
+"typing.Literal" = {msg = "Use an Enum instead of Literal for fixed sets of values."}

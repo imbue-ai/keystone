@@ -13,7 +13,7 @@ import threading
 import time
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 import modal
 
@@ -50,13 +50,13 @@ class ManagedProcess:
 
         self._stdout_thread = threading.Thread(
             target=self._stream_reader,
-            args=(proc.stdout, "stdout"),
+            args=(proc.stdout, StreamType.STDOUT),
             name=f"modal-stdout-{prefix}",
             daemon=True,
         )
         self._stderr_thread = threading.Thread(
             target=self._stream_reader,
-            args=(proc.stderr, "stderr"),
+            args=(proc.stderr, StreamType.STDERR),
             name=f"modal-stderr-{prefix}",
             daemon=True,
         )
@@ -64,9 +64,7 @@ class ManagedProcess:
         self._stdout_thread.start()
         self._stderr_thread.start()
 
-    def _stream_reader(
-        self, stream: Iterable[str], stream_name: Literal["stdout", "stderr"]
-    ) -> None:
+    def _stream_reader(self, stream: Iterable[str], stream_name: StreamType) -> None:
         logger = logging.getLogger("keystone.modal")
         try:
             for chunk in stream:
@@ -77,14 +75,12 @@ class ManagedProcess:
                         continue
                     # Log immediately to Python's logging system
                     # Format: [name] STDOUT/STDERR: line
-                    if stream_name == "stderr":
+                    if stream_name == StreamType.STDERR:
                         logger.info(f"[{self.prefix}] STDERR: {clean_line}")
                     else:
                         logger.info(f"[{self.prefix}] STDOUT: {clean_line}")
                     if self._queue is not None:
-                        self._queue.put(
-                            StreamEvent(stream=StreamType(stream_name), line=clean_line)
-                        )
+                        self._queue.put(StreamEvent(stream=stream_name, line=clean_line))
         except Exception:
             # Stream closed due to sandbox termination - this is expected
             pass

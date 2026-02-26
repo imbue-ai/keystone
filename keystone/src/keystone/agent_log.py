@@ -160,6 +160,9 @@ def ensure_column_exists(engine: Engine, table: str, column: str, column_type: s
         # Check if column exists (works for SQLite and PostgreSQL)
         # Validate identifiers to prevent SQL injection (PRAGMA and ALTER TABLE
         # don't support parameter binding for identifiers).
+        # FIXME: validation rejects valid SQL types with spaces or parens (e.g.
+        # VARCHAR(255), DECIMAL(10,2)) — table and column need strict validation
+        # but column_type should be checked separately with a broader allowlist.
         for name in (table, column, column_type):
             if not all(ch.isalnum() or ch == "_" for ch in name):
                 raise ValueError(f"Invalid SQL identifier: {name!r}")
@@ -341,6 +344,8 @@ class AgentLog:
             return None
 
         r = row._mapping
+        # FIXME: json.loads and StreamEvent(**e) can both throw if the cache row is
+        # corrupted — should catch and return None (treat as cache miss) instead of crashing.
         events_data = json.loads(r["events_json"])
         return AgentRunRecord(
             cli_run_id=r["cli_run_id"],

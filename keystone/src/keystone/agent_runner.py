@@ -161,6 +161,8 @@ class LocalAgentRunner(AgentRunner):
             stream="stderr",
             line="Extracting project archive to working directory...",
         )
+        # FIXME: if an exception escapes before cleanup() is called, this temp dir
+        # leaks permanently. Should use tempfile.TemporaryDirectory as a context manager.
         self._work_dir = Path(tempfile.mkdtemp(prefix="keystone-agent-"))
         with tarfile.open(fileobj=io.BytesIO(project_archive), mode="r:gz") as tar:
             tar.extractall(self._work_dir, filter="data")

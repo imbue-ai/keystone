@@ -421,6 +421,7 @@ def bootstrap(
                     status_messages=[m.message for m in status_messages],
                     agent_summary=agent_summary.message if agent_summary else None,
                     devcontainer_dir=devcontainer_dir,
+                    project_root=project_root,
                 )
 
                 if evaluator_result.passed:

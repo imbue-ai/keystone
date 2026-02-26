@@ -98,6 +98,9 @@ def run_process(
         name=f"{log_prefix}-stderr-reader",
     )
 
+    # FIXME: if the process fills the pipe buffer before the threads start draining,
+    # this can deadlock. Consider using process.communicate() instead, or at minimum
+    # call process.wait() after joining the threads, not before.
     stdout_thread.start()
     stderr_thread.start()
     stdout_thread.join()

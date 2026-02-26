@@ -6,7 +6,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from keystone.evaluator import EVALUATOR_MODEL, evaluate_agent_work, evaluate_and_fix
+from keystone.evaluator import (
+    EVALUATOR_MODEL,
+    _read_project_context,
+    _run_guardrail,
+    evaluate_agent_work,
+    evaluate_and_fix,
+)
 from keystone.schema import EvaluatorResult
 
 
@@ -411,3 +417,69 @@ def test_fixer_passed_false_when_no_files_written(
         )
 
     assert result.passed is False
+
+
+# ---------------------------------------------------------------------------
+# Tests for project context + guardrail integration
+# ---------------------------------------------------------------------------
+
+
+def test_read_project_context_finds_requirements(tmp_path: Path) -> None:
+    """_read_project_context should include requirements.txt content."""
+    (tmp_path / "requirements.txt").write_text("flask==3.0.0\npytest==8.0.0\n")
+    context = _read_project_context(tmp_path)
+    assert "requirements.txt" in context
+    assert "flask" in context
+
+
+def test_read_project_context_fallback_lists_files(tmp_path: Path) -> None:
+    """When no known config files exist, fallback to listing project root."""
+    (tmp_path / "main.go").write_text("package main\n")
+    context = _read_project_context(tmp_path)
+    assert "main.go" in context
+
+
+def test_run_guardrail_missing_devcontainer(tmp_path: Path) -> None:
+    """guardrail.sh should report FAIL when .devcontainer is missing."""
+    output = _run_guardrail(tmp_path)
+    assert "FAIL" in output or "MISSING" in output or "guardrail" in output.lower()
+
+
+def test_fixer_includes_project_context_in_prompt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Fixer should include project files and guardrail output in LLM prompt."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    (tmp_path / "requirements.txt").write_text("flask==3.0.0\npytest\n")
+
+    fix_response = {
+        "diagnosis": "Fixed for flask project",
+        "fixes_applied": ["Used flask base image"],
+        "devcontainer_json": None,
+        "dockerfile": "FROM python:3.12\nWORKDIR /project_src\nRUN mkdir -p /test_artifacts && chmod 777 /test_artifacts\nCOPY .devcontainer/run_all_tests.sh /run_all_tests.sh\nRUN chmod +x /run_all_tests.sh\n",
+        "run_all_tests_sh": "#!/bin/bash\npytest --junitxml=/test_artifacts/junit/pytest.xml\necho '{\"success\": true}' > /test_artifacts/final_result.json\n",
+    }
+
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text=json.dumps(fix_response))]
+    mock_response.usage = MagicMock(input_tokens=800, output_tokens=400)
+
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = mock_response
+
+    with patch("keystone.evaluator.anthropic.Anthropic", return_value=mock_client):
+        evaluate_and_fix(
+            verification_error="Build failed",
+            generated_files=_make_generated_files(has_dockerfile=False),
+            status_messages=[],
+            agent_summary=None,
+            devcontainer_dir=tmp_path / ".devcontainer",
+            project_root=tmp_path,
+        )
+
+    call_kwargs = mock_client.messages.create.call_args
+    user_content = call_kwargs.kwargs["messages"][0]["content"]
+    assert "requirements.txt" in user_content
+    assert "flask" in user_content
+    assert "Guardrail" in user_content

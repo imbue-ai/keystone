@@ -427,6 +427,8 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
                 "The agent may not have created a .devcontainer directory.",
                 tar_exit,
             )
+        # FIXME: tar failure is logged but execution continues — the sb.open() below
+        # will fail with a confusing error. Should return/raise early on tar_exit != 0.
         with sb.open("/tmp/devcontainer.tar.gz", "rb") as f:
             self._devcontainer_tarball = f.read()
         logger.info("Captured devcontainer tarball: %d bytes", len(self._devcontainer_tarball))

@@ -13,6 +13,7 @@ Design: one-shot fix — no back-and-forth conversation.  This keeps cost low
 import json
 import logging
 import os
+import subprocess
 from pathlib import Path
 
 import anthropic
@@ -22,6 +23,24 @@ from keystone.schema import EvaluatorResult
 logger = logging.getLogger(__name__)
 
 EVALUATOR_MODEL = "claude-haiku-4-5-20251001"
+
+# Project files that reveal the language/framework/dependencies.
+_PROJECT_CONTEXT_FILES = [
+    "requirements.txt",
+    "pyproject.toml",
+    "setup.py",
+    "setup.cfg",
+    "package.json",
+    "go.mod",
+    "Gemfile",
+    "Cargo.toml",
+    "pom.xml",
+    "build.gradle",
+    "Makefile",
+    "tox.ini",
+    "pytest.ini",
+    "conftest.py",
+]
 
 # ---------------------------------------------------------------------------
 # Prompt for the fixer: given the error + files, produce corrected files.
@@ -34,8 +53,10 @@ for a software project, but verification FAILED.
 You will be given:
 1. The error that occurred (build failure, missing file, test failure, etc.)
 2. The files the agent produced (some may be missing or broken)
-3. Information about the project (language, test framework, etc.) from the \
-   agent's status messages
+3. Key project files (requirements.txt, package.json, etc.) so you know the \
+   exact language, dependencies, and test framework
+4. Guardrail check results showing exactly which structural checks failed
+5. Information about the project from the agent's status messages
 
 Your job is to produce FIXED versions of the three files so the build and \
 tests pass.  Output a JSON object with exactly these keys:
@@ -48,24 +69,80 @@ tests pass.  Output a JSON object with exactly these keys:
   "run_all_tests_sh": "<full corrected run_all_tests.sh content>"
 }
 
-Rules:
-- If a file is null/missing, create it from scratch.
-- The Dockerfile MUST:
-  - Start with a FROM instruction
-  - Create /test_artifacts: RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
-  - End with: COPY .devcontainer/run_all_tests.sh /run_all_tests.sh\\nRUN chmod +x /run_all_tests.sh
-  - Use WORKDIR /project_src and copy source files explicitly (not COPY . .)
-- run_all_tests.sh MUST:
+GUARDRAIL REQUIREMENTS (these checks WILL be run on your output — all must pass):
+
+Dockerfile MUST:
+  - Start with a FROM instruction (e.g. FROM python:3.12)
+  - Contain: RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
+  - Contain: COPY .devcontainer/run_all_tests.sh /run_all_tests.sh
+  - Set WORKDIR (e.g. WORKDIR /project_src)
+  - NOT use "COPY . ." — use explicit COPY for source files only
+
+run_all_tests.sh MUST:
   - Start with #!/bin/bash
   - Produce JUnit XML in /test_artifacts/junit/*.xml
-  - Write /test_artifacts/final_result.json
+  - Write /test_artifacts/final_result.json with {"success": true/false}
+  - Reference /test_artifacts for all output
+
+Additional rules:
+- Use the project files provided to pick the right base image, install the \
+  right packages, and run the correct test command.
+- If requirements.txt exists, install it. If package.json, run npm install. etc.
+- For Python projects: use pytest --junitxml=/test_artifacts/junit/pytest.xml
+- For Node projects: use jest or mocha with JUnit reporter
+- For build failures: check package names, base images, COPY paths.
+- For test failures (exit code 4 = no tests collected): check the test \
+  discovery path, WORKDIR, and that test files are COPY'd into the image.
 - devcontainer_json should normally be kept as-is (return null to skip).
-- Focus on fixing the specific error.  Don't rewrite everything.
-- For build failures: check package names, base images, COPY paths, syntax.
-- For test failures: check test commands, working directory, env vars.
-- For missing files: create them.
-- For timeouts: add timeout commands, reduce scope.
 """
+
+
+def _run_guardrail(project_root: Path) -> str:
+    """Run guardrail.sh from project_root and return its output (non-Docker checks only).
+
+    We skip the Docker build step (section 4) to keep this fast and side-effect-free.
+    Returns the combined stdout/stderr output.
+    """
+    guardrail_path = Path(__file__).parent / "guardrail.sh"
+    if not guardrail_path.exists():
+        return "(guardrail.sh not found)"
+    try:
+        # Inject SKIP_DOCKER_BUILD=1 so the script can optionally skip section 4.
+        # Even without that env var the script will just fail the docker build check
+        # which is fine — we want all structural feedback.
+        result = subprocess.run(
+            ["bash", str(guardrail_path)],
+            cwd=str(project_root),
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env={**os.environ, "SKIP_DOCKER_BUILD": "1"},
+        )
+        output = result.stdout + result.stderr
+        return output[:3000]
+    except Exception as e:
+        return f"(guardrail failed to run: {e})"
+
+
+def _read_project_context(project_root: Path) -> str:
+    """Read key project files to give the fixer context about the project."""
+    parts: list[str] = []
+    for filename in _PROJECT_CONTEXT_FILES:
+        fpath = project_root / filename
+        if fpath.exists():
+            try:
+                content = fpath.read_text()[:2000]
+                parts.append(f"### {filename}\n```\n{content}\n```")
+            except Exception:
+                pass
+    if not parts:
+        # Fallback: list top-level files so LLM can infer the project type
+        try:
+            entries = sorted(p.name for p in project_root.iterdir() if not p.name.startswith("."))
+            parts.append(f"### Project root files\n{', '.join(entries[:40])}")
+        except Exception:
+            pass
+    return "\n".join(parts)
 
 
 def evaluate_and_fix(
@@ -74,6 +151,7 @@ def evaluate_and_fix(
     status_messages: list[str],
     agent_summary: str | None,
     devcontainer_dir: Path,
+    project_root: Path | None = None,
 ) -> EvaluatorResult:
     """Attempt to fix verification failures using a cheap LLM call.
 
@@ -86,6 +164,7 @@ def evaluate_and_fix(
         status_messages: Agent's status messages (project context).
         agent_summary: Agent's final summary.
         devcontainer_dir: Path to .devcontainer/ on disk (files will be overwritten).
+        project_root: Root of the project (used to read requirements, run guardrail).
 
     Returns:
         EvaluatorResult describing what happened.
@@ -110,6 +189,18 @@ def evaluate_and_fix(
             parts.append(f"### {name}\n```\n{display}\n```\n")
         else:
             parts.append(f"### {name}\nNOT CREATED (missing)\n")
+
+    # ---- Project files: give the fixer real context about the project ----
+    if project_root is not None:
+        project_context = _read_project_context(project_root)
+        if project_context:
+            parts.append(
+                f"## Project Files (language/dependencies/test framework)\n{project_context}\n"
+            )
+
+        # ---- Guardrail output: structural check results ----
+        guardrail_output = _run_guardrail(project_root)
+        parts.append(f"## Guardrail Check Results\n```\n{guardrail_output}\n```\n")
 
     if status_messages:
         parts.append("## Agent Status Messages (project context)\n")

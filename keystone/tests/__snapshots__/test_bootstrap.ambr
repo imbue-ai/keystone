@@ -263,24 +263,30 @@
       'error_messages': list([
       ]),
       'exit_code': 0,
-      'model': '',
       'status_messages': list([
         'Exploring repository structure to identify file types and test locations.',
-        'Simple Python project with pytest. Creating .devcontainer setup.',
-        'Building the devcontainer image.',
-        'Build succeeded. Running the test container.',
+        'Simple Python project detected. Creating .devcontainer directory with Dockerfile and test runner.',
+        'Running guardrail check.',
+        'Build passed. Running container with --network=host to verify tests.',
       ]),
-      'summary': 'Everything worked on the first try. Simple Python 3.11 project with pytest; used uv for fast dependency installation into /venv, copied only app.py and tests/ explicitly (not the whole source tree), and the two tests pass cleanly in under a second.',
+      'summary': "Everything worked. Simple Python project using uv for dependency management. Key fix: needed to set `PYTHONPATH=/project_src` in `run_all_tests.sh` so pytest could find `app.py` when tests import from it directly. The guardrail script's docker run command doesn't use `--network=host` so it shows a networking error in sandbox, but the build passes and manual runs with `--network=host` work correctly.",
       'timed_out': False,
     }),
     'cli_args': list([
-      '/Users/thad/.cursor/extensions/ms-python.python-2025.6.1-darwin-arm64/python_files/vscode_pytest/run_pytest_script.py',
+      '/Users/catherinekim/bootstrap_devcontainer/.venv/bin/pytest',
+      'keystone/tests/test_bootstrap.py::test_e2e_sample_projects[python_project]',
       '-sv',
-      '--log-cli-level=DEBUG',
       '--snapshot-update',
-      '--rootdir=/Users/thad/Imbue Dropbox/Thad Hughes/src/bootstrap_devcontainer',
     ]),
     'error_message': None,
+    'evaluator': dict({
+      'cost_usd': 0.0014472,
+      'issues': list([
+      ]),
+      'model': 'claude-haiku-4-5-20251001',
+      'passed': True,
+      'reasoning': "The agent successfully created all three required files with genuine, working implementations. The devcontainer.json is properly formatted, the Dockerfile is a substantial and well-structured image definition (not a stub) that handles dependency management with uv, creates necessary directories, and sets up the Python environment correctly. The run_all_tests.sh script is a complete test runner that properly generates JUnit XML output, sets PYTHONPATH correctly, and handles exit codes appropriately. The verification result confirms success, and the agent's explanation of the PYTHONPATH fix demonstrates understanding of the actual problem solved.",
+    }),
     'generated_files': dict({
       'devcontainer_json': '''
         {
@@ -298,7 +304,7 @@
   
       ''',
       'dockerfile': '''
-        FROM python:3.11-slim
+        FROM python:3.12-slim
         
         # Create test artifacts directory.
         RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
@@ -314,12 +320,16 @@
         # Install dependencies first (without the project itself) to maximize layer caching.
         COPY pyproject.toml uv.lock /tmp/deps/
         ENV UV_PROJECT_ENVIRONMENT=/venv
-        RUN cd /tmp/deps && uv sync --locked --no-install-project && echo "Python virtual environment created successfully at $UV_PROJECT_ENVIRONMENT"
+        RUN cd /tmp/deps && uv sync --locked --no-install-project && \
+            echo "Python virtual environment created successfully at $UV_PROJECT_ENVIRONMENT"
         
-        # Copy source code
+        # Copy source code (these won't change during agent work)
         WORKDIR /project_src
         COPY app.py ./
         COPY tests/ ./tests/
+        
+        # Ensure the venv is on PATH
+        ENV PATH="/venv/bin:$PATH"
         
         # Copy the test runner script last (this changes often during development)
         COPY .devcontainer/run_all_tests.sh /run_all_tests.sh
@@ -332,23 +342,22 @@
         
         mkdir -p /test_artifacts/junit
         
+        cd /project_src
         export PYTHONPATH=/project_src:${PYTHONPATH:-}
         
         echo "Running pytest..."
-        /venv/bin/pytest /project_src/tests/ \
-            --junitxml=/test_artifacts/junit/pytest.xml \
-            --no-header \
-            -v 2>&1
+        pytest --junitxml=/test_artifacts/junit/pytest.xml --no-header -v 2>&1
         
-        EXIT_CODE=$?
-        
-        if [ $EXIT_CODE -eq 0 ]; then
-            echo '{"success": true}' > /test_artifacts/final_result.json
+        # Write final result
+        RESULT=$?
+        if [ $RESULT -eq 0 ]; then
+          echo '{"success": true}' > /test_artifacts/final_result.json
+          echo "All tests passed."
         else
-            echo '{"success": false}' > /test_artifacts/final_result.json
+          echo '{"success": false}' > /test_artifacts/final_result.json
+          echo "Some tests failed."
+          exit $RESULT
         fi
-        
-        exit $EXIT_CODE
   
       ''',
     }),
@@ -368,6 +377,9 @@
           'skipped': False,
         }),
       ]),
+      'tests_failed': 0,
+      'tests_passed': 2,
+      'tests_skipped': 0,
     }),
   })
 # ---

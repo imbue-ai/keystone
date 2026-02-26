@@ -174,8 +174,8 @@ def test_eval_cli_fake_agents_config_file(
             f"{name}: python_project should succeed, got error: {repo_result.get('error_message')}"
         )
 
-        # Verify per-repo result file exists
-        repo_output_dir = config_dir / "python_project"
+        # Verify per-repo result file exists (path always includes trial_0 subdirectory)
+        repo_output_dir = config_dir / "python_project" / "trial_0"
         result_file = repo_output_dir / "eval_result.json"
         assert result_file.exists(), f"Missing eval_result.json for {name}/python_project"
 

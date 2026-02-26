@@ -33,6 +33,7 @@ class LLMModel(str, Enum):
 class StreamEvent(BaseModel):
     """A single event from the agent's output stream."""
 
+    # FIXME: Use the enum above.  Also, move this type up next to that enum.
     stream: Literal["stdout", "stderr"]
     line: str
 
@@ -47,6 +48,7 @@ class AgentConfig(BaseModel):
     max_budget_usd: float
     agent_time_limit_seconds: int
     agent_in_modal: bool
+    # FIXME: agent_cmd and model feel like they have interrelating concerns, and should maybe somehow be merged into a single field.  Can we get rid of agent_cmd and just use model and force it to be non-None.
     model: LLMModel | None = None
 
     def to_cache_key_json(self) -> str:
@@ -78,7 +80,7 @@ class AgentStatusMessage(BaseModel):
 
 
 class TestResult(BaseModel):
-    """Result of a single test case."""
+    """Result of a single test case, parsed from JUnit XML."""
 
     name: str  # Full test name (e.g., "classname::test_name")
     passed: bool
@@ -94,6 +96,8 @@ class VerificationResult(BaseModel):
     image_build_seconds: float | None = None
     test_execution_seconds: float | None = None
 
+    # FIXME: I thought we had ints in this object counting the number of passed, failed, and skipped tests to summarize the list below.  Did they get taken out?  Please add them back.
+
     # All test results from JUnit XML reports
     test_results: list[TestResult] = []
 
@@ -106,10 +110,14 @@ class AgentExecution(BaseModel):
     duration_seconds: float
     exit_code: int
     timed_out: bool = False
+
+    # FIXME: I don't we actually need this because we have have the model information in AgentConfig above.  Remove this please.
     model: str = ""
     summary: AgentStatusMessage | None = None
     status_messages: list[AgentStatusMessage] = []
     error_messages: list[str] = []
+
+    # FIXME: Unfortunately this is not getting populated (in the claude case anyway) if the agent exits with a non-zero exit code.  Maybe there's a way to fix this?  Perhaps something in the .claude dir can tell us?  Please research a better way to track agent costs for a session.
     cost: InferenceCost
 
 

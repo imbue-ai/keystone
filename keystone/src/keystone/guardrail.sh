@@ -1,12 +1,16 @@
 #!/bin/bash
 # guardrail.sh — Agent self-check tool for validating devcontainer work.
 #
+# FIXME: This script should copy the .devcontainer directory onto a clean copy of the project and devcontainer build from there, to make sure the agent didn't change anything else.  This probably means we want to write a clean copy of the repo somewhere inside the image before starting the agent.
+#
 # Run this script from the project root to get structured feedback about
 # common mistakes *before* the final verification step. It checks:
 #   1. Required files exist (.devcontainer/devcontainer.json, Dockerfile, run_all_tests.sh)
 #   2. Dockerfile basic structure (FROM, test_artifacts, COPY run_all_tests.sh)
 #   3. run_all_tests.sh basic structure (JUnit output, final_result.json)
 #   4. Docker image builds successfully
+# FIXME: Add step 5: run the run_all_tests.sh script and check that everything passes and it produces junit xml in the right place.
+
 #
 # Exit code 0 = all checks pass, non-zero = at least one check failed.
 # Output is structured feedback the agent can act on.
@@ -74,6 +78,7 @@ echo ""
 # ------------------------------------------------------------------
 # 2. Dockerfile structure checks
 # ------------------------------------------------------------------
+# FIXME: If we actually run the run all tests script from a built Docker image, we don't need all of these tests. 
 echo "[2/4] Checking Dockerfile structure..."
 
 if [ -f ".devcontainer/Dockerfile" ]; then

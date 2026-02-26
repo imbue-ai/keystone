@@ -18,22 +18,13 @@ import subprocess
 from functools import cache
 from pathlib import Path
 
-from pydantic import BaseModel
+from keystone.schema import VersionInfo
 
 logger = logging.getLogger(__name__)
 
 _DIST_NAME = "keystone"
 
-
-# FIXME: Consider moving to schema.py.
-class VersionInfo(BaseModel):
-    """Version information for the current codebase."""
-
-    branch: str | None
-    commit_count: int
-    commit_timestamp: str | None  # ISO format, None when unavailable
-    git_hash: str | None
-    is_dirty: bool
+__all__ = ["VersionInfo", "get_version_info"]
 
 
 _UNKNOWN_VERSION = VersionInfo(

@@ -153,3 +153,13 @@ class BootstrapResult(BaseModel):
 
     # CLI arguments used to invoke keystone, for reproducibility.
     cli_args: list[str] | None = None
+
+
+class VersionInfo(BaseModel):
+    """Version information for the current codebase."""
+
+    branch: str | None
+    commit_count: int
+    commit_timestamp: str | None  # ISO format, None when unavailable
+    git_hash: str | None
+    is_dirty: bool

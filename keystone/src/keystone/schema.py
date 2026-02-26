@@ -115,7 +115,6 @@ class AgentExecution(BaseModel):
     status_messages: list[AgentStatusMessage] = []
     error_messages: list[str] = []
 
-    # FIXME: Unfortunately this is not getting populated (in the claude case anyway) if the agent exits with a non-zero exit code.  Maybe there's a way to fix this?  Perhaps something in the .claude dir can tell us?  Please research a better way to track agent costs for a session.
     cost: InferenceCost
 
 

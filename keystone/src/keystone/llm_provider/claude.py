@@ -54,7 +54,8 @@ class ClaudeProvider(AgentProvider):
         msg_type = data.get("type")
 
         if msg_type == "assistant":
-            for item in data.get("message", {}).get("content", []):
+            msg = data.get("message", {})
+            for item in msg.get("content", []):
                 if item.get("type") == "text":
                     txt = item.get("text", "").strip()
                     if txt:
@@ -66,6 +67,20 @@ class ClaudeProvider(AgentProvider):
                             input=item.get("input", {}),
                         )
                     )
+            # Accumulate per-message token usage so cost is tracked even when the
+            # agent exits non-zero and never emits a "result" event.
+            usage = msg.get("usage", {})
+            if usage:
+                events.append(
+                    AgentCostEvent(
+                        cost_usd=None,
+                        model=msg.get("model", ""),
+                        input_tokens=usage.get("input_tokens", 0),
+                        output_tokens=usage.get("output_tokens", 0),
+                        cached_tokens=usage.get("cache_read_input_tokens", 0),
+                        cache_creation_tokens=usage.get("cache_creation_input_tokens", 0),
+                    )
+                )
 
         elif msg_type == "result":
             usage = data.get("usage", {})

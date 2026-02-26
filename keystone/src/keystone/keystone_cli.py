@@ -212,7 +212,6 @@ def bootstrap(
 
     token_spending = TokenSpending()
     total_cost_usd = 0.0
-    model_name = ""
     exit_code = 1
     verification_success = False
     evaluator_result: EvaluatorResult | None = None
@@ -252,7 +251,7 @@ def bootstrap(
 
     def process_stdout_line(line: str) -> None:
         """Process a line of agent stdout via the LLM provider's event parser."""
-        nonlocal total_cost_usd, model_name
+        nonlocal total_cost_usd
         for event in provider.parse_stdout_line(line):
             match event:
                 case AgentTextEvent(text=text):
@@ -265,8 +264,6 @@ def bootstrap(
                 case AgentCostEvent() as cost:
                     if cost.cost_usd is not None:
                         total_cost_usd = cost.cost_usd
-                    if cost.model is not None:
-                        model_name = cost.model
                     token_spending.input += cost.input_tokens
                     token_spending.cached += cost.cached_tokens
                     token_spending.output += cost.output_tokens
@@ -570,7 +567,6 @@ def bootstrap(
             duration_seconds=agent_work_seconds,
             exit_code=exit_code,
             timed_out=agent_timed_out,
-            model=model_name,
             summary=agent_summary,
             status_messages=status_messages,
             error_messages=agent_errors,

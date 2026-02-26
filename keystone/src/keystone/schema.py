@@ -111,8 +111,6 @@ class AgentExecution(BaseModel):
     exit_code: int
     timed_out: bool = False
 
-    # FIXME: I don't we actually need this because we have have the model information in AgentConfig above.  Remove this please.
-    model: str = ""
     summary: AgentStatusMessage | None = None
     status_messages: list[AgentStatusMessage] = []
     error_messages: list[str] = []

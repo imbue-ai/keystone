@@ -1,11 +1,12 @@
 """Tests for the LLM evaluator module."""
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from keystone.evaluator import EVALUATOR_MODEL, evaluate_agent_work
+from keystone.evaluator import EVALUATOR_MODEL, evaluate_agent_work, evaluate_and_fix
 from keystone.schema import EvaluatorResult
 
 
@@ -250,3 +251,163 @@ def test_evaluator_result_model() -> None:
     )
     assert result_fail.passed is False
     assert len(result_fail.issues) == 2
+
+
+# ---------------------------------------------------------------------------
+# Tests for evaluate_and_fix (the fixer)
+# ---------------------------------------------------------------------------
+
+
+def test_fixer_skips_without_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Fixer should skip gracefully when ANTHROPIC_API_KEY is not set."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    result = evaluate_and_fix(
+        verification_error="Build failed: no Dockerfile",
+        generated_files=_make_generated_files(),
+        status_messages=["Exploring repo"],
+        agent_summary=None,
+        devcontainer_dir=tmp_path / ".devcontainer",
+    )
+
+    assert result.passed is False
+    assert "Skipped" in result.reasoning
+
+
+def test_fixer_writes_fixed_files(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Fixer should write corrected files to disk on success."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    fix_response = {
+        "diagnosis": "Dockerfile was missing FROM instruction",
+        "fixes_applied": ["Added FROM python:3.12", "Fixed COPY path"],
+        "devcontainer_json": None,
+        "dockerfile": "FROM python:3.12\nWORKDIR /project_src\nRUN mkdir -p /test_artifacts && chmod 777 /test_artifacts\nCOPY .devcontainer/run_all_tests.sh /run_all_tests.sh\nRUN chmod +x /run_all_tests.sh\n",
+        "run_all_tests_sh": "#!/bin/bash\nset -euo pipefail\npytest --junitxml=/test_artifacts/junit/pytest.xml\necho '{\"success\": true}' > /test_artifacts/final_result.json\n",
+    }
+
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text=json.dumps(fix_response))]
+    mock_response.usage = MagicMock(input_tokens=500, output_tokens=300)
+
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = mock_response
+
+    devcontainer_dir = tmp_path / ".devcontainer"
+
+    with patch("keystone.evaluator.anthropic.Anthropic", return_value=mock_client):
+        result = evaluate_and_fix(
+            verification_error="Build failed: no FROM instruction",
+            generated_files=_make_generated_files(has_dockerfile=False),
+            status_messages=["Exploring repo", "Creating Dockerfile"],
+            agent_summary="Attempted to create devcontainer",
+            devcontainer_dir=devcontainer_dir,
+        )
+
+    assert result.passed is True
+    assert result.model == EVALUATOR_MODEL
+    assert result.cost_usd > 0
+    assert "FROM" in result.reasoning.lower() or "dockerfile" in result.reasoning.lower()
+
+    # Verify files were actually written to disk
+    assert (devcontainer_dir / "Dockerfile").exists()
+    assert (devcontainer_dir / "run_all_tests.sh").exists()
+    assert "FROM python:3.12" in (devcontainer_dir / "Dockerfile").read_text()
+    # devcontainer.json should NOT be written (null in response)
+    assert not (devcontainer_dir / "devcontainer.json").exists()
+
+    # Verify run_all_tests.sh is executable
+    import stat
+
+    mode = (devcontainer_dir / "run_all_tests.sh").stat().st_mode
+    assert mode & stat.S_IXUSR
+
+
+def test_fixer_handles_api_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Fixer should handle API errors gracefully."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    mock_client = MagicMock()
+    mock_client.messages.create.side_effect = Exception("API rate limit")
+
+    with patch("keystone.evaluator.anthropic.Anthropic", return_value=mock_client):
+        result = evaluate_and_fix(
+            verification_error="Build failed",
+            generated_files=_make_generated_files(),
+            status_messages=[],
+            agent_summary=None,
+            devcontainer_dir=tmp_path / ".devcontainer",
+        )
+
+    assert result.passed is False
+    assert "failed" in result.reasoning.lower()
+
+
+def test_fixer_handles_invalid_json(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Fixer should handle non-JSON responses from the LLM."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text="Sorry, I can't fix this.")]
+    mock_response.usage = MagicMock(input_tokens=100, output_tokens=50)
+
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = mock_response
+
+    with patch("keystone.evaluator.anthropic.Anthropic", return_value=mock_client):
+        result = evaluate_and_fix(
+            verification_error="Build failed",
+            generated_files=_make_generated_files(),
+            status_messages=[],
+            agent_summary=None,
+            devcontainer_dir=tmp_path / ".devcontainer",
+        )
+
+    assert result.passed is False
+    assert "not valid JSON" in result.reasoning
+
+
+def test_fixer_passed_false_when_no_files_written(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Fixer should report passed=False when LLM returns empty/null files."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    fix_response = {
+        "diagnosis": "Cannot determine the issue",
+        "fixes_applied": [],
+        "devcontainer_json": None,
+        "dockerfile": None,
+        "run_all_tests_sh": None,
+    }
+
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(text=json.dumps(fix_response))]
+    mock_response.usage = MagicMock(input_tokens=200, output_tokens=50)
+
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = mock_response
+
+    with patch("keystone.evaluator.anthropic.Anthropic", return_value=mock_client):
+        result = evaluate_and_fix(
+            verification_error="Tests timed out",
+            generated_files=_make_generated_files(),
+            status_messages=[],
+            agent_summary=None,
+            devcontainer_dir=tmp_path / ".devcontainer",
+        )
+
+    assert result.passed is False

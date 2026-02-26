@@ -13,6 +13,7 @@ from keystone.agent_log import (
     AgentLog,
     CLIRunRecord,
     compute_cache_key,
+    create_devcontainer_tarball,
 )
 from keystone.agent_runner import LocalAgentRunner
 from keystone.cached_runner import CachedAgentRunner, CacheMissError
@@ -23,7 +24,7 @@ from keystone.constants import (
     STATUS_MARKER,
     SUMMARY_MARKER,
 )
-from keystone.evaluator import evaluate_agent_work
+from keystone.evaluator import evaluate_agent_work, evaluate_and_fix
 from keystone.git_utils import (
     create_git_archive_bytes,
     get_git_tree_hash,
@@ -214,6 +215,7 @@ def bootstrap(
     model_name = ""
     exit_code = 1
     verification_success = False
+    evaluator_result: EvaluatorResult | None = None
     agent_summary: AgentStatusMessage | None = None
     status_messages: list[AgentStatusMessage] = []
     agent_errors: list[str] = []
@@ -345,36 +347,42 @@ def bootstrap(
 
         agent_work_seconds = time.monotonic() - start_time
 
-        # Verification step
+        # Verification step (with evaluator fix-up loop on failure)
         logging.info(f"{ANSI_BLUE}Verifying agent's work...{ANSI_RESET}")
 
-        # Print Dockerfile and test script for visibility
         dockerfile_path = project_root / ".devcontainer" / "Dockerfile"
         test_script_path = project_root / ".devcontainer" / "run_all_tests.sh"
 
-        if dockerfile_path.exists():
-            print("=" * 60, file=sys.stderr)
-            print(f"Dockerfile: {dockerfile_path}", file=sys.stderr)
-            print("=" * 60, file=sys.stderr)
-            print(dockerfile_path.read_text(), file=sys.stderr)
+        def _print_devcontainer_files() -> None:
+            """Print Dockerfile and test script for visibility."""
+            if dockerfile_path.exists():
+                print("=" * 60, file=sys.stderr)
+                print(f"Dockerfile: {dockerfile_path}", file=sys.stderr)
+                print("=" * 60, file=sys.stderr)
+                print(dockerfile_path.read_text(), file=sys.stderr)
+            if test_script_path.exists():
+                print("=" * 60, file=sys.stderr)
+                print(f"Test script: {test_script_path}", file=sys.stderr)
+                print("=" * 60, file=sys.stderr)
+                print(test_script_path.read_text(), file=sys.stderr)
 
-        if test_script_path.exists():
-            print("=" * 60, file=sys.stderr)
-            print(f"Test script: {test_script_path}", file=sys.stderr)
-            print("=" * 60, file=sys.stderr)
-            print(test_script_path.read_text(), file=sys.stderr)
+        _print_devcontainer_files()
 
         verification_error: str | None = None
         image_build_seconds: float | None = None
         test_execution_seconds: float | None = None
-        try:
-            verify_result = runner.verify(
+
+        def _run_verification(tarball: bytes) -> VerificationResult:
+            return runner.verify(
                 project_archive,
-                devcontainer_tarball,
+                tarball,
                 test_artifacts_dir,
                 image_build_timeout_seconds,
                 test_timeout_seconds,
             )
+
+        try:
+            verify_result = _run_verification(devcontainer_tarball)
             verification_success = verify_result.success
             verification_error = verify_result.error_message
             image_build_seconds = verify_result.image_build_seconds
@@ -387,6 +395,68 @@ def bootstrap(
                 print("=" * 60, file=sys.stderr)
                 print(verification_error, file=sys.stderr)
                 print("=" * 60, file=sys.stderr)
+
+            # ---- Evaluator fix-up: attempt to repair on failure ----
+            if not verification_success and verification_error:
+                devcontainer_dir = project_root / ".devcontainer"
+                console.print(
+                    "[yellow]Evaluator:[/yellow] Verification failed — "
+                    "attempting LLM fix-up pass..."
+                )
+
+                devcontainer_json_path = project_root / ".devcontainer" / "devcontainer.json"
+                fix_files = {
+                    "devcontainer_json": devcontainer_json_path.read_text()
+                    if devcontainer_json_path.exists()
+                    else None,
+                    "dockerfile": dockerfile_path.read_text() if dockerfile_path.exists() else None,
+                    "run_all_tests_sh": test_script_path.read_text()
+                    if test_script_path.exists()
+                    else None,
+                }
+
+                evaluator_result = evaluate_and_fix(
+                    verification_error=verification_error,
+                    generated_files=fix_files,
+                    status_messages=[m.message for m in status_messages],
+                    agent_summary=agent_summary.message if agent_summary else None,
+                    devcontainer_dir=devcontainer_dir,
+                )
+
+                if evaluator_result.passed:
+                    console.print(
+                        f"[yellow]Evaluator:[/yellow] Wrote fixes — {evaluator_result.reasoning}"
+                    )
+                    _print_devcontainer_files()
+
+                    # Rebuild tarball from fixed files and re-verify
+                    fixed_tarball = create_devcontainer_tarball(project_root)
+                    devcontainer_tarball = fixed_tarball
+
+                    console.print(
+                        "[yellow]Evaluator:[/yellow] Re-running verification with fixed files..."
+                    )
+                    verify_result_2 = _run_verification(fixed_tarball)
+                    verification_success = verify_result_2.success
+                    verification_error = verify_result_2.error_message
+                    image_build_seconds = verify_result_2.image_build_seconds
+                    test_execution_seconds = verify_result_2.test_execution_seconds
+
+                    if verification_success:
+                        console.print(
+                            "[green]Evaluator:[/green] Fix-up succeeded! Verification now passes."
+                        )
+                    else:
+                        console.print(
+                            f"[red]Evaluator:[/red] Fix-up did not resolve "
+                            f"the issue: {verification_error}"
+                        )
+                else:
+                    console.print(
+                        f"[red]Evaluator:[/red] Could not produce fixes — "
+                        f"{evaluator_result.reasoning}"
+                    )
+
         except Exception as e:
             print(f"Verification error: {e}", file=sys.stderr)
             verification_success = False
@@ -463,29 +533,29 @@ def bootstrap(
         run_all_tests_sh=test_script_path.read_text() if test_script_path.exists() else None,
     )
 
-    # Run LLM evaluator to check if agent completed its task
-    evaluator_result: EvaluatorResult | None = None
-    try:
-        logging.info("Running LLM evaluator to check agent completeness...")
-        evaluator_result = evaluate_agent_work(
-            generated_files={
-                "devcontainer_json": generated_files.devcontainer_json,
-                "dockerfile": generated_files.dockerfile,
-                "run_all_tests_sh": generated_files.run_all_tests_sh,
-            },
-            agent_summary=agent_summary.message if agent_summary else None,
-            status_messages=[m.message for m in status_messages],
-            verification_success=verification_success,
-            verification_error=verification_error,
-        )
-        if evaluator_result.passed:
-            console.print(f"[green]Evaluator:[/green] PASSED - {evaluator_result.reasoning}")
-        else:
-            console.print(f"[red]Evaluator:[/red] FAILED - {evaluator_result.reasoning}")
-            for issue in evaluator_result.issues:
-                console.print(f"  - {issue}")
-    except Exception as e:
-        logging.warning(f"Evaluator failed (non-blocking): {e}")
+    # Run passive LLM evaluator (only if the fix-up loop didn't already set it)
+    if evaluator_result is None:
+        try:
+            logging.info("Running LLM evaluator to check agent completeness...")
+            evaluator_result = evaluate_agent_work(
+                generated_files={
+                    "devcontainer_json": generated_files.devcontainer_json,
+                    "dockerfile": generated_files.dockerfile,
+                    "run_all_tests_sh": generated_files.run_all_tests_sh,
+                },
+                agent_summary=agent_summary.message if agent_summary else None,
+                status_messages=[m.message for m in status_messages],
+                verification_success=verification_success,
+                verification_error=verification_error,
+            )
+            if evaluator_result.passed:
+                console.print(f"[green]Evaluator:[/green] PASSED - {evaluator_result.reasoning}")
+            else:
+                console.print(f"[red]Evaluator:[/red] FAILED - {evaluator_result.reasoning}")
+                for issue in evaluator_result.issues:
+                    console.print(f"  - {issue}")
+        except Exception as e:
+            logging.warning(f"Evaluator failed (non-blocking): {e}")
 
     output = BootstrapResult(
         success=overall_success,

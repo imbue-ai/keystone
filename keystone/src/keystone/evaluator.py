@@ -2,12 +2,12 @@
 
 When the creator agent's output fails verification (build failure, missing
 Dockerfile, test failures, timeouts, etc.), this module calls a cheap LLM
-(Haiku) with the error context and generated files, asking it to produce
+with the error context and generated files, asking it to produce
 corrected versions.  The fixed files are written back to disk so the caller
 can re-run verification.
 
 Design: one-shot fix — no back-and-forth conversation.  This keeps cost low
-(single Haiku call, only on failure) while still rescuing common mistakes.
+(single LLM call, only on failure) while still rescuing common mistakes.
 """
 
 import json
@@ -17,12 +17,12 @@ import subprocess
 from pathlib import Path
 
 import anthropic
+import openai
 
+from keystone.llm_provider.pricing import estimate_cost_usd
 from keystone.schema import EvaluatorResult
 
 logger = logging.getLogger(__name__)
-
-EVALUATOR_MODEL = "claude-haiku-4-5-20251001"
 
 # Project files that reveal the language/framework/dependencies.
 _PROJECT_CONTEXT_FILES = [
@@ -97,7 +97,76 @@ Additional rules:
 """
 
 
-def _run_guardrail(project_root: Path) -> str:
+# ---------------------------------------------------------------------------
+# Provider routing helpers
+# ---------------------------------------------------------------------------
+
+
+def _is_openai_model(model: str) -> bool:
+    """Return True for models that use the OpenAI API."""
+    bare = model.split("/", 1)[-1] if "/" in model else model
+    return bare.startswith("gpt-")
+
+
+def _call_llm(model: str, system: str, user_message: str, max_tokens: int) -> tuple[str, float]:
+    """Call the appropriate LLM API and return (response_text, cost_usd).
+
+    Routes to OpenAI SDK for gpt-* models and Anthropic SDK otherwise.
+    Strips ``provider/`` prefixes (e.g. ``openai/gpt-5.2-codex`` -> ``gpt-5.2-codex``)
+    before calling the API.
+    """
+    bare_model = model.split("/", 1)[-1] if "/" in model else model
+
+    if _is_openai_model(bare_model):
+        api_key = os.environ.get("OPENAI_API_KEY", "")
+        if not api_key:
+            raise RuntimeError("OPENAI_API_KEY not set")
+        client = openai.OpenAI(api_key=api_key)
+        response = client.chat.completions.create(
+            model=bare_model,
+            max_tokens=max_tokens,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user_message},
+            ],
+        )
+        text = response.choices[0].message.content or ""
+        input_tokens = response.usage.prompt_tokens if response.usage else 0
+        output_tokens = response.usage.completion_tokens if response.usage else 0
+        cost_usd = estimate_cost_usd(
+            input_tokens=input_tokens,
+            cached_tokens=0,
+            output_tokens=output_tokens,
+            model=bare_model,
+        )
+        return text.strip(), cost_usd
+    else:
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            raise RuntimeError("ANTHROPIC_API_KEY not set")
+        client = anthropic.Anthropic(api_key=api_key)
+        response = client.messages.create(
+            model=bare_model,
+            max_tokens=max_tokens,
+            system=system,
+            messages=[{"role": "user", "content": user_message}],
+        )
+        first_block = response.content[0]
+        if not hasattr(first_block, "text"):
+            raise RuntimeError("Anthropic returned non-text content block")
+        text = first_block.text.strip()  # type: ignore[union-attr]
+        input_tokens = response.usage.input_tokens if response.usage else 0
+        output_tokens = response.usage.output_tokens if response.usage else 0
+        cost_usd = estimate_cost_usd(
+            input_tokens=input_tokens,
+            cached_tokens=0,
+            output_tokens=output_tokens,
+            model=bare_model,
+        )
+        return text, cost_usd
+
+
+def run_guardrail(project_root: Path) -> str:
     """Run guardrail.sh from project_root and return its output (non-Docker checks only).
 
     We skip the Docker build step (section 4) to keep this fast and side-effect-free.
@@ -152,8 +221,9 @@ def evaluate_and_fix(
     agent_summary: str | None,
     devcontainer_dir: Path,
     project_root: Path | None = None,
+    model: str = "claude-haiku-4-5-20251001",
 ) -> EvaluatorResult:
-    """Attempt to fix verification failures using a cheap LLM call.
+    """Attempt to fix verification failures using an LLM call.
 
     On success, writes corrected files to *devcontainer_dir* so the caller
     can re-run verification with the patched output.
@@ -165,17 +235,28 @@ def evaluate_and_fix(
         agent_summary: Agent's final summary.
         devcontainer_dir: Path to .devcontainer/ on disk (files will be overwritten).
         project_root: Root of the project (used to read requirements, run guardrail).
+        model: LLM model to use for the evaluator (matches agent model by default).
 
     Returns:
         EvaluatorResult describing what happened.
     """
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        logger.warning("ANTHROPIC_API_KEY not set, skipping evaluator fix attempt")
-        return EvaluatorResult(
-            passed=False,
-            reasoning="Skipped: ANTHROPIC_API_KEY not available",
-        )
+    # Check for the appropriate API key based on model
+    if _is_openai_model(model):
+        api_key = os.environ.get("OPENAI_API_KEY", "")
+        if not api_key:
+            logger.warning("OPENAI_API_KEY not set, skipping evaluator fix attempt")
+            return EvaluatorResult(
+                passed=False,
+                reasoning="Skipped: OPENAI_API_KEY not available",
+            )
+    else:
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            logger.warning("ANTHROPIC_API_KEY not set, skipping evaluator fix attempt")
+            return EvaluatorResult(
+                passed=False,
+                reasoning="Skipped: ANTHROPIC_API_KEY not available",
+            )
 
     # ---- Build the user message with full error context ----
     parts: list[str] = []
@@ -199,7 +280,7 @@ def evaluate_and_fix(
             )
 
         # ---- Guardrail output: structural check results ----
-        guardrail_output = _run_guardrail(project_root)
+        guardrail_output = run_guardrail(project_root)
         parts.append(f"## Guardrail Check Results\n```\n{guardrail_output}\n```\n")
 
     if status_messages:
@@ -213,22 +294,7 @@ def evaluate_and_fix(
     user_message = "\n".join(parts)
 
     try:
-        client = anthropic.Anthropic(api_key=api_key)
-        response = client.messages.create(
-            model=EVALUATOR_MODEL,
-            max_tokens=4096,
-            system=FIXER_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_message}],
-        )
-
-        first_block = response.content[0]
-        if not hasattr(first_block, "text"):
-            return EvaluatorResult(
-                passed=False,
-                reasoning="Evaluator returned non-text content block",
-                model=EVALUATOR_MODEL,
-            )
-        response_text = first_block.text.strip()  # type: ignore[union-attr]
+        response_text, cost_usd = _call_llm(model, FIXER_SYSTEM_PROMPT, user_message, 4096)
 
         # Extract JSON (handle markdown code blocks)
         if "```json" in response_text:
@@ -237,13 +303,6 @@ def evaluate_and_fix(
             response_text = response_text.split("```")[1].split("```")[0].strip()
 
         fix_data = json.loads(response_text)
-
-        cost_usd = 0.0
-        if response.usage:
-            cost_usd = (
-                response.usage.input_tokens * 0.80 / 1_000_000
-                + response.usage.output_tokens * 4.0 / 1_000_000
-            )
 
         # ---- Write fixed files to disk ----
         devcontainer_dir.mkdir(parents=True, exist_ok=True)
@@ -277,7 +336,7 @@ def evaluate_and_fix(
             passed=bool(files_written),
             reasoning=diagnosis,
             issues=fixes,
-            model=EVALUATOR_MODEL,
+            model=model,
             cost_usd=cost_usd,
         )
 
@@ -286,14 +345,14 @@ def evaluate_and_fix(
         return EvaluatorResult(
             passed=False,
             reasoning=f"Evaluator response was not valid JSON: {e}",
-            model=EVALUATOR_MODEL,
+            model=model,
         )
     except Exception as e:
         logger.error(f"Evaluator fix call failed: {e}")
         return EvaluatorResult(
             passed=False,
             reasoning=f"Evaluator fix call failed: {e}",
-            model=EVALUATOR_MODEL,
+            model=model,
         )
 
 
@@ -335,19 +394,40 @@ def evaluate_agent_work(
     status_messages: list[str],
     verification_success: bool,
     verification_error: str | None,
+    project_root: Path | None = None,
+    model: str = "claude-haiku-4-5-20251001",
 ) -> EvaluatorResult:
     """Run the LLM evaluator on the agent's output (passive check, no fixes).
+
+    Args:
+        generated_files: Dict with keys devcontainer_json, dockerfile, run_all_tests_sh.
+        agent_summary: Agent's final summary.
+        status_messages: Agent's status messages.
+        verification_success: Whether verification passed.
+        verification_error: Error string from verification, if any.
+        project_root: Root of the project (used to run guardrail for context).
+        model: LLM model to use for the evaluator (matches agent model by default).
 
     Returns:
         EvaluatorResult with pass/fail and reasoning.
     """
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        logger.warning("ANTHROPIC_API_KEY not set, skipping LLM evaluation")
-        return EvaluatorResult(
-            passed=True,
-            reasoning="Skipped: ANTHROPIC_API_KEY not available",
-        )
+    # Check for the appropriate API key based on model
+    if _is_openai_model(model):
+        api_key = os.environ.get("OPENAI_API_KEY", "")
+        if not api_key:
+            logger.warning("OPENAI_API_KEY not set, skipping LLM evaluation")
+            return EvaluatorResult(
+                passed=True,
+                reasoning="Skipped: OPENAI_API_KEY not available",
+            )
+    else:
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            logger.warning("ANTHROPIC_API_KEY not set, skipping LLM evaluation")
+            return EvaluatorResult(
+                passed=True,
+                reasoning="Skipped: ANTHROPIC_API_KEY not available",
+            )
 
     user_parts: list[str] = []
 
@@ -358,6 +438,11 @@ def evaluate_agent_work(
             user_parts.append(f"### {name}\n```\n{display}\n```\n")
         else:
             user_parts.append(f"### {name}\nNOT CREATED\n")
+
+    # ---- Guardrail output: give the evaluator structural context ----
+    if project_root is not None:
+        guardrail_output = run_guardrail(project_root)
+        user_parts.append(f"## Guardrail Check Results\n```\n{guardrail_output}\n```\n")
 
     if status_messages:
         user_parts.append("## Agent Status Messages\n")
@@ -380,22 +465,7 @@ def evaluate_agent_work(
     user_message = "\n".join(user_parts)
 
     try:
-        client = anthropic.Anthropic(api_key=api_key)
-        response = client.messages.create(
-            model=EVALUATOR_MODEL,
-            max_tokens=512,
-            system=EVALUATOR_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_message}],
-        )
-
-        first_block = response.content[0]
-        if not hasattr(first_block, "text"):
-            return EvaluatorResult(
-                passed=False,
-                reasoning="Evaluator returned non-text content block",
-                model=EVALUATOR_MODEL,
-            )
-        response_text = first_block.text.strip()  # type: ignore[union-attr]
+        response_text, cost_usd = _call_llm(model, EVALUATOR_SYSTEM_PROMPT, user_message, 512)
 
         if "```json" in response_text:
             response_text = response_text.split("```json")[1].split("```")[0].strip()
@@ -404,18 +474,11 @@ def evaluate_agent_work(
 
         result_data = json.loads(response_text)
 
-        cost_usd = 0.0
-        if response.usage:
-            cost_usd = (
-                response.usage.input_tokens * 0.80 / 1_000_000
-                + response.usage.output_tokens * 4.0 / 1_000_000
-            )
-
         return EvaluatorResult(
             passed=result_data.get("passed", False),
             reasoning=result_data.get("reasoning", "No reasoning provided"),
             issues=result_data.get("issues", []),
-            model=EVALUATOR_MODEL,
+            model=model,
             cost_usd=cost_usd,
         )
 
@@ -424,12 +487,12 @@ def evaluate_agent_work(
         return EvaluatorResult(
             passed=False,
             reasoning=f"Evaluator response was not valid JSON: {e}",
-            model=EVALUATOR_MODEL,
+            model=model,
         )
     except Exception as e:
         logger.error(f"Evaluator LLM call failed: {e}")
         return EvaluatorResult(
             passed=True,
             reasoning=f"Evaluator call failed (non-blocking): {e}",
-            model=EVALUATOR_MODEL,
+            model=model,
         )

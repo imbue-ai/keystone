@@ -42,12 +42,15 @@ class AgentConfig(BaseModel):
     This is part of the cache key - changing any field invalidates the cache.
     """
 
-    agent_cmd: str
     max_budget_usd: float
     agent_time_limit_seconds: int
     agent_in_modal: bool
-    # FIXME: agent_cmd and model feel like they have interrelating concerns, and should maybe somehow be merged into a single field.  Can we get rid of agent_cmd and just use model and force it to be non-None.
+    # model picks which LLM to use (passed as --model to the agent CLI).
+    # agent_cmd overrides the agent binary/path; None means use the provider's default command.
+    # Both are optional: omitting model lets the provider use its own default, omitting agent_cmd
+    # means we infer the command from the provider (e.g. "claude", "codex").
     model: LLMModel | None = None
+    agent_cmd: str | None = None
 
     def to_cache_key_json(self) -> str:
         """Stable JSON representation for cache key computation."""

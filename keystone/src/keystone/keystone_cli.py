@@ -115,7 +115,7 @@ def bootstrap(
         help="Skip cache lookup but still log the run (force fresh execution)",
     ),
     cache_version: str = typer.Option(
-        "2026-02-09",
+        "2026-02-26",
         "--cache_version",
         help="String appended to cache key.  Bumping this invalidates the cache, forcing fresh runs.",
     ),
@@ -209,7 +209,6 @@ def bootstrap(
 
     # Instantiate the LLM provider
     provider = get_provider(provider_name, model=model.value if model else None)
-    effective_agent_cmd = agent_cmd if agent_cmd is not None else provider.default_cmd
 
     token_spending = TokenSpending()
     total_cost_usd = 0.0
@@ -287,12 +286,13 @@ def bootstrap(
         # Build agent config (part of cache key — only behavioral params)
         assert max_budget_usd is not None
         agent_config = AgentConfig(
-            agent_cmd=effective_agent_cmd,
             max_budget_usd=max_budget_usd,
             agent_time_limit_seconds=agent_time_limit_seconds,
             agent_in_modal=agent_in_modal,
             model=model,
+            agent_cmd=agent_cmd,  # None means infer from provider.default_cmd at run time
         )
+        effective_agent_cmd = agent_config.agent_cmd or provider.default_cmd
 
         # Compute cache key
         cache_key = compute_cache_key(prompt, project_root, agent_config, cache_version)

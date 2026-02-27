@@ -113,7 +113,7 @@ def bootstrap(
         help="Skip cache lookup but still log the run (force fresh execution)",
     ),
     cache_version: str = typer.Option(
-        "2026-02-27",
+        "2026-02-26_a",
         "--cache_version",
         help="String appended to cache key.  Bumping this invalidates the cache, forcing fresh runs.",
     ),

@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from keystone.evaluator import (
+    _is_codex_model,
     _is_openai_model,
     _read_project_context,
     evaluate_agent_work,
@@ -570,21 +571,36 @@ def test_is_openai_model() -> None:
     assert _is_openai_model("anthropic/claude-opus-4-6") is False
 
 
-def test_evaluator_routes_to_openai(monkeypatch: pytest.MonkeyPatch) -> None:
-    """evaluate_agent_work should use OpenAI SDK for gpt-* models."""
+def test_is_codex_model() -> None:
+    """_is_codex_model should identify codex models that need the Responses API."""
+    assert _is_codex_model("gpt-5.2-codex") is True
+    assert _is_codex_model("gpt-5.1-codex-mini") is True
+    assert _is_codex_model("openai/gpt-5.2-codex") is True
+    assert _is_codex_model("openai/gpt-5.1-codex-mini") is True
+    assert _is_codex_model("gpt-4o") is False
+    assert _is_codex_model("claude-opus-4-6") is False
+    assert _is_codex_model("claude-haiku-4-5-20251001") is False
+
+
+def test_evaluator_routes_to_openai_responses_for_codex(monkeypatch: pytest.MonkeyPatch) -> None:
+    """evaluate_agent_work should use OpenAI Responses API for codex models."""
     monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
 
-    mock_choice = MagicMock()
-    mock_choice.message.content = json.dumps(
-        {"passed": True, "reasoning": "All good", "issues": []}
-    )
+    # Mock the Responses API output structure
+    mock_text_block = MagicMock()
+    mock_text_block.type = "output_text"
+    mock_text_block.text = json.dumps({"passed": True, "reasoning": "All good", "issues": []})
+
+    mock_message = MagicMock()
+    mock_message.type = "message"
+    mock_message.content = [mock_text_block]
 
     mock_response = MagicMock()
-    mock_response.choices = [mock_choice]
-    mock_response.usage = MagicMock(prompt_tokens=100, completion_tokens=50)
+    mock_response.output = [mock_message]
+    mock_response.usage = MagicMock(input_tokens=100, output_tokens=50)
 
     mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = mock_response
+    mock_client.responses.create.return_value = mock_response
 
     with patch("keystone.evaluator.openai.OpenAI", return_value=mock_client):
         result = evaluate_agent_work(
@@ -598,27 +614,32 @@ def test_evaluator_routes_to_openai(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert result.passed is True
     assert result.model == "gpt-5.2-codex"
-    call_kwargs = mock_client.chat.completions.create.call_args
+    call_kwargs = mock_client.responses.create.call_args
     assert call_kwargs.kwargs["model"] == "gpt-5.2-codex"
+    # Should NOT have called chat.completions
+    mock_client.chat.completions.create.assert_not_called()
 
 
 def test_evaluator_strips_opencode_prefix_for_openai(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """OpenCode-prefixed gpt models should be stripped before calling OpenAI."""
+    """OpenCode-prefixed gpt codex models should be stripped before calling OpenAI Responses API."""
     monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
 
-    mock_choice = MagicMock()
-    mock_choice.message.content = json.dumps(
-        {"passed": True, "reasoning": "All good", "issues": []}
-    )
+    mock_text_block = MagicMock()
+    mock_text_block.type = "output_text"
+    mock_text_block.text = json.dumps({"passed": True, "reasoning": "All good", "issues": []})
+
+    mock_message = MagicMock()
+    mock_message.type = "message"
+    mock_message.content = [mock_text_block]
 
     mock_response = MagicMock()
-    mock_response.choices = [mock_choice]
-    mock_response.usage = MagicMock(prompt_tokens=100, completion_tokens=50)
+    mock_response.output = [mock_message]
+    mock_response.usage = MagicMock(input_tokens=100, output_tokens=50)
 
     mock_client = MagicMock()
-    mock_client.chat.completions.create.return_value = mock_response
+    mock_client.responses.create.return_value = mock_response
 
     with patch("keystone.evaluator.openai.OpenAI", return_value=mock_client):
         result = evaluate_agent_work(
@@ -632,7 +653,7 @@ def test_evaluator_strips_opencode_prefix_for_openai(
 
     assert result.passed is True
     # Should strip "openai/" prefix when calling the API
-    call_kwargs = mock_client.chat.completions.create.call_args
+    call_kwargs = mock_client.responses.create.call_args
     assert call_kwargs.kwargs["model"] == "gpt-5.2-codex"
 
 

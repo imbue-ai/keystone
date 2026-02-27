@@ -242,10 +242,12 @@ Include anything you wish you had been told at the start. Examples:
 
 Please don't forget to emit the summary at the end.
 
-IMPORTANT: Before doing your final verification, run the guardrail check script to catch common mistakes:
+IMPORTANT: Before doing your final verification, YOU MUST run the guardrail check script to catch common mistakes:
 ```bash
 timeout 10m ./guardrail.sh
 ```
+**You MUST have a successful guardrail run with 0 exit code BEFORE ending your turn!!**
+
 This script validates that:
 - All required files exist (.devcontainer/devcontainer.json, Dockerfile, run_all_tests.sh)
 - Dockerfile has correct structure (FROM, test_artifacts, COPY run_all_tests.sh)

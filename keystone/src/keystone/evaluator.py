@@ -108,6 +108,12 @@ def _is_openai_model(model: str) -> bool:
     return bare.startswith("gpt-")
 
 
+def _is_codex_model(model: str) -> bool:
+    """Return True for Codex models that require the Responses API."""
+    bare = model.split("/", 1)[-1] if "/" in model else model
+    return "codex" in bare.lower()
+
+
 def _call_llm(model: str, system: str, user_message: str, max_tokens: int) -> tuple[str, float]:
     """Call the appropriate LLM API and return (response_text, cost_usd).
 
@@ -122,17 +128,38 @@ def _call_llm(model: str, system: str, user_message: str, max_tokens: int) -> tu
         if not api_key:
             raise RuntimeError("OPENAI_API_KEY not set")
         client = openai.OpenAI(api_key=api_key)
-        response = client.chat.completions.create(
-            model=bare_model,
-            max_tokens=max_tokens,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user_message},
-            ],
-        )
-        text = response.choices[0].message.content or ""
-        input_tokens = response.usage.prompt_tokens if response.usage else 0
-        output_tokens = response.usage.completion_tokens if response.usage else 0
+
+        if _is_codex_model(bare_model):
+            # Codex models only support the Responses API (/v1/responses).
+            response = client.responses.create(
+                model=bare_model,
+                instructions=system,
+                input=user_message,
+                max_output_tokens=max_tokens,
+            )
+            # Extract text from output items.
+            text = ""
+            for item in response.output:
+                if item.type == "message":
+                    for block in item.content:
+                        if block.type == "output_text":
+                            text += block.text
+            input_tokens = response.usage.input_tokens if response.usage else 0
+            output_tokens = response.usage.output_tokens if response.usage else 0
+        else:
+            # Standard OpenAI models use Chat Completions.
+            chat_response = client.chat.completions.create(
+                model=bare_model,
+                max_tokens=max_tokens,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user_message},
+                ],
+            )
+            text = chat_response.choices[0].message.content or ""
+            input_tokens = chat_response.usage.prompt_tokens if chat_response.usage else 0
+            output_tokens = chat_response.usage.completion_tokens if chat_response.usage else 0
+
         cost_usd = estimate_cost_usd(
             input_tokens=input_tokens,
             cached_tokens=0,

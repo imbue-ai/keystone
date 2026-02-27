@@ -719,10 +719,10 @@ exec timeout {image_build_timeout_seconds} docker build \
 
         # Pick the right ccusage command based on provider
         if provider_name == "codex":
-            ccusage_cmd = ["npx", "@ccusage/codex@latest", "session", "--json"]
+            ccusage_cmd = ["ccusage-codex", "session", "--json"]
         else:
             # Default to claude ccusage for claude/opencode/other providers
-            ccusage_cmd = ["npx", "ccusage@latest", "session", "--json"]
+            ccusage_cmd = ["ccusage", "session", "--json"]
 
         try:
             logger.info("Running ccusage (provider=%s)...", provider_name)

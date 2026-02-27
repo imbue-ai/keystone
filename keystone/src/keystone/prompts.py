@@ -253,7 +253,9 @@ This script validates that:
 - The Docker image builds successfully
 
 Since both Docker builds and test runs can be slow and even stall, it's a good idea to use some kind of timeout.
-You might need to adjust the timeout based on the size of the project, though.
+You might need to adjust the timeout based on the size of the project, though.  Remember that your first run
+of the devcontainer build (which guardrail.sh runs) will be slow because early layers are not cached.
+So you might need to use a longer timeout for the first run.
 
 Run this script after creating your files, and fix any reported errors before proceeding.
 If the guardrail reports a build failure, read the error output carefully and fix the issue.

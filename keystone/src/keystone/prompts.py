@@ -244,13 +244,16 @@ Please don't forget to emit the summary at the end.
 
 IMPORTANT: Before doing your final verification, run the guardrail check script to catch common mistakes:
 ```bash
-bash ./guardrail.sh
+timeout 10m ./guardrail.sh
 ```
 This script validates that:
 - All required files exist (.devcontainer/devcontainer.json, Dockerfile, run_all_tests.sh)
 - Dockerfile has correct structure (FROM, test_artifacts, COPY run_all_tests.sh)
 - run_all_tests.sh has correct structure (JUnit output, final_result.json)
 - The Docker image builds successfully
+
+Since both Docker builds and test runs can be slow and even stall, it's a good idea to use some kind of timeout.
+You might need to adjust the timeout based on the size of the project, though.
 
 Run this script after creating your files, and fix any reported errors before proceeding.
 If the guardrail reports a build failure, read the error output carefully and fix the issue.

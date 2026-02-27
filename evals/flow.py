@@ -269,6 +269,8 @@ def process_repo_task(
                 cmd.append("--require_cache_hit")
             if agent_config.no_cache_replay:
                 cmd.append("--no_cache_replay")
+            if agent_config.no_guardrail:
+                cmd.append("--no_guardrail")
 
             log.info(f"[{repo_id}] Running keystone...")
 

@@ -81,11 +81,12 @@ class AgentConfig(BaseModel):
         description="Run agent locally with --run_agent_locally_with_dangerously_skip_permissions",
     )
 
-    # Evaluator (LLM fix-up pass after verification failure)
+    # Feature toggles
     evaluator: bool = Field(
         ...,
         description="Enable or disable the LLM evaluator fix-up pass.",
     )
+    no_guardrail: bool = Field(default=False, description="Skip guardrail structural checks")
 
     # Docker build cache (Modal secret name)
     docker_cache_secret: str = Field(

@@ -222,6 +222,7 @@ def evaluate_and_fix(
     devcontainer_dir: Path,
     project_root: Path | None = None,
     model: str = "claude-haiku-4-5-20251001",
+    guardrail: bool = True,
 ) -> EvaluatorResult:
     """Attempt to fix verification failures using an LLM call.
 
@@ -236,6 +237,7 @@ def evaluate_and_fix(
         devcontainer_dir: Path to .devcontainer/ on disk (files will be overwritten).
         project_root: Root of the project (used to read requirements, run guardrail).
         model: LLM model to use for the evaluator (matches agent model by default).
+        guardrail: Whether to run guardrail checks and include output in LLM context.
 
     Returns:
         EvaluatorResult describing what happened.
@@ -280,8 +282,9 @@ def evaluate_and_fix(
             )
 
         # ---- Guardrail output: structural check results ----
-        guardrail_output = run_guardrail(project_root)
-        parts.append(f"## Guardrail Check Results\n```\n{guardrail_output}\n```\n")
+        if guardrail:
+            guardrail_output = run_guardrail(project_root)
+            parts.append(f"## Guardrail Check Results\n```\n{guardrail_output}\n```\n")
 
     if status_messages:
         parts.append("## Agent Status Messages (project context)\n")
@@ -396,6 +399,7 @@ def evaluate_agent_work(
     verification_error: str | None,
     project_root: Path | None = None,
     model: str = "claude-haiku-4-5-20251001",
+    guardrail: bool = True,
 ) -> EvaluatorResult:
     """Run the LLM evaluator on the agent's output (passive check, no fixes).
 
@@ -407,6 +411,7 @@ def evaluate_agent_work(
         verification_error: Error string from verification, if any.
         project_root: Root of the project (used to run guardrail for context).
         model: LLM model to use for the evaluator (matches agent model by default).
+        guardrail: Whether to run guardrail checks and include output in LLM context.
 
     Returns:
         EvaluatorResult with pass/fail and reasoning.
@@ -440,7 +445,7 @@ def evaluate_agent_work(
             user_parts.append(f"### {name}\nNOT CREATED\n")
 
     # ---- Guardrail output: give the evaluator structural context ----
-    if project_root is not None:
+    if project_root is not None and guardrail:
         guardrail_output = run_guardrail(project_root)
         user_parts.append(f"## Guardrail Check Results\n```\n{guardrail_output}\n```\n")
 

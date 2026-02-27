@@ -53,6 +53,8 @@ def run(
     ),
     no_cache_replay: bool = typer.Option(False, "--no_cache_replay", help="Force fresh execution"),
     require_cache_hit: bool = typer.Option(False, "--require_cache_hit", help="Fail if cache miss"),
+    no_evaluator: bool = typer.Option(False, "--no_evaluator", help="Skip LLM evaluator"),
+    no_guardrail: bool = typer.Option(False, "--no_guardrail", help="Skip guardrail checks"),
     limit: int | None = typer.Option(None, "--limit", help="Limit to first N repos"),
 ) -> None:
     """Run the eval harness on a list of repos.
@@ -77,6 +79,12 @@ def run(
     if require_cache_hit:
         for cfg in resolved_configs:
             cfg.agent_config = cfg.agent_config.model_copy(update={"require_cache_hit": True})
+    if no_evaluator:
+        for cfg in resolved_configs:
+            cfg.agent_config = cfg.agent_config.model_copy(update={"evaluator": False})
+    if no_guardrail:
+        for cfg in resolved_configs:
+            cfg.agent_config = cfg.agent_config.model_copy(update={"no_guardrail": True})
 
     # Print plan
     console.print(f"\n[bold]Eval run: {len(resolved_configs)} configs[/bold]")

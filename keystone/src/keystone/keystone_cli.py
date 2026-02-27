@@ -156,10 +156,15 @@ def bootstrap(
         "--evaluator/--no_evaluator",
         help="Enable or disable the LLM evaluator (fix-up and passive check).",
     ),
+    guardrail: bool = typer.Option(
+        True,
+        "--guardrail/--no_guardrail",
+        help="Enable or disable guardrail structural checks.",
+    ),
 ) -> None:
     """Bootstrap a devcontainer for a project."""
     logging.info(
-        f"Starting keystone CLI, version: {Path.cwd()=}, {project_root=}, {test_artifacts_dir=}, {agent_cmd=}, {provider_name=}, {model=}, {max_budget_usd=}, {log_db=}, {require_cache_hit=}, {no_cache_replay=}, {cache_version=}, {output_file=}, {agent_in_modal=}, {agent_time_limit_seconds=}, {image_build_timeout_seconds=}, {test_timeout_seconds=}, {docker_cache_secret=}, {evaluator=}, {get_version_info()=}"
+        f"Starting keystone CLI, version: {Path.cwd()=}, {project_root=}, {test_artifacts_dir=}, {agent_cmd=}, {provider_name=}, {model=}, {max_budget_usd=}, {log_db=}, {require_cache_hit=}, {no_cache_replay=}, {cache_version=}, {output_file=}, {agent_in_modal=}, {agent_time_limit_seconds=}, {image_build_timeout_seconds=}, {test_timeout_seconds=}, {docker_cache_secret=}, {evaluator=}, {guardrail=}, {get_version_info()=}"
     )
     assert project_root is not None, "--project_root is required"
     project_root = project_root.resolve()
@@ -404,9 +409,10 @@ def bootstrap(
                 devcontainer_dir = project_root / ".devcontainer"
 
                 # Run guardrail and display output before evaluator LLM call
-                console.print("[yellow]Guardrail:[/yellow] Running structural checks...")
-                guardrail_output = run_guardrail(project_root)
-                console.print(guardrail_output)
+                if guardrail:
+                    console.print("[yellow]Guardrail:[/yellow] Running structural checks...")
+                    guardrail_output = run_guardrail(project_root)
+                    console.print(guardrail_output)
 
                 console.print(
                     "[yellow]Evaluator:[/yellow] Verification failed — "
@@ -434,6 +440,7 @@ def bootstrap(
                     devcontainer_dir=devcontainer_dir,
                     project_root=project_root,
                     model=evaluator_model,
+                    guardrail=guardrail,
                 )
 
                 if evaluator_result.passed:
@@ -554,9 +561,10 @@ def bootstrap(
             evaluator_model = model.value if model else "claude-haiku-4-5-20251001"
 
             # Run guardrail and display output before evaluator LLM call
-            console.print("[yellow]Guardrail:[/yellow] Running structural checks...")
-            guardrail_output = run_guardrail(project_root)
-            console.print(guardrail_output)
+            if guardrail:
+                console.print("[yellow]Guardrail:[/yellow] Running structural checks...")
+                guardrail_output = run_guardrail(project_root)
+                console.print(guardrail_output)
 
             logging.info("Running LLM evaluator to check agent completeness...")
             evaluator_result = evaluate_agent_work(
@@ -571,6 +579,7 @@ def bootstrap(
                 verification_error=verification_error,
                 project_root=project_root,
                 model=evaluator_model,
+                guardrail=guardrail,
             )
             if evaluator_result.passed:
                 console.print(f"[green]Evaluator:[/green] PASSED - {evaluator_result.reasoning}")

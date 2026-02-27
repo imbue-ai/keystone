@@ -40,7 +40,6 @@ from keystone.llm_provider import (
     AgentToolResultEvent,
     get_provider,
 )
-from keystone.llm_provider.pricing import estimate_cost_usd
 from keystone.logging_utils import ISOFormatter
 from keystone.modal.modal_runner import ModalAgentRunner
 from keystone.prompts import build_agent_prompt
@@ -53,7 +52,6 @@ from keystone.schema import (
     GeneratedFiles,
     InferenceCost,
     LLMModel,
-    TokenSpending,
     VerificationResult,
 )
 from keystone.version import get_version_info
@@ -115,7 +113,7 @@ def bootstrap(
         help="Skip cache lookup but still log the run (force fresh execution)",
     ),
     cache_version: str = typer.Option(
-        "2026-02-26",
+        "2026-02-27",
         "--cache_version",
         help="String appended to cache key.  Bumping this invalidates the cache, forcing fresh runs.",
     ),
@@ -220,8 +218,6 @@ def bootstrap(
     # Instantiate the LLM provider
     provider = get_provider(provider_name, model=model.value if model else None)
 
-    token_spending = TokenSpending()
-    total_cost_usd = 0.0
     exit_code = 1
     verification_success = False
     evaluator_result: EvaluatorResult | None = None
@@ -261,7 +257,6 @@ def bootstrap(
 
     def process_stdout_line(line: str) -> None:
         """Process a line of agent stdout via the LLM provider's event parser."""
-        nonlocal total_cost_usd
         for event in provider.parse_stdout_line(line):
             match event:
                 case AgentTextEvent(text=text):
@@ -271,13 +266,8 @@ def bootstrap(
                     logging.info(f"Tool Call: {name}({input_data})")
                 case AgentToolResultEvent(tool_name=name, output=output):
                     logging.info(f"Tool Result: {name} -> {output[:200]}")
-                case AgentCostEvent() as cost:
-                    if cost.cost_usd is not None:
-                        total_cost_usd = cost.cost_usd
-                    token_spending.input += cost.input_tokens
-                    token_spending.cached += cost.cached_tokens
-                    token_spending.output += cost.output_tokens
-                    token_spending.cache_creation += cost.cache_creation_tokens
+                case AgentCostEvent():
+                    pass  # Cost is now computed post-hoc via ccusage
                 case AgentErrorEvent(message=msg):
                     logging.error(f"Agent error: {msg}")
                     agent_errors.append(msg)
@@ -352,6 +342,9 @@ def bootstrap(
         agent_timed_out = runner.timed_out
         devcontainer_tarball = runner.get_devcontainer_tarball()
         logging.info(f"Devcontainer tarball size: {len(devcontainer_tarball)} bytes")
+
+        # Get inference cost via ccusage (Modal only; returns None for local runs)
+        inference_cost = runner.get_inference_cost(provider_name) or InferenceCost()
 
         agent_work_seconds = time.monotonic() - start_time
 
@@ -603,17 +596,7 @@ def bootstrap(
             summary=agent_summary,
             status_messages=status_messages,
             error_messages=agent_errors,
-            cost=InferenceCost(
-                cost_usd=total_cost_usd,
-                cost_usd_computed=estimate_cost_usd(
-                    input_tokens=token_spending.input,
-                    cached_tokens=token_spending.cached,
-                    output_tokens=token_spending.output,
-                    cache_creation_tokens=token_spending.cache_creation,
-                    model=model.value if model else None,
-                ),
-                token_spending=token_spending,
-            ),
+            cost=inference_cost,
         ),
         verification=verification,
         evaluator=evaluator_result,

@@ -69,9 +69,10 @@ class TokenSpending(BaseModel):
 class InferenceCost(BaseModel):
     """Cumulative inference cost at a point in time."""
 
-    cost_usd: float = 0.0  # As reported by the API (may be 0 on non-zero exit)
-    cost_usd_computed: float = 0.0  # Computed from token counts + pricing table
+    cost_usd: float = 0.0  # As reported by ccusage (or 0 for local/cached runs)
+    cost_usd_computed: float = 0.0  # Deprecated: kept for schema compat, always 0
     token_spending: TokenSpending = TokenSpending()
+    ccusage_raw: dict[str, object] | None = None  # Raw ccusage session JSON if available
 
 
 class AgentStatusMessage(BaseModel):

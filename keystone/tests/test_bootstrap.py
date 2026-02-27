@@ -434,6 +434,14 @@ def test_e2e_codex_on_modal(tmp_path: Path, project_root: Path) -> None:
     assert output.verification is not None
     assert output.verification.success, f"Verification failed: {output.verification.error_message}"
 
+    # Verify ccusage cost reporting (Modal runs should have non-zero cost data)
+    cost = output.agent.cost
+    assert cost.cost_usd > 0, f"ccusage should report non-zero cost: {cost}"
+    ts = cost.token_spending
+    assert ts.input > 0 or ts.cached > 0, f"ccusage should report input tokens: {ts}"
+    assert ts.output > 0, f"ccusage should report output tokens: {ts}"
+    assert cost.ccusage_raw is not None, "ccusage raw session data should be attached"
+
 
 @pytest.mark.manual
 @pytest.mark.parametrize("project_root", ["python_project"], indirect=True)
@@ -582,8 +590,16 @@ def test_e2e_sample_projects(
     assert (project_root / ".devcontainer" / "Dockerfile").exists()
     assert (project_root / ".devcontainer" / "run_all_tests.sh").exists()
 
-    # Validate that status messages have proper cumulative costs before stripping
+    # Validate status messages
     _validate_status_messages(output)
+
+    # Verify ccusage cost reporting (Modal runs should have non-zero cost data)
+    cost = output.agent.cost
+    assert cost.cost_usd > 0, f"ccusage should report non-zero cost: {cost}"
+    ts = cost.token_spending
+    assert ts.input > 0 or ts.cached > 0, f"ccusage should report input tokens: {ts}"
+    assert ts.output > 0, f"ccusage should report output tokens: {ts}"
+    assert cost.ccusage_raw is not None, "ccusage raw session data should be attached"
 
     # Snapshot test - strip non-deterministic fields
     snapshot_data = _strip_nondeterministic_fields(output)
@@ -709,11 +725,8 @@ def _validate_status_messages(output: BootstrapResult) -> None:
             )
         prev_ts = msg.timestamp
 
-    # Verify final cost on the result (not on status messages)
-    assert output.agent.cost.cost_usd > 0, f"Result should have non-zero cost: {output.agent.cost}"
-    ts = output.agent.cost.token_spending
-    assert ts.input > 0 or ts.cached > 0, f"Result should have some input tokens: {ts}"
-    assert ts.output > 0, f"Result should have output tokens: {ts}"
+    # Cost data is now computed post-hoc via ccusage (only available on Modal).
+    # For local/test runs, cost will be zero — no assertion on cost values here.
 
 
 def _strip_nondeterministic_fields(output: BootstrapResult) -> dict[str, Any]:

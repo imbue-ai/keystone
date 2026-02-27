@@ -17,7 +17,7 @@ from keystone.llm_provider import AgentProvider
 from keystone.modal.image import TIMESTAMP_SCRIPT_PATH
 from keystone.process_runner import run_process
 from keystone.prompts import generate_devcontainer_json
-from keystone.schema import StreamEvent, StreamType, VerificationResult
+from keystone.schema import InferenceCost, StreamEvent, StreamType, VerificationResult
 
 GUARDRAIL_SCRIPT_PATH = Path(__file__).parent / "guardrail.sh"
 
@@ -102,6 +102,20 @@ class AgentRunner(ABC):
 
         Returns:
             Gzipped tarball of ~/.claude, or None if not available.
+        """
+        return None
+
+    def get_inference_cost(self, provider_name: str) -> InferenceCost | None:  # noqa: ARG002
+        """Get inference cost via ccusage after agent execution.
+
+        Only available on Modal runner where ccusage is installed and the sandbox
+        contains only this agent's session data. Returns None for local runs.
+
+        Args:
+            provider_name: The LLM provider name ('claude', 'codex', etc.)
+
+        Returns:
+            InferenceCost from ccusage, or None if not available.
         """
         return None
 

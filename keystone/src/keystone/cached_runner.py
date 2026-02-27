@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from keystone.llm_provider import AgentProvider
-    from keystone.schema import StreamEvent, VerificationResult
+    from keystone.schema import InferenceCost, StreamEvent, VerificationResult
 
 logger = logging.getLogger(__name__)
 
@@ -235,6 +235,12 @@ class CachedAgentRunner(AgentRunner):
         if self._cache_hit:
             return None
         return self._inner.get_claude_dir_tarball()
+
+    def get_inference_cost(self, provider_name: str) -> InferenceCost | None:
+        """Delegate to inner runner (only available on cache miss)."""
+        if self._cache_hit:
+            return None
+        return self._inner.get_inference_cost(provider_name)
 
 
 class CacheMissError(Exception):

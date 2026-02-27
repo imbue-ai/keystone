@@ -20,15 +20,10 @@ from keystone.llm_provider.base import (
     AgentToolCallEvent,
     AgentToolResultEvent,
 )
-from keystone.llm_provider.pricing import estimate_cost_usd
 
 
 class CodexProvider(AgentProvider):
     """Provider for the ``codex`` CLI (OpenAI Codex)."""
-
-    def __init__(self, model: str | None = None) -> None:
-        super().__init__(model)
-        self._cumulative_cost_usd: float = 0.0
 
     @property
     def name(self) -> str:
@@ -67,17 +62,11 @@ class CodexProvider(AgentProvider):
 
         if event_type == "turn.completed":
             usage = data.get("usage", {})
-            input_tok = usage.get("input_tokens", 0)
-            output_tok = usage.get("output_tokens", 0)
-            cached_tok = usage.get("cached_input_tokens", 0)
-            turn_cost = estimate_cost_usd(input_tok, cached_tok, output_tok, model=self.model)
-            self._cumulative_cost_usd += turn_cost
             events.append(
                 AgentCostEvent(
-                    cost_usd=self._cumulative_cost_usd,
-                    input_tokens=input_tok,
-                    output_tokens=output_tok,
-                    cached_tokens=cached_tok,
+                    input_tokens=usage.get("input_tokens", 0),
+                    output_tokens=usage.get("output_tokens", 0),
+                    cached_tokens=usage.get("cached_input_tokens", 0),
                 )
             )
 

@@ -16,7 +16,7 @@ FAKE_CLAUDE_AGENT_SCRIPT_PATH = _REPO_ROOT / "keystone" / "tests" / "fake_claude
 FAKE_CODEX_AGENT_SCRIPT_PATH = _REPO_ROOT / "keystone" / "tests" / "fake_codex_agent.py"
 
 
-IMAGE_CACHE_BUST = "2026-02-26T22:50:00"  # bump to force Modal image rebuild
+IMAGE_CACHE_BUST = "2026-02-27T00:45:00"  # bump to force Modal image rebuild
 
 
 def create_modal_image() -> modal.Image:
@@ -80,7 +80,7 @@ def create_modal_image() -> modal.Image:
         .apt_install("nodejs")
         # Install devcontainer CLI and agent CLIs
         .run_commands(
-            "npm install -g @devcontainers/cli @anthropic-ai/claude-code @openai/codex opencode-ai@latest"
+            "npm install -g @devcontainers/cli @anthropic-ai/claude-code @openai/codex opencode-ai@latest ccusage @ccusage/codex"
         )
         # Add scripts natively
         .add_local_file(START_DOCKERD_SCRIPT_PATH, "/start-dockerd.sh", copy=True)

@@ -4,6 +4,7 @@ The sandbox is created once and reused for both agent execution and verification
 """
 
 import io
+import json
 import logging
 import queue
 import shlex
@@ -25,7 +26,13 @@ from keystone.agent_runner import (
 from keystone.llm_provider import AgentProvider
 from keystone.modal.image import create_modal_image
 from keystone.prompts import generate_devcontainer_json
-from keystone.schema import StreamEvent, StreamType, VerificationResult
+from keystone.schema import (
+    InferenceCost,
+    StreamEvent,
+    StreamType,
+    TokenSpending,
+    VerificationResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -681,6 +688,100 @@ exec timeout {image_build_timeout_seconds} docker build \
         except Exception as e:
             logger.error(f"Error extracting ~/.claude tarball: {e}")
             return None
+
+    def run_ccusage(self, provider_name: str) -> InferenceCost:
+        """Run ccusage/ccusage-codex in the sandbox to get accurate token counts and costs.
+
+        This should be called after the agent finishes. The sandbox must still be alive.
+        ccusage reads the agent's JSONL transcript files and computes token usage and pricing.
+
+        Args:
+            provider_name: The LLM provider name ('claude', 'codex', etc.)
+
+        Returns:
+            InferenceCost populated from ccusage output, or a zero-cost default on failure.
+        """
+        if self._sandbox is None:
+            logger.warning("Cannot run ccusage: sandbox is None")
+            return InferenceCost()
+
+        sb = self._sandbox
+
+        # Pick the right ccusage command based on provider
+        if provider_name == "codex":
+            ccusage_cmd = ["npx", "@ccusage/codex@latest", "session", "--json"]
+        else:
+            # Default to claude ccusage for claude/opencode/other providers
+            ccusage_cmd = ["npx", "ccusage@latest", "session", "--json"]
+
+        try:
+            logger.info("Running ccusage (provider=%s)...", provider_name)
+            proc = run_modal_command(
+                sb,
+                "su",
+                "agent",
+                "-c",
+                shlex.join(ccusage_cmd),
+                name="ccusage",
+                capture=True,
+            )
+
+            # Collect stdout (proc.stream() calls wait() internally)
+            stdout_lines: list[str] = []
+            for event in proc.stream():
+                if event.stream == StreamType.STDOUT:
+                    stdout_lines.append(event.line)
+
+            ccusage_exit = proc.proc.returncode or 0
+            if ccusage_exit != 0:
+                logger.warning("ccusage exited with code %d", ccusage_exit)
+                return InferenceCost()
+
+            # Parse JSON output
+            raw = "\n".join(stdout_lines)
+            data = json.loads(raw)
+
+            # ccusage output format varies by version:
+            #   Newer: { "sessions": [...], "totals": {...} }
+            #   Older:  { "type": "session", "data": [...], "summary": {...} }
+            sessions = data.get("sessions") or data.get("data") or []
+            if not sessions:
+                logger.warning("ccusage returned no sessions: %s", list(data.keys()))
+                return InferenceCost()
+
+            # Use the first (and should be only) session
+            session = sessions[0]
+            # Cost field: "totalCost" (newer) or "costUSD" (older)
+            cost_usd = float(session.get("totalCost") or session.get("costUSD") or 0.0)
+            token_spending = TokenSpending(
+                input=int(session.get("inputTokens", 0)),
+                cached=int(session.get("cacheReadTokens", 0)),
+                output=int(session.get("outputTokens", 0)),
+                cache_creation=int(session.get("cacheCreationTokens", 0)),
+            )
+
+            logger.info(
+                "ccusage: cost=$%.4f input=%d cached=%d output=%d cache_creation=%d",
+                cost_usd,
+                token_spending.input,
+                token_spending.cached,
+                token_spending.output,
+                token_spending.cache_creation,
+            )
+
+            return InferenceCost(
+                cost_usd=cost_usd,
+                token_spending=token_spending,
+                ccusage_raw=session,
+            )
+
+        except Exception as e:
+            logger.error("Error running ccusage: %s", e)
+            return InferenceCost()
+
+    def get_inference_cost(self, provider_name: str) -> InferenceCost | None:
+        """Get inference cost by running ccusage in the sandbox."""
+        return self.run_ccusage(provider_name)
 
     def cleanup(self) -> None:
         """Terminate the Modal sandbox."""

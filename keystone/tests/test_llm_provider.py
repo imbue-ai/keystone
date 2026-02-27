@@ -129,7 +129,7 @@ class TestCodexProvider:
         assert cmd[0] == "codex"
         assert "exec" in cmd
         assert "--json" in cmd
-        assert "danger-full-access" in cmd
+        assert "--dangerously-bypass-approvals-and-sandbox" in cmd
         assert "Fix the bug" in cmd
 
     def test_build_command_with_model(self) -> None:

@@ -39,6 +39,7 @@ class AgentRunner(ABC):
         agent_cmd: str,
         time_limit_seconds: int,
         provider: AgentProvider,
+        agents_md: str | None = None,
     ) -> Iterator[StreamEvent]:
         """Run the agent and yield output events.
 
@@ -49,6 +50,7 @@ class AgentRunner(ABC):
             agent_cmd: Base command to run the agent.
             time_limit_seconds: Maximum time in seconds for agent execution.
             provider: LLM provider for command building and output parsing.
+            agents_md: Optional AGENTS.md content to write into the project directory.
 
         Yields:
             StreamEvent for each line of stdout/stderr.
@@ -165,6 +167,7 @@ class LocalAgentRunner(AgentRunner):
         agent_cmd: str,
         time_limit_seconds: int,
         provider: AgentProvider,
+        agents_md: str | None = None,
     ) -> Iterator[StreamEvent]:
         if not self._check_docker_available():
             yield StreamEvent(
@@ -210,6 +213,10 @@ class LocalAgentRunner(AgentRunner):
         dest_guardrail = self._work_dir / "guardrail.sh"
         dest_guardrail.write_bytes(GUARDRAIL_SCRIPT_PATH.read_bytes())
         dest_guardrail.chmod(0o755)
+
+        # Write AGENTS.md if provided (used by codex to read instructions as system context)
+        if agents_md:
+            (self._work_dir / "AGENTS.md").write_text(agents_md)
 
         events: list[StreamEvent] = []
 

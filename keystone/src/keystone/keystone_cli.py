@@ -42,7 +42,7 @@ from keystone.llm_provider import (
 )
 from keystone.logging_utils import ISOFormatter
 from keystone.modal.modal_runner import ModalAgentRunner
-from keystone.prompts import build_agent_prompt
+from keystone.prompts import build_agent_prompt, build_codex_prompt
 from keystone.schema import (
     AgentConfig,
     AgentExecution,
@@ -192,8 +192,12 @@ def bootstrap(
         test_artifacts_dir = test_artifacts_dir.resolve()
         test_artifacts_dir.mkdir(parents=True, exist_ok=True)
 
-    # Build prompt
-    prompt = build_agent_prompt(agent_in_modal)
+    # Build prompt — codex providers get a short CLI prompt + AGENTS.md file
+    agents_md_content: str | None = None
+    if provider_name == "codex":
+        agents_md_content, prompt = build_codex_prompt(agent_in_modal)
+    else:
+        prompt = build_agent_prompt(agent_in_modal)
 
     start_time = time.monotonic()
     start_datetime = datetime.now(UTC)
@@ -327,6 +331,7 @@ def bootstrap(
                 effective_agent_cmd,
                 agent_time_limit_seconds,
                 provider,
+                agents_md=agents_md_content,
             ):
                 if event.stream == "stdout":
                     process_stdout_line(event.line)

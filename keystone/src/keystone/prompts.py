@@ -315,3 +315,98 @@ def build_agent_prompt(agent_in_modal: bool) -> str:
     prompt = AGENT_PROMPT_TEMPLATE
     prompt = prompt + MODAL_ADDENDUM if agent_in_modal else prompt + LOCAL_ADDENDUM
     return prompt
+
+
+# ---------------------------------------------------------------------------
+# Codex-optimised prompt
+# ---------------------------------------------------------------------------
+# Codex-mini has a limited output budget per turn.  A long CLI prompt causes
+# it to spend all its reasoning on comprehension, leaving nothing for actual
+# tool calls.  The solution: keep the *CLI prompt* very short and put the
+# detailed instructions in an AGENTS.md file that codex reads automatically
+# as system-level context.
+# ---------------------------------------------------------------------------
+
+CODEX_AGENTS_MD = f"""\
+# Bootstrap Devcontainer - Agent Instructions
+
+You are setting up a reproducible dev container so this project's test suite passes.
+
+## What you must create
+
+All files go inside `.devcontainer/` — nothing outside that directory is preserved.
+
+1. **`.devcontainer/devcontainer.json`** — already pre-generated at `./devcontainer.json`.
+   Just copy it: `cp ./devcontainer.json .devcontainer/devcontainer.json`
+   Do NOT modify it.
+
+2. **`.devcontainer/Dockerfile`** — must contain, near the top:
+   ```dockerfile
+   RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
+   ```
+   And must end with:
+   ```dockerfile
+   COPY .devcontainer/run_all_tests.sh /run_all_tests.sh
+   RUN chmod +x /run_all_tests.sh
+   ```
+   Use `WORKDIR /project_src` and copy source files explicitly (not `COPY . .`).
+   Do NOT create `.dockerignore` files.
+
+3. **`.devcontainer/run_all_tests.sh`** (executable) — runs the full test suite:
+   - Writes JUnit XML to `/test_artifacts/junit/*.xml`
+     (e.g. `pytest --junitxml=/test_artifacts/junit/pytest.xml`)
+   - Writes `/test_artifacts/final_result.json` with `{{"success": true/false}}`
+   - Use `set -euo pipefail`
+   - `mkdir -p /test_artifacts/junit` at the top
+
+## Workflow
+
+1. Explore the repo: `ls -a`, `cat README.md`, `cat pyproject.toml`, etc.
+2. Identify language, test framework, and dependencies.
+3. Create the three files above.
+4. Run `timeout 10m ./guardrail.sh` to validate — fix any errors it reports.
+5. Build and test:
+   ```bash
+   IMAGE_NAME="img-$(date +%s)"
+   devcontainer build --image-name "$IMAGE_NAME" --workspace-folder .
+   docker run --network host --name "test-$(date +%s)" "$IMAGE_NAME" /run_all_tests.sh
+   ```
+
+## Key tips
+
+- Python: use `uv` for fast installs. Set `ENV UV_LINK_MODE=copy` in Dockerfile.
+  Set `PYTHONPATH=/project_src:${{PYTHONPATH:-}}` in run_all_tests.sh if needed.
+- Use `timeout` to prevent hung tests (e.g. `timeout 300 pytest`).
+- Disable coverage (`--no-cov`) to speed things up.
+- `docker run` must use `--network=host` in this environment.
+- Only changes inside `.devcontainer/` are preserved.
+
+## Status updates
+
+Emit status lines like:
+{STATUS_MARKER} Exploring repository structure.
+{STATUS_MARKER} Creating Dockerfile for Python project.
+
+When done, emit:
+{SUMMARY_MARKER} <summary of what worked and tips>
+
+**You MUST run `./guardrail.sh` and get exit code 0 before finishing.**
+"""
+
+CODEX_SHORT_PROMPT = (
+    "Set up a .devcontainer with Dockerfile and test runner for this project. "
+    "Read the AGENTS.md file first for detailed instructions, then explore the repo and create the files."
+)
+
+
+def build_codex_prompt(agent_in_modal: bool) -> tuple[str, str]:
+    """Return (agents_md_content, short_cli_prompt) for codex providers.
+
+    The AGENTS.md is written to the project root before launching codex,
+    keeping the CLI prompt short so codex-mini doesn't exhaust its output
+    budget on prompt comprehension.
+    """
+    agents_md = CODEX_AGENTS_MD
+    if agent_in_modal:
+        agents_md += "\n\nIMPORTANT: You are in a Modal sandbox. Use `--network=host` for all docker run commands.\n"
+    return agents_md, CODEX_SHORT_PROMPT

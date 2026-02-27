@@ -255,7 +255,7 @@ su agent -c "$(printf 'echo %q | docker login --username %q --password-stdin %q'
             )
         logger.info("Docker login successful")
 
-    def upload_project(self, project_archive: bytes) -> None:
+    def upload_project(self, project_archive: bytes, agents_md: str | None = None) -> None:
         """Upload project archive to sandbox."""
         sb = self.ensure_sandbox()
         logger.info("Uploading project to sandbox...")
@@ -332,6 +332,12 @@ ENDJSON
             f.write(GUARDRAIL_SCRIPT_PATH.read_bytes())
         run_modal_command(sb, "chmod", "+x", "/project/guardrail.sh", name="upload").wait()
 
+        # Write AGENTS.md if provided (used by codex to read instructions as system context)
+        if agents_md:
+            with sb.open("/project/AGENTS.md", "w") as f:
+                f.write(agents_md)
+            logger.info("Wrote /project/AGENTS.md (%d chars)", len(agents_md))
+
         run_modal_command(sb, "chown", "-R", "agent:agent", "/project", name="upload").wait()
         run_modal_command(sb, "chown", "-R", "agent:agent", "/project_clean", name="upload").wait()
 
@@ -343,10 +349,11 @@ ENDJSON
         agent_cmd: str,
         time_limit_seconds: int,
         provider: AgentProvider,
+        agents_md: str | None = None,
     ) -> Iterator[StreamEvent]:
         """Run the agent in the Modal sandbox."""
         self.ensure_sandbox()
-        self.upload_project(project_archive)
+        self.upload_project(project_archive, agents_md=agents_md)
 
         try:
             yield from self._run_agent(

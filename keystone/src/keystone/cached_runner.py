@@ -92,6 +92,7 @@ class CachedAgentRunner(AgentRunner):
         agent_cmd: str,
         time_limit_secs: int,
         provider: AgentProvider,
+        agents_md: str | None = None,
     ) -> Iterator[StreamEvent]:
         # Try cache lookup
         cached_run: AgentRunRecord | None = None
@@ -113,6 +114,7 @@ class CachedAgentRunner(AgentRunner):
                 agent_cmd,
                 time_limit_secs,
                 provider,
+                agents_md=agents_md,
             )
 
     def _replay_cached(self, cached_run: AgentRunRecord) -> Iterator[StreamEvent]:
@@ -144,6 +146,7 @@ class CachedAgentRunner(AgentRunner):
         agent_cmd: str,
         time_limit_secs: int,
         provider: AgentProvider,
+        agents_md: str | None = None,
     ) -> Iterator[StreamEvent]:
         """Run the agent for real and record the result."""
         self._cache_hit = False
@@ -168,6 +171,7 @@ class CachedAgentRunner(AgentRunner):
                 agent_cmd,
                 time_limit_secs,
                 provider,
+                agents_md=agents_md,
             ):
                 collected_events.append(event)
                 yield event

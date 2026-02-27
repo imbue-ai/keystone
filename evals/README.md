@@ -16,6 +16,12 @@ Requires AWS credentials in your environment for S3 access (`AWS_ACCESS_KEY_ID`/
 
 Run the flow directly on your laptop. The Prefect orchestrator runs in-process; keystone tasks run on Modal. **This always uses your current code tree — no deploy step needed.** Best for iterating on code changes.
 
+If you want to see the local Prefect web UI monitoring your runs, do this at any point (works both before and after starting the evals below):
+```bash
+uv run prefect server start
+```
+Then you can navigate to: [http://127.0.0.1:4200/](http://127.0.0.1:4200/) to see the Prefect UI.
+
 All runs require a JSON config file (`EvalRunConfig`). See `evals/examples/` for templates.
 
 ```bash
@@ -34,7 +40,7 @@ uv run eval-harness --config_file evals/examples/four_model_comparison.json
 
 CLI overrides available: `--limit N`, `--no_cache_replay`, `--require_cache_hit`.
 
-## Usage — Prefect Cloud
+## Usage — Prefect Cloud (THIS WHOLE PART HAS NEVER BEEN TESTED)
 
 Deploy the flow to a Prefect-managed work pool so it runs in the cloud instead of on your laptop.
 
@@ -93,6 +99,21 @@ Each line is a JSON object with `id` (unique short name) and `repo` (git URL):
 Optional metadata fields (preserved in output): `rank`, `language`, `build_system`, `tests`, `difficulty`, `notes`.
 
 ## Output
+
+### TL;DR:
+
+To get the output results back onto your local machine for analysis, you can do something like:
+```bash
+aws s3 cp --recursive s3://int8-datasets/keystone/evals/2026-02-25_thad ~/keystone_evals/
+```
+
+There's a Jupyter notebook to analyze the results which you can run like this (variable doesn't actually work yet):
+```bash
+KEYSTONE_EVAL_DATA=~/keystone_evals/2026-02-25_thad \
+uv run jupyter nbconvert --to notebook \
+    --execute evals/eda/keystone_eval_analysis.ipynb \
+    --output evals/eda/keystone_eval_analysis_executed.ipynb
+```
 
 Results are written to S3 under the `s3_output_prefix` specified in the config file:
 

@@ -113,7 +113,9 @@ class AgentRunRecord(BaseModel):
     events: list[StreamEvent]
     devcontainer_tarball: bytes
     return_code: int
-    claude_dir_tarball: bytes | None = None  # Tarball of ~/.claude from Modal
+    agent_dir_tarball: bytes | None = (
+        None  # Tarball of agent state dirs (e.g. ~/.claude, ~/.codex) from Modal
+    )
     version_info: VersionInfo | None = None  # Version of the code that ran
 
 
@@ -220,7 +222,7 @@ class AgentLog:
             events_json TEXT,
             devcontainer_tarball BLOB,
             return_code INTEGER,
-            claude_dir_tarball BLOB,
+            agent_dir_tarball BLOB,
             version_info_json TEXT
         )
         """,
@@ -280,8 +282,9 @@ class AgentLog:
 
     def log_agent_run(self, record: AgentRunRecord) -> None:
         """Log an agent execution."""
-        # Ensure version_info column exists (schema migration)
+        # Ensure new columns exist (schema migration for older databases)
         ensure_column_exists(self._engine, "agent_run", "version_info_json", "TEXT")
+        ensure_column_exists(self._engine, "agent_run", "agent_dir_tarball", "BLOB")
 
         # Use current version if not provided
         version_info = record.version_info or get_version_info()
@@ -299,7 +302,7 @@ class AgentLog:
                     "events_json": json.dumps([e.model_dump() for e in record.events]),
                     "devcontainer_tarball": record.devcontainer_tarball,
                     "return_code": record.return_code,
-                    "claude_dir_tarball": record.claude_dir_tarball,
+                    "agent_dir_tarball": record.agent_dir_tarball,
                     "version_info_json": version_info.model_dump_json(),
                 }
             ]
@@ -316,7 +319,7 @@ class AgentLog:
         query = text("""
             SELECT cli_run_id, timestamp,
                    git_tree_hash, prompt_hash, agent_config_json, cache_version,
-                   events_json, devcontainer_tarball, return_code, claude_dir_tarball
+                   events_json, devcontainer_tarball, return_code, agent_dir_tarball
             FROM agent_run
             WHERE cache_key_hash = :cache_hash AND return_code = 0
             ORDER BY timestamp DESC
@@ -353,7 +356,7 @@ class AgentLog:
             events=events,
             devcontainer_tarball=r["devcontainer_tarball"],
             return_code=r["return_code"],
-            claude_dir_tarball=r["claude_dir_tarball"],
+            agent_dir_tarball=r["agent_dir_tarball"],
         )
 
 

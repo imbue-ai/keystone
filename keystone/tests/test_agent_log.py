@@ -79,7 +79,7 @@ def test_agent_run_logging_and_cache_lookup(temp_db: Path) -> None:
         ],
         devcontainer_tarball=b"tarball data",
         return_code=0,
-        claude_dir_tarball=None,
+        agent_dir_tarball=None,
     )
     agent_log.log_agent_run(record)
 
@@ -112,7 +112,7 @@ def test_cache_only_returns_successful_runs(temp_db: Path) -> None:
         events=[StreamEvent(stream=StreamType.STDERR, line="error")],
         devcontainer_tarball=b"",
         return_code=1,  # Failed
-        claude_dir_tarball=None,
+        agent_dir_tarball=None,
     )
     agent_log.log_agent_run(record)
 

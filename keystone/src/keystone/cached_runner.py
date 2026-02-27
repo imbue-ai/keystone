@@ -181,7 +181,7 @@ class CachedAgentRunner(AgentRunner):
                 self._devcontainer_tarball = self._inner.get_devcontainer_tarball()
                 extract_devcontainer_tarball(self._devcontainer_tarball, self._project_root)
 
-                claude_dir_tarball = self._inner.get_claude_dir_tarball()
+                agent_dir_tarball = self._inner.get_agent_dir_tarball()
 
                 agent_run_record = AgentRunRecord(
                     cli_run_id=self._cli_run_id,
@@ -190,7 +190,7 @@ class CachedAgentRunner(AgentRunner):
                     events=collected_events,
                     devcontainer_tarball=self._devcontainer_tarball,
                     return_code=self._exit_code,
-                    claude_dir_tarball=claude_dir_tarball,
+                    agent_dir_tarball=agent_dir_tarball,
                 )
                 self._agent_log.log_agent_run(agent_run_record)
 
@@ -230,11 +230,11 @@ class CachedAgentRunner(AgentRunner):
         """Delegate cleanup to inner runner."""
         self._inner.cleanup()
 
-    def get_claude_dir_tarball(self) -> bytes | None:
+    def get_agent_dir_tarball(self) -> bytes | None:
         """Delegate to inner runner (only available on cache miss)."""
         if self._cache_hit:
             return None
-        return self._inner.get_claude_dir_tarball()
+        return self._inner.get_agent_dir_tarball()
 
     def get_inference_cost(self, provider_name: str) -> InferenceCost | None:
         """Delegate to inner runner (only available on cache miss)."""

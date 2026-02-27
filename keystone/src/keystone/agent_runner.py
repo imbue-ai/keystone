@@ -94,14 +94,17 @@ class AgentRunner(ABC):
         """Perform any necessary cleanup (e.g. terminating sandboxes)."""
         ...
 
-    def get_claude_dir_tarball(self) -> bytes | None:
-        """Get tarball of ~/.claude directory if available.
+    def get_agent_dir_tarball(self) -> bytes | None:
+        """Get tarball of agent state directories if available.
+
+        Captures whichever agent directories exist in the sandbox
+        (e.g. ~/.claude, ~/.codex, ~/.gemini) as a single gzipped tarball.
 
         This is optional - only Modal runner implements it since it has access
         to the sandbox filesystem. Local runner returns None.
 
         Returns:
-            Gzipped tarball of ~/.claude, or None if not available.
+            Gzipped tarball of agent directories, or None if not available.
         """
         return None
 

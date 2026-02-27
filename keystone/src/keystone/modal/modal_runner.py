@@ -14,7 +14,7 @@ import threading
 import time
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import modal
 
@@ -648,45 +648,55 @@ exec timeout {image_build_timeout_seconds} docker build \
                 test_execution_seconds=test_execution_seconds,
             )
 
-    def get_claude_dir_tarball(self) -> bytes | None:
-        """Extract tarball of ~/.claude directory from the sandbox.
+    # Agent state directories to capture (add new agents here)
+    _AGENT_DIRS: ClassVar[list[str]] = [".claude", ".codex", ".gemini"]
 
-        This captures Claude's full state including conversation logs,
-        settings, and any other data stored during the run.
+    def get_agent_dir_tarball(self) -> bytes | None:
+        """Extract tarball of agent state directories from the sandbox.
+
+        Looks for known agent directories (e.g. ~/.claude, ~/.codex, ~/.gemini)
+        and tars whichever ones exist into a single gzipped tarball.
 
         Returns:
-            Gzipped tarball of ~/.claude, or None if not available.
+            Gzipped tarball of agent directories, or None if none found.
         """
         if self._sandbox is None:
             return None
 
         sb = self._sandbox
         try:
-            # Check if ~/.claude exists
-            check_proc = run_modal_command(
-                sb, "test", "-d", "/home/agent/.claude", name="check-claude-dir"
-            )
-            if check_proc.wait() != 0:
-                logger.info("No ~/.claude directory found in sandbox")
+            # Find which agent directories exist
+            found_dirs: list[str] = []
+            for dir_name in self._AGENT_DIRS:
+                check_proc = run_modal_command(
+                    sb, "test", "-d", f"/home/agent/{dir_name}", name=f"check-{dir_name}"
+                )
+                if check_proc.wait() == 0:
+                    found_dirs.append(dir_name)
+
+            if not found_dirs:
+                logger.info("No agent state directories found in sandbox")
                 return None
 
-            # Create tarball
+            logger.info("Found agent directories: %s", found_dirs)
+
+            # Create tarball containing all found directories
             run_modal_command(
                 sb,
                 "tar",
                 "-czf",
-                "/tmp/claude_dir.tar.gz",
+                "/tmp/agent_dir.tar.gz",
                 "-C",
                 "/home/agent",
-                ".claude",
-                name="tar-claude-dir",
+                *found_dirs,
+                name="tar-agent-dirs",
             ).wait()
 
             # Read tarball
-            with sb.open("/tmp/claude_dir.tar.gz", "rb") as f:
+            with sb.open("/tmp/agent_dir.tar.gz", "rb") as f:
                 return f.read()
         except Exception as e:
-            logger.error(f"Error extracting ~/.claude tarball: {e}")
+            logger.error(f"Error extracting agent dir tarball: {e}")
             return None
 
     def run_ccusage(self, provider_name: str) -> InferenceCost:

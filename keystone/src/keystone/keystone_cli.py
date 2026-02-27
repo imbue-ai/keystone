@@ -343,6 +343,15 @@ def bootstrap(
         devcontainer_tarball = runner.get_devcontainer_tarball()
         logging.info(f"Devcontainer tarball size: {len(devcontainer_tarball)} bytes")
 
+        # Write agent state directory tarball (e.g. ~/.claude, ~/.codex) to disk if available
+        agent_dir_tarball = runner.get_agent_dir_tarball()
+        if agent_dir_tarball and output_file:
+            agent_dir_path = output_file.parent / "agent_dir.tar.gz"
+            agent_dir_path.write_bytes(agent_dir_tarball)
+            logging.info(
+                f"Agent dir tarball ({len(agent_dir_tarball)} bytes) written to {agent_dir_path}"
+            )
+
         # Get inference cost via ccusage (Modal only; returns None for local runs)
         inference_cost = runner.get_inference_cost(provider_name) or InferenceCost()
 

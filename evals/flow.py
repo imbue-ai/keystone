@@ -345,6 +345,17 @@ def process_repo_task(
                         )
                 else:
                     log.warning(f"[{repo_id}] No .devcontainer directory found to upload")
+                # Upload agent state directory tarball (e.g. ~/.claude, ~/.codex)
+                agent_dir_file = work_path / "agent_dir.tar.gz"
+                if agent_dir_file.exists():
+                    _s3_write_bytes(
+                        f"{repo_output_prefix}/agent_dir.tar.gz",
+                        agent_dir_file.read_bytes(),
+                    )
+                    log.info(
+                        f"[{repo_id}] Uploaded agent dir tarball to "
+                        f"{repo_output_prefix}/agent_dir.tar.gz"
+                    )
                 log.info(f"[{repo_id}] Uploaded results to {repo_output_prefix}/")
             except Exception as upload_err:
                 log.warning(f"[{repo_id}] Failed to upload to S3: {upload_err}")

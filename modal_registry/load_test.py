@@ -27,29 +27,57 @@ SANDBOX_TIMEOUT_SECS = 600  # 10 minutes per sandbox
 # Registry URL (from secret, but also hardcoded as fallback)
 REGISTRY = "imbue--keystone-docker-registry-cache-registry.modal.run"
 
-# Simple Dockerfile that pulls from Docker Hub (alpine:3.19).
+# Dockerfile that pulls python:3.12-slim from Docker Hub.
 # All 200 builds use the same Dockerfile + same cache ref, so after the first
 # build pushes cache layers, the remaining 199 should get cache hits and never
 # touch Docker Hub for the base image layers.
 DOCKERFILE_CONTENT = """\
 FROM python:3.12-slim
-RUN echo "load-test-sentinel" > /stamp.txt
-RUN pip install --no-cache-dir requests
+RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
+COPY .devcontainer/run_all_tests.sh /run_all_tests.sh
+RUN chmod +x /run_all_tests.sh
 """
 
-# Script that runs inside each sandbox: starts Docker, logs in, builds with cache.
+DEVCONTAINER_JSON = """\
+{{
+    "build": {{
+        "dockerfile": "Dockerfile",
+        "context": "..",
+        "cacheFrom": "type=registry,ref={registry}/load-test-cache:latest",
+        "cacheTo": "type=registry,ref={registry}/load-test-cache:latest,mode=max"
+    }}
+}}
+"""
+
+RUN_ALL_TESTS_SH = """\
+#!/bin/bash
+echo "load-test-sentinel"
+mkdir -p /test_artifacts/junit
+echo '<?xml version="1.0" ?><testsuites><testsuite tests="1"><testcase name="t"/></testsuite></testsuites>' > /test_artifacts/junit/results.xml
+echo '{"success": true}' > /test_artifacts/final_result.json
+"""
+
+# Script that runs inside each sandbox: starts Docker, logs in, runs devcontainer build.
 SANDBOX_SCRIPT_TEMPLATE = """\
 #!/bin/bash
 set -euo pipefail
 
 REGISTRY="{registry}"
-CACHE_REF="$REGISTRY/load-test-cache:latest"
 
-# Write Dockerfile
-mkdir -p /tmp/build
-cat > /tmp/build/Dockerfile << 'DOCKERFILE'
+# Set up project with .devcontainer
+mkdir -p /tmp/project/.devcontainer
+cat > /tmp/project/.devcontainer/Dockerfile << 'DOCKERFILE'
 {dockerfile}
 DOCKERFILE
+
+cat > /tmp/project/.devcontainer/devcontainer.json << 'DEVCONTAINER_JSON'
+{devcontainer_json}
+DEVCONTAINER_JSON
+
+cat > /tmp/project/.devcontainer/run_all_tests.sh << 'RUN_ALL_TESTS'
+{run_all_tests}
+RUN_ALL_TESTS
+chmod +x /tmp/project/.devcontainer/run_all_tests.sh
 
 # Log in to our cache registry
 echo "$DOCKER_BUILD_CACHE_REGISTRY_PASSWORD" | \
@@ -57,14 +85,12 @@ echo "$DOCKER_BUILD_CACHE_REGISTRY_PASSWORD" | \
         -u "$DOCKER_BUILD_CACHE_REGISTRY_USERNAME" \
         --password-stdin
 
-echo "=== Starting build (sandbox {sandbox_id}) ==="
+echo "=== Starting devcontainer build (sandbox {sandbox_id}) ==="
 START_TS=$(date +%s%N)
 
-docker buildx build \
-    --cache-from "type=registry,ref=$CACHE_REF" \
-    --cache-to "type=registry,ref=$CACHE_REF,mode=max" \
-    -t "load-test-throwaway:latest" \
-    /tmp/build 2>&1
+devcontainer build \
+    --workspace-folder /tmp/project \
+    --image-name "load-test-throwaway-{sandbox_id}:latest" 2>&1
 
 END_TS=$(date +%s%N)
 ELAPSED_MS=$(( (END_TS - START_TS) / 1000000 ))
@@ -119,6 +145,8 @@ def run_sandbox_build(
         script = SANDBOX_SCRIPT_TEMPLATE.format(
             registry=REGISTRY,
             dockerfile=DOCKERFILE_CONTENT,
+            devcontainer_json=DEVCONTAINER_JSON.format(registry=REGISTRY),
+            run_all_tests=RUN_ALL_TESTS_SH,
             sandbox_id=index,
         )
         build_proc = sandbox.exec("bash", "-c", script)

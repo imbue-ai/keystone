@@ -11,10 +11,10 @@ Prerequisites:
     - Modal secret 'keystone-docker-registry-config' exists with registry credentials
 """
 
-import asyncio
 import os
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
 import modal
@@ -23,8 +23,6 @@ from keystone.modal.image import create_modal_image
 
 SANDBOX_COUNT = 200
 SANDBOX_TIMEOUT_SECS = 600  # 10 minutes per sandbox
-# Concurrency for sandbox creation — avoid overwhelming Modal API
-CREATION_BATCH_SIZE = 50
 
 # Registry URL (from secret, but also hardcoded as fallback)
 REGISTRY = "imbue--keystone-docker-registry-cache-registry.modal.run"
@@ -86,7 +84,7 @@ class SandboxResult:
     error: str
 
 
-async def run_sandbox_build(
+def run_sandbox_build(
     app: modal.App,
     image: modal.Image,
     secret: modal.Secret,
@@ -161,7 +159,7 @@ async def run_sandbox_build(
         )
 
 
-async def run_load_test() -> None:
+def run_load_test() -> None:
     """Spawn SANDBOX_COUNT sandboxes and run concurrent builds."""
     print(f"Starting load test with {SANDBOX_COUNT} sandboxes", file=sys.stderr)
     print(f"Registry: {REGISTRY}", file=sys.stderr)
@@ -172,7 +170,7 @@ async def run_load_test() -> None:
 
     # First, seed the cache with one build so that the remaining 199 can use it.
     print("=== Phase 1: Seeding cache with initial build ===", file=sys.stderr)
-    seed_result = await run_sandbox_build(app, image, secret, index=0)
+    seed_result = run_sandbox_build(app, image, secret, index=0)
     if not seed_result.success:
         print(
             f"FATAL: Seed build failed — cannot proceed.\n{seed_result.error}",
@@ -184,27 +182,28 @@ async def run_load_test() -> None:
         file=sys.stderr,
     )
 
-    # Now launch the remaining builds concurrently in batches.
+    # Now launch ALL remaining builds concurrently using threads.
     print(
         f"=== Phase 2: Launching {SANDBOX_COUNT - 1} concurrent builds ===",
         file=sys.stderr,
     )
     overall_start = time.monotonic()
 
-    # Create tasks in batches to avoid overwhelming the Modal API
     all_results: list[SandboxResult] = [seed_result]
-    remaining_indices = list(range(1, SANDBOX_COUNT))
-
-    for batch_start in range(0, len(remaining_indices), CREATION_BATCH_SIZE):
-        batch = remaining_indices[batch_start : batch_start + CREATION_BATCH_SIZE]
-        print(
-            f"Launching batch {batch_start // CREATION_BATCH_SIZE + 1} "
-            f"(sandboxes {batch[0]}-{batch[-1]})",
-            file=sys.stderr,
-        )
-        tasks = [run_sandbox_build(app, image, secret, index=i) for i in batch]
-        batch_results = await asyncio.gather(*tasks)
-        all_results.extend(batch_results)
+    with ThreadPoolExecutor(max_workers=SANDBOX_COUNT - 1) as executor:
+        futures = {
+            executor.submit(run_sandbox_build, app, image, secret, i): i
+            for i in range(1, SANDBOX_COUNT)
+        }
+        for future in as_completed(futures):
+            result = future.result()
+            all_results.append(result)
+            status = "✓" if result.success else "✗"
+            print(
+                f"  {status} sandbox {result.sandbox_index:03d} "
+                f"finished in {result.duration_secs:.1f}s",
+                file=sys.stderr,
+            )
 
     overall_duration = time.monotonic() - overall_start
 
@@ -254,4 +253,4 @@ if __name__ == "__main__":
     if count_override:
         SANDBOX_COUNT = int(count_override)
 
-    asyncio.run(run_load_test())
+    run_load_test()

@@ -36,7 +36,7 @@ REGISTRY = "imbue--keystone-docker-registry-cache-registry.modal.run"
 DOCKERFILE_CONTENT = """\
 FROM python:3.12-slim
 RUN echo "load-test-sentinel" > /stamp.txt
-RUN pip install --no-cache-dir requests
+# RUN pip install --no-cache-dir requests
 """
 
 # Script that runs inside each sandbox: starts Docker, logs in, builds with cache.

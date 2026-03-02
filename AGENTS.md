@@ -25,16 +25,17 @@ bd sync               # Sync with git
    ```bash
    git pull
    bd sync
-   git push origin HEAD:main  # Push current branch to origin/main
+   git push origin HEAD:<feature-branch-name>  # Push to a feature branch, NOT main
    git status  # MUST show "up to date with origin"
    ```
-   **Note:** You're typically on a worktree branch (e.g., `agent-foo-1234`) that tracks `origin/main`. 
-   Plain `git push` won't work. Use `git push origin HEAD:main` to push your branch to remote main.
+   **Note:** Always push to a feature branch (e.g., `git push origin HEAD:my-feature`).
+   Never push directly to main — let the user review and merge.
 5. **Clean up** - Clear stashes, prune remote branches
 6. **Verify** - All changes committed AND pushed
 7. **Hand off** - Provide context for next session
 
 **CRITICAL RULES:**
+- **NEVER push to main without explicit user permission** - Always push to a feature branch and let the user review/merge
 - Work is NOT complete until `git push` succeeds
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push

@@ -11,6 +11,8 @@ dependencies = [
     "rich>=13.0",
     "json5>=0.9",
     "boto3>=1.28",
+    "fsspec>=2024.0",
+    "s3fs>=2024.0",
     "pytest>=8.0",
 ]
 

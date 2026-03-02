@@ -1,0 +1,21 @@
+{
+  // Manual-run config for codex (default model) on requests repo.
+  // The automated test is in evals/test_tiny_codex.py (uses file:// paths via tmp_path).
+  // To run manually:  cd evals && uv run eval-harness --config_file test_data/tiny_codex/config.json --no_cache_replay
+  "description": "Manual smoke test for codex default model on requests repo.",
+  "repo_list_path": "test_data/tiny_codex/repos.jsonl",
+  "s3_output_prefix": "s3://int8-datasets/keystone/evals/test-tiny-codex/",
+  "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs/",
+  "configs": [
+    {
+      "name": "codex-default",
+      "agent_config": {
+        "provider": "codex",
+        "evaluator": true,
+        "max_budget_usd": 5.0,
+        "timeout_minutes": 20
+      },
+      "trials_per_repo": 1,
+    }
+  ]
+}

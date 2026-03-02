@@ -31,6 +31,11 @@ has networking issues inside Modal. Alternative approaches:
 3. Use Modal's image caching for the base environment
 """
 
+import subprocess
+import tempfile
+import time
+from pathlib import Path
+
 import modal
 
 app = modal.App("docker-cache-test")
@@ -65,11 +70,6 @@ image = (
 )
 def test_cached_build(use_cache: bool = True) -> dict:  # noqa: ARG001
     """Test docker build with volume-based caching."""
-    import subprocess
-    import tempfile
-    import time
-    from pathlib import Path
-
     results = {"docker_started": False, "build_time": 0, "cache_used": False}
 
     # Start Docker daemon

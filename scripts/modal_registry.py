@@ -28,6 +28,8 @@ LIMITATIONS:
 - Consider using Modal Volumes directly for simpler caching
 """
 
+import subprocess
+
 import modal
 
 app = modal.App("docker-registry")
@@ -89,8 +91,6 @@ registry_image = (
 @modal.web_server(port=5000, startup_timeout=60)
 def registry():
     """Run nginx + Docker registry."""
-    import subprocess
-
     # Start registry on port 5001
     subprocess.Popen(
         ["/usr/local/bin/registry", "serve", "/etc/docker/registry/config.yml"],

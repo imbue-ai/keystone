@@ -1,0 +1,49 @@
+{
+  // opencode eval on tiny repo set — 4 models
+  "description": "OpenCode eval on tiny repo set with 4 models.",
+  "repo_list_path": "evals/examples/repos_tiny.jsonl",
+  "s3_output_prefix": "s3://int8-datasets/keystone/evals/opencode-samples-2026-02-25-v4/",
+  "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs/",
+  "configs": [
+    {
+      "name": "opencode-haiku",
+      "agent_config": {
+        "provider": "opencode",
+        "evaluator": true,
+        "model": "anthropic/claude-haiku-4-5",
+        "max_budget_usd": 5.0,
+        "timeout_minutes": 20
+      },
+    },
+    {
+      "name": "opencode-opus",
+      "agent_config": {
+        "provider": "opencode",
+        "evaluator": true,
+        "model": "anthropic/claude-opus-4-6",
+        "max_budget_usd": 5.0,
+        "timeout_minutes": 20
+      },
+    },
+    {
+      "name": "opencode-codex-mini",
+      "agent_config": {
+        "provider": "opencode",
+        "evaluator": true,
+        "model": "openai/gpt-5.1-codex-mini",
+        "max_budget_usd": 5.0,
+        "timeout_minutes": 20
+      },
+    },
+    {
+      "name": "opencode-codex",
+      "agent_config": {
+        "provider": "opencode",
+        "evaluator": true,
+        "model": "openai/gpt-5.2-codex",
+        "max_budget_usd": 5.0,
+        "timeout_minutes": 20
+      },
+    }
+  ]
+}

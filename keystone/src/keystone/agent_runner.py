@@ -1,7 +1,7 @@
 """Agent runner abstraction for local and Modal execution."""
 
 import io
-import shlex
+import os
 import shutil
 import subprocess
 import tarfile
@@ -9,44 +9,22 @@ import tempfile
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
-from dataclasses import dataclass
 from logging import getLogger
 from pathlib import Path
-from typing import Literal
 
 from keystone.agent_log import create_devcontainer_tarball
+from keystone.llm_provider import AgentProvider
+from keystone.modal.image import TIMESTAMP_SCRIPT_PATH
 from keystone.process_runner import run_process
-from keystone.schema import VerifyResult
+from keystone.prompts import generate_devcontainer_json
+from keystone.schema import InferenceCost, StreamEvent, StreamType, VerificationResult
+
+GUARDRAIL_SCRIPT_PATH = Path(__file__).parent / "guardrail.sh"
 
 logger = getLogger(__name__)
 
 DEFAULT_AGENT_TIMEOUT = 3600
 TIMEOUT_EXIT_CODE = 124  # Exit code used by GNU timeout command
-
-
-@dataclass
-class StreamEvent:
-    """A line of output from the agent process."""
-
-    stream: Literal["stdout", "stderr"]
-    line: str
-
-
-def build_claude_command(
-    prompt: str, max_budget_usd: float, agent_cmd: str = "claude"
-) -> list[str]:
-    """Build the command to run the Claude agent.
-
-    Uses the splat pattern for grouping arguments for better readability.
-    """
-    return [
-        *shlex.split(agent_cmd),
-        "--dangerously-skip-permissions",
-        *("--output-format", "stream-json"),
-        "--verbose",
-        *("--max-budget-usd", str(max_budget_usd)),
-        *("-p", prompt),
-    ]
 
 
 class AgentRunner(ABC):
@@ -59,19 +37,20 @@ class AgentRunner(ABC):
         project_archive: bytes,
         max_budget_usd: float,
         agent_cmd: str,
-        time_limit_secs: int,
+        time_limit_seconds: int,
+        provider: AgentProvider,
+        agents_md: str | None = None,
     ) -> Iterator[StreamEvent]:
-        # FIXME: It's not clear why this is a generator -- we could just return a result object.
-        # It is important that the intermediate output gets logged in a streaming way, but it needn't be a generator.
-        # That would eliminate the need for the separate exit_code method below.
         """Run the agent and yield output events.
 
         Args:
             prompt: The prompt to send to the agent.
             project_archive: Git archive tarball of the project.
             max_budget_usd: Maximum budget for agent inference.
-            agent_cmd: Base command to run the agent (e.g., "claude").
-            time_limit_secs: Maximum time in seconds for agent execution.
+            agent_cmd: Base command to run the agent.
+            time_limit_seconds: Maximum time in seconds for agent execution.
+            provider: LLM provider for command building and output parsing.
+            agents_md: Optional AGENTS.md content to write into the project directory.
 
         Yields:
             StreamEvent for each line of stdout/stderr.
@@ -95,20 +74,20 @@ class AgentRunner(ABC):
         project_archive: bytes,
         devcontainer_tarball: bytes,
         test_artifacts_dir: Path,
-        image_build_timeout_secs: int,
-        test_timeout_secs: int,
-    ) -> VerifyResult:
+        image_build_timeout_seconds: int,
+        test_timeout_seconds: int,
+    ) -> VerificationResult:
         """Run verification tests on pristine source + agent's devcontainer.
 
         Args:
             project_archive: Git archive tarball of the original project source.
             devcontainer_tarball: Tarball of .devcontainer/ created by agent.
             test_artifacts_dir: Directory to store test artifacts.
-            image_build_timeout_secs: Timeout for building the devcontainer image.
-            test_timeout_secs: Timeout for running tests.
+            image_build_timeout_seconds: Timeout for building the devcontainer image.
+            test_timeout_seconds: Timeout for running tests.
 
         Returns:
-            VerifyResult with success status and optional error message.
+            VerificationResult with success status and optional error message.
         """
         ...
 
@@ -117,14 +96,31 @@ class AgentRunner(ABC):
         """Perform any necessary cleanup (e.g. terminating sandboxes)."""
         ...
 
-    def get_claude_dir_tarball(self) -> bytes | None:
-        """Get tarball of ~/.claude directory if available.
+    def get_agent_dir_tarball(self) -> bytes | None:
+        """Get tarball of agent state directories if available.
+
+        Captures whichever agent directories exist in the sandbox
+        (e.g. ~/.claude, ~/.codex, ~/.gemini) as a single gzipped tarball.
 
         This is optional - only Modal runner implements it since it has access
         to the sandbox filesystem. Local runner returns None.
 
         Returns:
-            Gzipped tarball of ~/.claude, or None if not available.
+            Gzipped tarball of agent directories, or None if not available.
+        """
+        return None
+
+    def get_inference_cost(self, provider_name: str) -> InferenceCost | None:  # noqa: ARG002
+        """Get inference cost via ccusage after agent execution.
+
+        Only available on Modal runner where ccusage is installed and the sandbox
+        contains only this agent's session data. Returns None for local runs.
+
+        Args:
+            provider_name: The LLM provider name ('claude', 'codex', etc.)
+
+        Returns:
+            InferenceCost from ccusage, or None if not available.
         """
         return None
 
@@ -138,7 +134,8 @@ class LocalAgentRunner(AgentRunner):
 
     def __init__(self) -> None:
         self._exit_code: int = 1
-        self._work_dir: Path | None = None  # Temp dir from git archive
+        self._work_dir: Path | None = None
+        self._work_dir_td: tempfile.TemporaryDirectory | None = None
 
     def _check_docker_available(self) -> bool:
         """Check if Docker is available locally."""
@@ -153,17 +150,28 @@ class LocalAgentRunner(AgentRunner):
         except (FileNotFoundError, subprocess.TimeoutExpired):
             return False
 
+    @staticmethod
+    def _with_timeout(seconds: int, cmd: list[str]) -> list[str]:
+        """Prepend GNU timeout to cmd if available, otherwise return cmd unchanged."""
+        try:
+            subprocess.run(["timeout", "--version"], capture_output=True, check=False)
+            return ["timeout", str(seconds), *cmd]
+        except FileNotFoundError:
+            return cmd
+
     def run(
         self,
         prompt: str,
         project_archive: bytes,
         max_budget_usd: float,
         agent_cmd: str,
-        time_limit_secs: int,
+        time_limit_seconds: int,
+        provider: AgentProvider,
+        agents_md: str | None = None,
     ) -> Iterator[StreamEvent]:
         if not self._check_docker_available():
             yield StreamEvent(
-                stream="stderr",
+                stream=StreamType.STDERR,
                 line="Error: Docker is required for local agent execution but not available.",
             )
             self._exit_code = 1
@@ -171,32 +179,60 @@ class LocalAgentRunner(AgentRunner):
 
         # Extract archive to temp directory
         yield StreamEvent(
-            stream="stderr",
+            stream=StreamType.STDERR,
             line="Extracting project archive to working directory...",
         )
-        self._work_dir = Path(tempfile.mkdtemp(prefix="keystone-agent-"))
+        self._work_dir_td = tempfile.TemporaryDirectory(prefix="keystone-agent-")
+        self._work_dir = Path(self._work_dir_td.name)
         with tarfile.open(fileobj=io.BytesIO(project_archive), mode="r:gz") as tar:
-            tar.extractall(self._work_dir)
+            tar.extractall(self._work_dir, filter="data")
+
+        # Save a clean copy for guardrail.sh to verify the agent didn't modify source files
+        clean_dir = self._work_dir / ".project_clean"
+        clean_dir.mkdir()
+        with tarfile.open(fileobj=io.BytesIO(project_archive), mode="r:gz") as tar:
+            tar.extractall(clean_dir, filter="data")
+
+        # Initialize a git repo so agents that require one (e.g. codex) work correctly.
+        subprocess.run(
+            ["git", "init"],
+            cwd=str(self._work_dir),
+            capture_output=True,
+            check=False,
+        )
+
+        # Seed pre-generated helper files into the work directory.
+        # Modal places these at /devcontainer.json and /timestamp_process_output.pl;
+        # locally we put them in the work dir and the prompt addendum points there.
+        (self._work_dir / "devcontainer.json").write_text(generate_devcontainer_json())
+        dest_pl = self._work_dir / "timestamp_process_output.pl"
+        dest_pl.write_bytes(TIMESTAMP_SCRIPT_PATH.read_bytes())
+        dest_pl.chmod(0o755)
+
+        # Copy guardrail script into workspace for agent self-checks
+        dest_guardrail = self._work_dir / "guardrail.sh"
+        dest_guardrail.write_bytes(GUARDRAIL_SCRIPT_PATH.read_bytes())
+        dest_guardrail.chmod(0o755)
+
+        # Write AGENTS.md if provided (used by codex to read instructions as system context)
+        if agents_md:
+            (self._work_dir / "AGENTS.md").write_text(agents_md)
 
         events: list[StreamEvent] = []
 
         def collect_stdout(line: str) -> None:
-            events.append(StreamEvent(stream="stdout", line=line))
+            events.append(StreamEvent(stream=StreamType.STDOUT, line=line))
 
         def collect_stderr(line: str) -> None:
-            events.append(StreamEvent(stream="stderr", line=line))
+            events.append(StreamEvent(stream=StreamType.STDERR, line=line))
 
-        full_cmd = build_claude_command(prompt, max_budget_usd, agent_cmd)
-
-        # Add timeout if available
-        try:
-            subprocess.run(["timeout", "--version"], capture_output=True, check=False)
-            full_cmd = ["timeout", str(time_limit_secs), *full_cmd]
-        except FileNotFoundError:
-            pass
+        full_cmd = provider.build_command(prompt, max_budget_usd, agent_cmd)
+        full_cmd = self._with_timeout(time_limit_seconds, full_cmd)
 
         result = run_process(
             full_cmd,
+            log_prefix="[local_agent]",
+            env={**os.environ, **provider.env_vars()},
             cwd=str(self._work_dir),
             stdout_callback=collect_stdout,
             stderr_callback=collect_stderr,
@@ -221,16 +257,16 @@ class LocalAgentRunner(AgentRunner):
         project_archive: bytes,
         devcontainer_tarball: bytes,
         test_artifacts_dir: Path,
-        image_build_timeout_secs: int,
-        test_timeout_secs: int,
-    ) -> VerifyResult:
+        image_build_timeout_seconds: int,
+        test_timeout_seconds: int,
+    ) -> VerificationResult:
         """Run verification tests locally using Docker.
 
         Extracts pristine project source + agent's devcontainer to a temp dir,
         then builds and runs tests.
         """
         if not self._check_docker_available():
-            return VerifyResult(
+            return VerificationResult(
                 success=False,
                 error_message="Docker is required for local verification but not available.",
             )
@@ -240,16 +276,16 @@ class LocalAgentRunner(AgentRunner):
         try:
             # Extract project archive
             with tarfile.open(fileobj=io.BytesIO(project_archive), mode="r:gz") as tar:
-                tar.extractall(work_dir)
+                tar.extractall(work_dir, filter="data")
 
             # Overlay devcontainer
             with tarfile.open(fileobj=io.BytesIO(devcontainer_tarball), mode="r:gz") as tar:
-                tar.extractall(work_dir)
+                tar.extractall(work_dir, filter="data")
 
             # Check if devcontainer.json exists
             devcontainer_json = work_dir / ".devcontainer" / "devcontainer.json"
             if not devcontainer_json.exists():
-                return VerifyResult(
+                return VerificationResult(
                     success=False,
                     error_message="Build failed: .devcontainer/devcontainer.json not found.",
                 )
@@ -259,27 +295,28 @@ class LocalAgentRunner(AgentRunner):
 
             # 1. Build the image
             build_start = time.time()
-            build_cmd = [
-                "timeout",
-                str(image_build_timeout_secs),
-                "devcontainer",
-                "build",
-                "--workspace-folder",
-                str(work_dir),
-                "--image-name",
-                image_name,
-            ]
+            build_cmd = self._with_timeout(
+                image_build_timeout_seconds,
+                [
+                    "devcontainer",
+                    "build",
+                    "--workspace-folder",
+                    str(work_dir),
+                    "--image-name",
+                    image_name,
+                ],
+            )
             logger.info("Building image: %s", " ".join(build_cmd))
             build_proc = subprocess.run(build_cmd, capture_output=True, text=True)
             image_build_seconds = time.time() - build_start
             if build_proc.returncode == TIMEOUT_EXIT_CODE:
-                return VerifyResult(
+                return VerificationResult(
                     success=False,
-                    error_message=f"Image build timed out after {image_build_timeout_secs} seconds",
+                    error_message=f"Image build timed out after {image_build_timeout_seconds} seconds",
                     image_build_seconds=image_build_seconds,
                 )
             if build_proc.returncode != 0:
-                return VerifyResult(
+                return VerificationResult(
                     success=False,
                     error_message=f"Build failed:\n{build_proc.stderr}",
                     image_build_seconds=image_build_seconds,
@@ -289,16 +326,17 @@ class LocalAgentRunner(AgentRunner):
             test_start = time.time()
             # Remove any existing container
             subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
-            test_cmd = [
-                "timeout",
-                str(test_timeout_secs),
-                "docker",
-                "run",
-                "--name",
-                container_name,
-                image_name,
-                "/run_all_tests.sh",
-            ]
+            test_cmd = self._with_timeout(
+                test_timeout_seconds,
+                [
+                    "docker",
+                    "run",
+                    "--name",
+                    container_name,
+                    image_name,
+                    "/run_all_tests.sh",
+                ],
+            )
             test_run = subprocess.run(test_cmd, capture_output=True, text=True)
             test_execution_seconds = time.time() - test_start
 
@@ -313,20 +351,20 @@ class LocalAgentRunner(AgentRunner):
             subprocess.run(["docker", "rm", container_name], capture_output=True)
 
             if test_run.returncode == TIMEOUT_EXIT_CODE:
-                return VerifyResult(
+                return VerificationResult(
                     success=False,
-                    error_message=f"Test execution timed out after {test_timeout_secs} seconds",
+                    error_message=f"Test execution timed out after {test_timeout_seconds} seconds",
                     image_build_seconds=image_build_seconds,
                     test_execution_seconds=test_execution_seconds,
                 )
             if test_run.returncode == 0:
-                return VerifyResult(
+                return VerificationResult(
                     success=True,
                     image_build_seconds=image_build_seconds,
                     test_execution_seconds=test_execution_seconds,
                 )
             else:
-                return VerifyResult(
+                return VerificationResult(
                     success=False,
                     error_message=f"Test run failed with return code {test_run.returncode}",
                     image_build_seconds=image_build_seconds,
@@ -337,6 +375,7 @@ class LocalAgentRunner(AgentRunner):
 
     def cleanup(self) -> None:
         """Clean up the temporary work directory."""
-        if self._work_dir is not None and self._work_dir.exists():
-            shutil.rmtree(self._work_dir, ignore_errors=True)
+        if self._work_dir_td is not None:
+            self._work_dir_td.cleanup()
+            self._work_dir_td = None
             self._work_dir = None

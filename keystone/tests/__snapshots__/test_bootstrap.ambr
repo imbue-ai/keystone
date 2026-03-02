@@ -6,15 +6,106 @@
       'model': '',
       'status_messages': list([
         'Exploring repository structure to identify file types and test locations.',
-        'Creating devcontainer structure for C++ CMake project with vcpkg dependencies.',
-        'Building devcontainer image to verify setup.',
+        'Creating .devcontainer directory and copying required files.',
+        'Creating Dockerfile for C++/CMake/vcpkg project.',
+        'Building the Docker image to verify the setup.',
         'Running tests in the built container.',
-        'Verifying build reproducibility with second build test.',
       ]),
-      'summary': 'All tests passing. Optimized Dockerfile with vcpkg dependency caching and pre-built artifacts results in 0.3s cached rebuilds. Tip: For C++ projects with vcpkg, pre-installing dependencies via vcpkg.json and pre-building the project in Docker layers dramatically speeds up iteration time.',
+      'summary': "Everything worked. C++/CMake/vcpkg project using fmt library; vcpkg is cloned and bootstrapped inside the Dockerfile, dependencies pre-installed for caching, project built at image build time so `run_all_tests.sh` just runs `ctest`. CTest's `--output-junit` flag (available since CMake 3.21, Ubuntu 22.04 ships 3.22) generates JUnit XML directly.",
       'timed_out': False,
     }),
     'error_message': None,
+    'generated_files': dict({
+      'devcontainer_json': '''
+        {
+          "build": {
+            "dockerfile": "Dockerfile",
+            "context": "..",
+            "options": [
+              "--network=host"
+            ]
+          },
+          "runArgs": [
+            "--network=host"
+          ]
+        }
+  
+      ''',
+      'dockerfile': '''
+        FROM ubuntu:22.04
+        
+        ENV DEBIAN_FRONTEND=noninteractive
+        
+        # Install system dependencies
+        RUN apt-get update && apt-get install -y \
+            build-essential \
+            cmake \
+            git \
+            curl \
+            zip \
+            unzip \
+            tar \
+            pkg-config \
+            ninja-build \
+            perl-base \
+            ca-certificates \
+            && rm -rf /var/lib/apt/lists/*
+        
+        # Set up timestamp helper script.
+        COPY ./.devcontainer/timestamp_process_output.pl /timestamp_process_output.pl
+        
+        # Create test artifacts directory.
+        RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
+        
+        # Install and bootstrap vcpkg
+        ENV VCPKG_ROOT=/vcpkg
+        RUN git clone https://github.com/microsoft/vcpkg.git $VCPKG_ROOT && \
+            $VCPKG_ROOT/bootstrap-vcpkg.sh -disableMetrics
+        
+        # Copy vcpkg manifest first to pre-warm the package cache
+        WORKDIR /project_src
+        COPY vcpkg.json ./
+        
+        # Pre-install vcpkg dependencies using manifest mode (cache this layer)
+        RUN $VCPKG_ROOT/vcpkg install --no-print-usage
+        
+        # Copy source code and build files
+        COPY CMakeLists.txt ./
+        COPY src/ ./src/
+        COPY tests/ ./tests/
+        
+        # Configure and build the project
+        RUN cmake -B build -S . \
+            -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
+            -DCMAKE_BUILD_TYPE=Release && \
+            cmake --build build --parallel $(nproc)
+        
+        # Copy the test runner script last (this changes often during development)
+        COPY .devcontainer/run_all_tests.sh /run_all_tests.sh
+        RUN chmod +x /run_all_tests.sh
+  
+      ''',
+      'run_all_tests_sh': '''
+        #!/bin/bash
+        set -euo pipefail
+        
+        mkdir -p /test_artifacts/junit
+        
+        cd /project_src
+        
+        echo "Running tests with CTest..."
+        
+        /timestamp_process_output.pl --logfile /test_artifacts/ctest.log \
+            ctest --test-dir build \
+                --output-on-failure \
+                --output-junit /test_artifacts/junit/ctest.xml \
+                -V
+        
+        echo '{"success": true}' > /test_artifacts/final_result.json
+        echo "All tests passed!"
+  
+      ''',
+    }),
     'success': True,
     'verification': dict({
       'error_message': None,
@@ -36,19 +127,102 @@
       'model': '',
       'status_messages': list([
         'Exploring repository structure to identify file types and test locations.',
-        'Creating .devcontainer directory and copying timestamp helper script.',
-        'Creating devcontainer.json configuration file.',
-        'Creating Dockerfile with Python and Node.js runtimes for polyglot project.',
-        'Creating run_all_tests.sh script to execute both backend and frontend test suites.',
-        'Building dev container image to verify configuration.',
-        'Build failed due to uv virtual environment issue. Fixing Dockerfile to use proper uv commands.',
-        'Retrying dev container build with fixed uv commands.',
-        'Running tests in container to verify functionality.',
+        'Creating Dockerfile and test runner for Python/Flask backend + Node.js frontend project.',
+        'Building the Docker image to verify the setup.',
+        'Fixing Dockerfile - no uv.lock file exists, switching to direct pip install.',
+        'Build succeeded. Running tests now.',
       ]),
-      'summary': 'Successfully built polyglot dev container with Python and Node.js. Both backend (pytest) and frontend (node:test) suites pass. Key tip: This project needed both Python and Node.js runtimes since the frontend tests start the Flask backend server and make API calls to it. Using uv for Python dependencies significantly sped up builds.',
+      'summary': 'Everything worked. The project is a Python Flask backend + Node.js frontend with integration tests. Key points: no uv.lock file exists so used `uv pip install` directly rather than `uv sync --locked`; the Node.js frontend tests use the built-in `node --test` runner with `--test-reporter=junit` for JUnit XML output; the frontend integration tests start the Flask server as a subprocess, so both Python (with Flask) and Node.js must be in the same container image.',
       'timed_out': False,
     }),
     'error_message': None,
+    'generated_files': dict({
+      'devcontainer_json': '''
+        {
+          "build": {
+            "dockerfile": "Dockerfile",
+            "context": "..",
+            "options": [
+              "--network=host"
+            ]
+          },
+          "runArgs": [
+            "--network=host"
+          ]
+        }
+  
+      ''',
+      'dockerfile': '''
+        FROM python:3.12-slim
+        
+        # Install system dependencies including perl and Node.js prerequisites
+        RUN apt-get update && apt-get install -y \
+            perl-base \
+            curl \
+            ca-certificates \
+            && rm -rf /var/lib/apt/lists/*
+        
+        # Install Node.js 20 LTS
+        RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+            && apt-get install -y nodejs \
+            && rm -rf /var/lib/apt/lists/*
+        
+        # Set up timestamp helper script.
+        COPY ./.devcontainer/timestamp_process_output.pl /timestamp_process_output.pl
+        
+        # Create test artifacts directory.
+        RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
+        
+        # Copy uv from official image.
+        COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+        
+        # Very important on Modal -- without this, there is a crazy bug that means that some files do not show up in snapshots!
+        # This is because Modal's snapshotting mechanism does not work correctly with symlinks.
+        ENV UV_LINK_MODE=copy
+        
+        # Pre-create uv virtual environment and install Python dependencies.
+        ENV UV_PROJECT_ENVIRONMENT=/venv
+        RUN uv venv /venv && \
+            uv pip install --python /venv/bin/python flask pytest
+        
+        # Add venv to PATH
+        ENV PATH="/venv/bin:$PATH"
+        
+        # Copy project source files
+        WORKDIR /project_src
+        COPY backend/ ./backend/
+        COPY frontend/ ./frontend/
+        
+        # Copy the test runner script last (this changes often during development)
+        COPY .devcontainer/run_all_tests.sh /run_all_tests.sh
+        RUN chmod +x /run_all_tests.sh
+  
+      ''',
+      'run_all_tests_sh': '''
+        #!/usr/bin/env bash
+        set -euo pipefail
+        
+        mkdir -p /test_artifacts/junit
+        
+        echo "=== Running backend Python tests ==="
+        cd /project_src/backend
+        /timestamp_process_output.pl --logfile /test_artifacts/pytest.log \
+            pytest --junitxml=/test_artifacts/junit/pytest.xml -v .
+        
+        echo "=== Running frontend Node.js tests ==="
+        cd /project_src/frontend
+        /timestamp_process_output.pl --logfile /test_artifacts/node_test.log \
+            timeout 30 node --test --test-reporter=junit --test-reporter-destination=/test_artifacts/junit/node.xml
+        
+        echo "=== All tests completed ==="
+        
+        # Write final result
+        cat > /test_artifacts/final_result.json <<'EOF'
+        {"status": "success"}
+        EOF
+  
+      ''',
+    }),
     'success': True,
     'verification': dict({
       'error_message': None,
@@ -77,6 +251,267 @@
         dict({
           'name': 'test_simple::test_also_passes',
           'passed': True,
+          'skipped': False,
+        }),
+      ]),
+    }),
+  })
+# ---
+# name: test_e2e_sample_projects[python_project]
+  dict({
+    'agent': dict({
+      'error_messages': list([
+      ]),
+      'exit_code': 0,
+      'status_messages': list([
+        'Exploring repository structure to identify file types and test locations.',
+        'Simple Python project detected. Creating .devcontainer directory with Dockerfile and test runner.',
+        'Running guardrail check.',
+        'Build passed. Running container with --network=host to verify tests.',
+      ]),
+      'summary': "Everything worked. Simple Python project using uv for dependency management. Key fix: needed to set `PYTHONPATH=/project_src` in `run_all_tests.sh` so pytest could find `app.py` when tests import from it directly. The guardrail script's docker run command doesn't use `--network=host` so it shows a networking error in sandbox, but the build passes and manual runs with `--network=host` work correctly.",
+      'timed_out': False,
+    }),
+    'cli_args': list([
+      '/Users/catherinekim/bootstrap_devcontainer/.venv/bin/pytest',
+      'keystone/tests/test_bootstrap.py::test_e2e_sample_projects[python_project]',
+      '-sv',
+      '--snapshot-update',
+    ]),
+    'error_message': None,
+    'evaluator': dict({
+      'cost_usd': 0.0014472,
+      'issues': list([
+      ]),
+      'model': 'claude-haiku-4-5-20251001',
+      'passed': True,
+      'reasoning': "The agent successfully created all three required files with genuine, working implementations. The devcontainer.json is properly formatted, the Dockerfile is a substantial and well-structured image definition (not a stub) that handles dependency management with uv, creates necessary directories, and sets up the Python environment correctly. The run_all_tests.sh script is a complete test runner that properly generates JUnit XML output, sets PYTHONPATH correctly, and handles exit codes appropriately. The verification result confirms success, and the agent's explanation of the PYTHONPATH fix demonstrates understanding of the actual problem solved.",
+    }),
+    'generated_files': dict({
+      'devcontainer_json': '''
+        {
+          "build": {
+            "dockerfile": "Dockerfile",
+            "context": "..",
+            "options": [
+              "--network=host"
+            ]
+          },
+          "runArgs": [
+            "--network=host"
+          ]
+        }
+  
+      ''',
+      'dockerfile': '''
+        FROM python:3.12-slim
+        
+        # Create test artifacts directory.
+        RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
+        
+        # Copy uv from official image.
+        COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+        
+        # Very important on Modal -- without this, there is a crazy bug that means that some files do not show up in snapshots!
+        # This is because Modal's snapshotting mechanism does not work correctly with symlinks.
+        ENV UV_LINK_MODE=copy
+        
+        # Pre-create uv virtual environment and install dependencies.
+        # Install dependencies first (without the project itself) to maximize layer caching.
+        COPY pyproject.toml uv.lock /tmp/deps/
+        ENV UV_PROJECT_ENVIRONMENT=/venv
+        RUN cd /tmp/deps && uv sync --locked --no-install-project && \
+            echo "Python virtual environment created successfully at $UV_PROJECT_ENVIRONMENT"
+        
+        # Copy source code (these won't change during agent work)
+        WORKDIR /project_src
+        COPY app.py ./
+        COPY tests/ ./tests/
+        
+        # Ensure the venv is on PATH
+        ENV PATH="/venv/bin:$PATH"
+        
+        # Copy the test runner script last (this changes often during development)
+        COPY .devcontainer/run_all_tests.sh /run_all_tests.sh
+        RUN chmod +x /run_all_tests.sh
+  
+      ''',
+      'run_all_tests_sh': '''
+        #!/usr/bin/env bash
+        set -euo pipefail
+        
+        mkdir -p /test_artifacts/junit
+        
+        cd /project_src
+        export PYTHONPATH=/project_src:${PYTHONPATH:-}
+        
+        echo "Running pytest..."
+        pytest --junitxml=/test_artifacts/junit/pytest.xml --no-header -v 2>&1
+        
+        # Write final result
+        RESULT=$?
+        if [ $RESULT -eq 0 ]; then
+          echo '{"success": true}' > /test_artifacts/final_result.json
+          echo "All tests passed."
+        else
+          echo '{"success": false}' > /test_artifacts/final_result.json
+          echo "Some tests failed."
+          exit $RESULT
+        fi
+  
+      ''',
+    }),
+    'success': True,
+    'verification': dict({
+      'error_message': None,
+      'success': True,
+      'test_results': list([
+        dict({
+          'name': 'tests.test_app::test_add',
+          'passed': True,
+          'skipped': False,
+        }),
+        dict({
+          'name': 'tests.test_app::test_multiply',
+          'passed': True,
+          'skipped': False,
+        }),
+      ]),
+      'tests_failed': 0,
+      'tests_passed': 2,
+      'tests_skipped': 0,
+    }),
+  })
+# ---
+# name: test_e2e_sample_projects[python_with_failing_test]
+  dict({
+    'agent': dict({
+      'exit_code': 0,
+      'model': '',
+      'status_messages': list([
+        'Exploring repository structure to identify file types and test locations.',
+        'Creating .devcontainer directory and copying pre-generated files.',
+        'Creating Dockerfile for Python 3.12 project with uv.',
+        'Creating run_all_tests.sh script.',
+        'Building the Docker image to verify the setup.',
+        'Image built successfully. Running tests to verify.',
+        "Fixing PYTHONPATH issue - tests can't import app module.",
+      ]),
+      'summary': 'Tests run successfully. The project is a minimal Python 3.12 project using uv + pytest. Two tests pass, one (`test_impossible`) always fails by design. The key fix needed was setting `PYTHONPATH=/project_src` in `run_all_tests.sh` so pytest could import the `app` module since the project source is not installed as a package. The `uv sync --locked` in the Dockerfile pre-warms all dependencies for fast layer caching.',
+      'timed_out': False,
+    }),
+    'error_message': 'Test run failed with return code 1',
+    'generated_files': dict({
+      'devcontainer_json': '''
+        {
+          "build": {
+            "dockerfile": "Dockerfile",
+            "context": "..",
+            "options": [
+              "--network=host"
+            ]
+          },
+          "runArgs": [
+            "--network=host"
+          ]
+        }
+  
+      ''',
+      'dockerfile': '''
+        FROM python:3.12-slim
+        
+        # Install system dependencies
+        RUN apt-get update && apt-get install -y --no-install-recommends \
+            perl-base \
+            && rm -rf /var/lib/apt/lists/*
+        
+        # Set up timestamp helper script.
+        COPY ./.devcontainer/timestamp_process_output.pl /timestamp_process_output.pl
+        
+        # Create test artifacts directory.
+        RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
+        
+        # Copy uv from official image.
+        COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+        
+        # Set uv environment variables
+        ENV UV_LINK_MODE=copy
+        ENV UV_PROJECT_ENVIRONMENT=/venv
+        
+        # Pre-create uv virtual environment and install dependencies.
+        # Install dependencies first (without the project itself) to maximize layer caching.
+        COPY pyproject.toml uv.lock /tmp/deps/
+        RUN cd /tmp/deps && \
+            uv sync --locked --no-install-project && \
+            echo "Python virtual environment created successfully at $UV_PROJECT_ENVIRONMENT"
+        
+        # Copy source code
+        WORKDIR /project_src
+        COPY app.py ./
+        COPY tests/ ./tests/
+        COPY pyproject.toml uv.lock ./
+        
+        # Install the project itself
+        RUN uv sync --locked
+        
+        # Ensure the venv is on the PATH
+        ENV PATH="/venv/bin:$PATH"
+        
+        # Copy the test runner script last (this changes often during development)
+        COPY .devcontainer/run_all_tests.sh /run_all_tests.sh
+        RUN chmod +x /run_all_tests.sh
+  
+      ''',
+      'run_all_tests_sh': '''
+        #!/usr/bin/env bash
+        set -uo pipefail
+        
+        mkdir -p /test_artifacts/junit
+        
+        cd /project_src
+        export PYTHONPATH=/project_src:${PYTHONPATH:-}
+        
+        echo "Running pytest..."
+        /timestamp_process_output.pl --logfile /test_artifacts/pytest.log \
+            pytest \
+            --junitxml=/test_artifacts/junit/pytest.xml \
+            --no-header \
+            -v \
+            tests/
+        TEST_EXIT_CODE=$?
+        
+        # Write final result
+        if [ $TEST_EXIT_CODE -eq 0 ]; then
+            echo '{"success": true, "exit_code": 0}' > /test_artifacts/final_result.json
+        else
+            echo "{\"success\": false, \"exit_code\": $TEST_EXIT_CODE}" > /test_artifacts/final_result.json
+        fi
+        
+        echo "Test run complete. Exit code: $TEST_EXIT_CODE"
+        cat /test_artifacts/final_result.json
+        
+        exit $TEST_EXIT_CODE
+  
+      ''',
+    }),
+    'success': False,
+    'verification': dict({
+      'error_message': 'Test run failed with return code 1',
+      'success': False,
+      'test_results': list([
+        dict({
+          'name': 'tests.test_app::test_add',
+          'passed': True,
+          'skipped': False,
+        }),
+        dict({
+          'name': 'tests.test_app::test_multiply',
+          'passed': True,
+          'skipped': False,
+        }),
+        dict({
+          'name': 'tests.test_app::test_impossible',
+          'passed': False,
           'skipped': False,
         }),
       ]),

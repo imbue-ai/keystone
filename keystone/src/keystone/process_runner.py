@@ -5,14 +5,13 @@ import os
 import subprocess
 import threading
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
 
-# FIXME: Use Pydantic instead.
-@dataclass
-class ProcessResult:
+class ProcessResult(BaseModel):
     """Result of a process run with captured output."""
 
     returncode: int
@@ -35,8 +34,7 @@ def _stream_reader(
 
 def run_process(
     cmd: list[str],
-    # FIXME: Get rid of default below -- never use a blank string for a log prefix.
-    log_prefix: str = "",
+    log_prefix: str,
     env: dict[str, str] | None = None,
     cwd: str | None = None,
     stdout_callback: Callable[[str], None] | None = None,
@@ -56,10 +54,9 @@ def run_process(
     Returns:
         ProcessResult with returncode, stdout, and stderr.
     """
-    # FIXME: It's strange to only update this env var if the whole env is None.
     if env is None:
         env = os.environ.copy()
-        env["PYTHONUNBUFFERED"] = "1"
+    env["PYTHONUNBUFFERED"] = "1"
 
     process = subprocess.Popen(
         cmd,
@@ -78,12 +75,11 @@ def run_process(
     effective_stdout_cb: Callable[[str], None] | None = stdout_callback
     effective_stderr_cb: Callable[[str], None] | None = stderr_callback
 
-    # FIXME: We should use logging instead of print.
     def _log_stdout(line: str) -> None:
-        print(f"{log_prefix} STDOUT: {line}", flush=True)
+        logger.info("%s STDOUT: %s", log_prefix, line)
 
     def _log_stderr(line: str) -> None:
-        print(f"{log_prefix} STDERR: {line}", flush=True)
+        logger.info("%s STDERR: %s", log_prefix, line)
 
     if log_prefix and not stdout_callback:
         effective_stdout_cb = _log_stdout

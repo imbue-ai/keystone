@@ -21,6 +21,7 @@ def generate_devcontainer_json(cache_registry_url: str | None = None) -> str:
             [
                 f"--cache-from=type=registry,ref={cache_ref}",
                 f"--cache-to=type=registry,ref={cache_ref},mode=max",
+                "--load",  # Important to get the images into the local image list.
             ]
         )
 
@@ -43,7 +44,7 @@ We need to build an appropriate dev container, Dockerfile, and test runner in wh
 You are currently at a clean copy of the root of the project's code tree, without any build artifacts or git history.
 This copy was created using `git archive`.
 
-Your task is to create and populate a .devcontainer/... folder at the root of the project's code tree.
+Your task is to create and populate a .devcontainer/... folder with the appropriate Dockerfile at the root of the project's code tree.
 
 IMPORTANT: Only your changes inside .devcontainer/... will be preserved.
 When we capture your work, we extract only the .devcontainer/ directory and reapply it to the original repo.
@@ -53,60 +54,15 @@ Instructions:
 
 1. Copy the pre-generated devcontainer.json into the .devcontainer/ directory:
    ```bash
-   cp /devcontainer.json .devcontainer/devcontainer.json
+   cp ./devcontainer.json .devcontainer/devcontainer.json
    ```
    This file is already configured with the correct build context, Dockerfile path,
    network settings, and build cache options. Do NOT modify it.
 
-2. Copy the timestamp helper script into .devcontainer/:
-   ```bash
-   cp /timestamp_process_output.pl .devcontainer/
-   ```
-
-   This script wraps command execution with timestamped, tab-separated output that's easy to parse.
-   Usage: `/timestamp_process_output.pl [--logfile FILE] [--stamp-stdout] [--stamp-stderr] command [args...]`
-
-   Options:
-   - `--logfile FILE`: Write timestamped output to FILE (always includes timestamps and elapsed time)
-   - `--stamp-stdout`: Add timestamps to stdout (default: pass through unchanged)
-   - `--stamp-stderr`: Add timestamps to stderr (default: pass through unchanged)
-
-   Example output (with --stamp-stdout or in logfile):
-   ```
-   2026-02-02T17:28:47-0800	0.000	STDOUT	Running tests...
-   2026-02-02T17:28:47-0800	0.052	STDERR	Warning: deprecated function
-   2026-02-02T17:28:48-0800	1.234	STDOUT	Tests passed!
-   ```
-
-   The format is: `ISO_TIMESTAMP<tab>ELAPSED_SECS<tab>STDOUT|STDERR<tab>original_line`
-   This makes it trivial to filter/parse with grep, cut, awk, etc.
-
-   Use it in run_all_tests.sh like this:
-   ```bash
-   /timestamp_process_output.pl --logfile /test_artifacts/pytest.log \
-       pytest --junitxml=/test_artifacts/junit/pytest.xml tests/
-   ```
-
-   Or prefix your own commands, like this:
-```bash
-/timestamp_process_output.pl --logfile /tmp/devcontainer_build.$IMAGE_NAME.log \
-  devcontainer build \
-    --image-name "project_image-$(date +%Y%m%d-%H%M%S)" \
-    --workspace-folder .
-```
-
-   IMPORTANT: Your Dockerfile must include perl for this script to work:
-   ```dockerfile
-   RUN apt-get update && apt-get install -y perl-base
-   ```
-
-3. Create a .devcontainer/Dockerfile alongside that.
+2. Create a .devcontainer/Dockerfile alongside that.
 
   The Dockerfile MUST contain these lines, ideally early in the file, to create a writable test artifacts directory:
 ```
-# Set up timestamp helper script.
-COPY ./.devcontainer/timestamp_process_output.pl /timestamp_process_output.pl
-
 # Create test artifacts directory.
 RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
 ```
@@ -205,14 +161,13 @@ For example, you might want to `RUN apt-get install` must-have core dependencies
 and have subsequent layers of `RUN apt-get install` for dependencies you later discover are necessary.
 This way, the layer caching for the early `RUN apt-get install` will be reused when you later add dependencies.
 
-4. Create a .devcontainer/run_all_tests.sh script alongside the Dockerfile.
+3. Create a .devcontainer/run_all_tests.sh script alongside the Dockerfile.
 This will be copied to /run_all_tests.sh in the image by the final COPY command.
 
    a. run_all_tests.sh takes no arguments.
    b. It always writes test artifacts to /test_artifacts inside the container filesystem.
    c. /test_artifacts should be populated with artifacts from running the tests:
-      i. Run long-running comands prefixed with `/timestamp_process_output.pl --logfile /test_artifacts/COMMAND_NAME.log COMMAND arg1 arg2 ...`.
-      ii. Create JUnit XML test reports in /test_artifacts/junit/.
+      i. Create JUnit XML test reports in /test_artifacts/junit/.
           All test reports should be JUnit XML format and placed in /test_artifacts/junit/*.xml.
           Create the directory first: `mkdir -p /test_artifacts/junit`
           Examples for common frameworks:
@@ -225,7 +180,7 @@ This will be copied to /run_all_tests.sh in the image by the final COPY command.
           - Rust: Use cargo-nextest (install: `RUN cargo install cargo-nextest --locked`)
             Command: `cargo nextest run --profile default`
             Copy report: `cp target/nextest/default/junit.xml /test_artifacts/junit/cargo.xml`
-      iii. A file called /test_artifacts/final_result.json stating success/failure.
+      ii. A file called /test_artifacts/final_result.json stating success/failure.
    d. run_all_tests.sh should forward enough information to stdout/stderr to enable debugging failing tests.
    e. run_all_tests.sh is allowed to fail early (before running all tests) if that helps complete the task faster.
    f. If some of the test runs fail, run_all_tests.sh should fail as well (No need to explicitly verify this behavior, though).
@@ -254,14 +209,6 @@ Tips and Notes:
 
 * If the tests have code coverage enabled by default, disable it in run_all_tests.sh to speed things up.
   (e.g., `pytest --no-cov` or `coverage run` flags) - coverage reports are slow and not needed.
-
-* If the project does docker operations (e.g., runs containers as part of tests), ensure the docker CLI
-  is installed in the image and run the container with the docker socket exposed. Example:
-  ```
-  docker run --rm -it \\
-    -v /var/run/docker.sock:/var/run/docker.sock \\
-    docker:cli ps
-  ```
 
 * For polyglot projects (e.g., Python backend + Node frontend), ensure ALL test suites are run.
   This may require installing multiple runtimes (Python, Node, Go, etc.) in the Dockerfile.
@@ -296,13 +243,32 @@ Include anything you wish you had been told at the start. Examples:
 
 Please don't forget to emit the summary at the end.
 
-Verify your work using commands like these:
+IMPORTANT: Before doing your final verification, YOU MUST run the guardrail check script to catch common mistakes:
+```bash
+timeout 10m ./guardrail.sh
+```
+**You MUST have a successful guardrail run with 0 exit code BEFORE ending your turn!!**
+
+This script validates that:
+- All required files exist (.devcontainer/devcontainer.json, Dockerfile, run_all_tests.sh)
+- Dockerfile has correct structure (FROM, test_artifacts, COPY run_all_tests.sh)
+- run_all_tests.sh has correct structure (JUnit output, final_result.json)
+- The Docker image builds successfully
+
+Since both Docker builds and test runs can be slow and even stall, it's a good idea to use some kind of timeout.
+You might need to adjust the timeout based on the size of the project, though.  Remember that your first run
+of the devcontainer build (which guardrail.sh runs) will be slow because early layers are not cached.
+So you might need to use a longer timeout for the first run.
+
+Run this script after creating your files, and fix any reported errors before proceeding.
+If the guardrail reports a build failure, read the error output carefully and fix the issue.
+
+Then verify your work using commands like these:
 
 1. To build your image:
 ```bash
 IMAGE_NAME="project_image-$(date +%Y%m%d-%H%M%S)"
-/timestamp_process_output.pl --logfile /tmp/devcontainer_build.$IMAGE_NAME.log \
-  devcontainer build \
+devcontainer build \
   --image-name "$IMAGE_NAME" \
   --workspace-folder .
 ```
@@ -331,6 +297,11 @@ Bridge networking does not work in this environment due to gVisor/veth restricti
 When using `docker run`, you MUST use `--network=host` for containers to have network access.
 """
 
+LOCAL_ADDENDUM = """
+
+IMPORTANT: You are running locally (not in a Modal sandbox).
+"""
+
 OLD_PART = """
 IMPORTANT: Modal's image builder does not support --chown flags in COPY commands.
 Do NOT use `COPY --chown=user:group` syntax. Instead, use separate RUN commands to change ownership:
@@ -343,6 +314,100 @@ RUN chown user:group /path/file.txt
 def build_agent_prompt(agent_in_modal: bool) -> str:
     """Build the agent prompt, optionally adding Modal-specific guidance."""
     prompt = AGENT_PROMPT_TEMPLATE
-    if agent_in_modal:
-        prompt = prompt + MODAL_ADDENDUM
+    prompt = prompt + MODAL_ADDENDUM if agent_in_modal else prompt + LOCAL_ADDENDUM
     return prompt
+
+
+# ---------------------------------------------------------------------------
+# Codex-optimised prompt
+# ---------------------------------------------------------------------------
+# Codex-mini has a limited output budget per turn.  A long CLI prompt causes
+# it to spend all its reasoning on comprehension, leaving nothing for actual
+# tool calls.  The solution: keep the *CLI prompt* very short and put the
+# detailed instructions in an AGENTS.md file that codex reads automatically
+# as system-level context.
+# ---------------------------------------------------------------------------
+
+CODEX_AGENTS_MD = f"""\
+# Bootstrap Devcontainer - Agent Instructions
+
+You are setting up a reproducible dev container so this project's test suite passes.
+
+## What you must create
+
+All files go inside `.devcontainer/` — nothing outside that directory is preserved.
+
+1. **`.devcontainer/devcontainer.json`** — already pre-generated at `./devcontainer.json`.
+   Just copy it: `cp ./devcontainer.json .devcontainer/devcontainer.json`
+   Do NOT modify it.
+
+2. **`.devcontainer/Dockerfile`** — must contain, near the top:
+   ```dockerfile
+   RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
+   ```
+   And must end with:
+   ```dockerfile
+   COPY .devcontainer/run_all_tests.sh /run_all_tests.sh
+   RUN chmod +x /run_all_tests.sh
+   ```
+   Use `WORKDIR /project_src` and copy source files explicitly (not `COPY . .`).
+   Do NOT create `.dockerignore` files.
+
+3. **`.devcontainer/run_all_tests.sh`** (executable) — runs the full test suite:
+   - Writes JUnit XML to `/test_artifacts/junit/*.xml`
+     (e.g. `pytest --junitxml=/test_artifacts/junit/pytest.xml`)
+   - Writes `/test_artifacts/final_result.json` with `{{"success": true/false}}`
+   - Use `set -euo pipefail`
+   - `mkdir -p /test_artifacts/junit` at the top
+
+## Workflow
+
+1. Explore the repo: `ls -a`, `cat README.md`, `cat pyproject.toml`, etc.
+2. Identify language, test framework, and dependencies.
+3. Create the three files above.
+4. Run `timeout 10m ./guardrail.sh` to validate — fix any errors it reports.
+5. Build and test:
+   ```bash
+   IMAGE_NAME="img-$(date +%s)"
+   devcontainer build --image-name "$IMAGE_NAME" --workspace-folder .
+   docker run --network host --name "test-$(date +%s)" "$IMAGE_NAME" /run_all_tests.sh
+   ```
+
+## Key tips
+
+- Python: use `uv` for fast installs. Set `ENV UV_LINK_MODE=copy` in Dockerfile.
+  Set `PYTHONPATH=/project_src:${{PYTHONPATH:-}}` in run_all_tests.sh if needed.
+- Use `timeout` to prevent hung tests (e.g. `timeout 300 pytest`).
+- Disable coverage (`--no-cov`) to speed things up.
+- `docker run` must use `--network=host` in this environment.
+- Only changes inside `.devcontainer/` are preserved.
+
+## Status updates
+
+Emit status lines like:
+{STATUS_MARKER} Exploring repository structure.
+{STATUS_MARKER} Creating Dockerfile for Python project.
+
+When done, emit:
+{SUMMARY_MARKER} <summary of what worked and tips>
+
+**You MUST run `./guardrail.sh` and get exit code 0 before finishing.**
+"""
+
+CODEX_SHORT_PROMPT = (
+    "Set up a .devcontainer with Dockerfile and test runner for this project. "
+    "Read the AGENTS.md file first for detailed instructions, then explore the repo and create the files."
+)
+
+
+def build_codex_prompt(agent_in_modal: bool) -> tuple[str, str]:
+    """Return (agents_md_content, short_cli_prompt) for codex providers.
+
+    The AGENTS.md is written to the project root before launching codex,
+    keeping the CLI prompt short so codex-mini doesn't exhaust its output
+    budget on prompt comprehension.
+    """
+    agents_md = CODEX_AGENTS_MD
+    if agent_in_modal:
+        agents_md += "\n\nIMPORTANT: You are in a Modal sandbox. Use `--network=host` for all docker run commands.\n"
+    return agents_md, CODEX_SHORT_PROMPT

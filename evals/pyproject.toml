@@ -11,7 +11,13 @@ dependencies = [
     "rich>=13.0",
     "json5>=0.9",
     "boto3>=1.28",
+    "fsspec>=2024.0",
+    "s3fs>=2024.0",
     "pytest>=8.0",
+    "pyarrow>=14.0",
+    "ipywidgets>=8.1.8",
+    "anywidget>=0.9.21",
+    "ipyaggrid>=0.5.4",
 ]
 
 [tool.uv.sources]
@@ -19,6 +25,7 @@ keystone = { workspace = true }
 
 [project.optional-dependencies]
 dask = ["prefect-dask>=0.3"]
+eda = ["plotly>=5.0", "ipywidgets>=8.0", "numpy>=1.26"]
 
 [project.scripts]
 eval-harness = "eval_cli:app"

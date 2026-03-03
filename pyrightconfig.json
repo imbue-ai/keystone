@@ -1,7 +1,7 @@
 {
   "include": ["keystone", "evals", "modal_registry"],
   "exclude": ["**/node_modules", "**/.venv", "github_datasets", "samples"],
-  "extraPaths": ["keystone/src"],
+  "extraPaths": ["keystone/src", "keystone/tests"],
   "pythonVersion": "3.12",
   "typeCheckingMode": "basic",
   "reportMissingImports": true,

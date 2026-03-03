@@ -1,0 +1,55 @@
+{
+  // Minimal eval: 4 models x 2 repos x 1 trial = 8 total tasks
+  "description": "Minimal smoke test: 4 models x 2 repos x 1 trial -- trying without evalua",
+  "repo_list_path": "evals/examples/repos_tiny.jsonl",
+  // Might want to do this first:
+  // rm -rf /tmp/keystone-evals/tiny-four-model_v1
+  "s3_output_prefix": "file:///tmp/keystone-evals/tiny-four-model_v4",
+  "s3_repo_cache_prefix": "file:///tmp/keystone-evals/repo-tarballs/",
+  "configs": [
+    {
+      "name": "claude-opus",
+      "agent_config": {
+        "provider": "claude",
+        "evaluator": true,
+        "model": "claude-opus-4-6",
+        "max_budget_usd": 5.0,
+        "timeout_minutes": 20
+      },
+      "trials_per_repo": 1,
+    },
+    {
+      "name": "claude-haiku",
+      "agent_config": {
+        "provider": "claude",
+        "evaluator": true,
+        "model": "claude-haiku-4-5-20251001",
+        "max_budget_usd": 5.0,
+        "timeout_minutes": 20
+      },
+      "trials_per_repo": 1,
+    },
+    {
+      "name": "codex-premium",
+      "agent_config": {
+        "provider": "codex",
+        "evaluator": true,
+        "model": "gpt-5.2-codex",
+        "max_budget_usd": 5.0,
+        "timeout_minutes": 30
+      },
+      "trials_per_repo": 1,
+    },
+    {
+      "name": "codex-mini",
+      "agent_config": {
+        "provider": "codex",
+        "evaluator": true,
+        "model": "gpt-5.1-codex-mini",
+        "max_budget_usd": 5.0,
+        "timeout_minutes": 30
+      },
+      "trials_per_repo": 1,
+    }
+  ]
+}

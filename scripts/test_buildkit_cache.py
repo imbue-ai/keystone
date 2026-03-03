@@ -5,7 +5,10 @@ Usage:
     uv run modal run scripts/test_buildkit_cache.py
 """
 
+import subprocess
+import tempfile
 import time
+from pathlib import Path
 
 import modal
 
@@ -47,10 +50,6 @@ image = (
 )
 def test_buildkit_cache() -> dict:
     """Test BuildKit cache capabilities in Modal sandbox."""
-    import subprocess
-    import tempfile
-    from pathlib import Path
-
     results = {
         "docker_available": False,
         "buildkit_available": False,
@@ -133,15 +132,13 @@ RUN echo "layer2"
 
         # Test 2: Second build uses cache
         print("\nTest 2: Second build (should use cache)...")
-        import time as t
-
-        start = t.time()
+        start = time.time()
         ret = subprocess.run(
             ["docker", "build", "-t", "test-image:v2", "-f", str(dockerfile), str(tmppath)],
             capture_output=True,
             text=True,
         )
-        elapsed = t.time() - start
+        elapsed = time.time() - start
         if ret.returncode == 0:
             # Check for cache usage in output
             cache_used = "CACHED" in ret.stderr or "Using cache" in ret.stderr

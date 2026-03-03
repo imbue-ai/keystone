@@ -5,8 +5,10 @@ description = "Automatically generates a working .devcontainer/ setup for any pr
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "anthropic>=0.40.0",
     "junitparser>=3.0.0",
     "modal>=1.3.1",
+    "openai>=1.0.0",
     "pandas>=2.0.0",
     "pydantic>=2.0.0",
     "pytest>=9.0.2",
@@ -17,7 +19,7 @@ dependencies = [
 ]
 
 [project.scripts]
-keystone = "keystone:main"
+keystone = "keystone.keystone_cli:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -35,8 +37,8 @@ log_cli = true
 log_cli_level = "INFO"
 addopts = "-s"
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "ruff>=0.9.0",
     "pyright>=1.1.390",
     "pre-commit>=4.0.0",
@@ -62,6 +64,7 @@ select = [
     "PTH",    # flake8-use-pathlib
     "PLC",    # pylint conventions
     "RUF",    # ruff-specific rules
+    "TID",    # flake8-tidy-imports (banned-api)
 ]
 ignore = [
     "E501",   # line too long (handled by formatter)
@@ -71,3 +74,7 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["keystone"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"dataclasses" = {msg = "Use pydantic.BaseModel instead of @dataclass."}
+"typing.Literal" = {msg = "Use an Enum instead of Literal for fixed sets of values."}

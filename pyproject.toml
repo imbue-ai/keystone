@@ -4,14 +4,15 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
     "ipykernel>=7.1.0",
+    "nbformat>=4.2.0",
     "plotly>=6.5.2",
 ]
 
 [tool.uv.workspace]
 members = ["keystone", "evals", "modal_registry"]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "ruff>=0.9.0",
     "pyright>=1.1.390",
     "pre-commit>=4.0.0",
@@ -23,6 +24,7 @@ dev-dependencies = [
 target-version = "py312"
 line-length = 100
 exclude = ["github_datasets", "samples", "prototypes"]
+extend-exclude = ["*.ipynb"]
 
 [tool.ruff.lint]
 select = [

@@ -5,6 +5,7 @@
         "modal_registry",
         "-sv",
         "--log-cli-level=DEBUG",
+        "--snapshot-update",
     ],
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true

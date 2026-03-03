@@ -1,0 +1,3 @@
+{"id": "requests", "rank": 1, "repo": "https://github.com/psf/requests", "language": "python", "build_system": "pip", "tests": "pytest", "difficulty": "easy", "notes": "Pure Python, minimal dependencies, fast test suite; ideal baseline container workload."}
+{"id": "flask", "rank": 2, "repo": "https://github.com/pallets/flask", "language": "python", "build_system": "pip", "tests": "pytest", "difficulty": "easy", "notes": "Pure Python web framework; tests run quickly and reliably in Docker."}
+{"id": "starlette", "rank": 3, "repo": "https://github.com/encode/starlette", "language": "python", "build_system": "poetry", "tests": "pytest", "difficulty": "easy", "notes": "Poetry-based Python project with async tests; good example of modern Python packaging."}

@@ -12,9 +12,8 @@ from keystone.agent_log import (
     AgentRunRecord,
     CacheKey,
     CLIRunRecord,
-    StreamEvent,
 )
-from keystone.schema import AgentConfig
+from keystone.schema import AgentConfig, StreamEvent, StreamType
 
 
 @pytest.fixture
@@ -75,12 +74,12 @@ def test_agent_run_logging_and_cache_lookup(temp_db: Path) -> None:
         timestamp=datetime.now(UTC),
         cache_key=cache_key,
         events=[
-            StreamEvent(stream="stdout", line="hello"),
-            StreamEvent(stream="stderr", line="world"),
+            StreamEvent(stream=StreamType.STDOUT, line="hello"),
+            StreamEvent(stream=StreamType.STDERR, line="world"),
         ],
         devcontainer_tarball=b"tarball data",
         return_code=0,
-        claude_dir_tarball=None,
+        agent_dir_tarball=None,
     )
     agent_log.log_agent_run(record)
 
@@ -110,10 +109,10 @@ def test_cache_only_returns_successful_runs(temp_db: Path) -> None:
         cli_run_id=agent_log.generate_run_id(),
         timestamp=datetime.now(UTC),
         cache_key=cache_key,
-        events=[StreamEvent(stream="stderr", line="error")],
+        events=[StreamEvent(stream=StreamType.STDERR, line="error")],
         devcontainer_tarball=b"",
         return_code=1,  # Failed
-        claude_dir_tarball=None,
+        agent_dir_tarball=None,
     )
     agent_log.log_agent_run(record)
 
@@ -129,13 +128,13 @@ def test_agent_config_cache_key() -> None:
     config1 = AgentConfig(
         agent_cmd="claude",
         max_budget_usd=1.0,
-        agent_time_limit_secs=3600,
+        agent_time_limit_seconds=3600,
         agent_in_modal=True,
     )
     config2 = AgentConfig(
         agent_cmd="claude",
         max_budget_usd=1.0,
-        agent_time_limit_secs=3600,
+        agent_time_limit_seconds=3600,
         agent_in_modal=True,
     )
     # Same config should produce same JSON
@@ -145,7 +144,7 @@ def test_agent_config_cache_key() -> None:
     config3 = AgentConfig(
         agent_cmd="claude",
         max_budget_usd=2.0,  # Different
-        agent_time_limit_secs=3600,
+        agent_time_limit_seconds=3600,
         agent_in_modal=True,
     )
     assert config1.to_cache_key_json() != config3.to_cache_key_json()

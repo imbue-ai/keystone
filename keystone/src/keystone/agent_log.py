@@ -72,7 +72,7 @@ import tarfile
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import ClassVar
 
 import pandas as pd
 from pydantic import BaseModel
@@ -80,19 +80,10 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
 from keystone.git_utils import get_git_tree_hash
-from keystone.schema import AgentConfig
+from keystone.schema import AgentConfig, StreamEvent
 from keystone.version import VersionInfo, get_version_info
 
 logger = logging.getLogger(__name__)
-
-
-# FIXME: This is basically replicated from agent_runner.py.
-class StreamEvent(BaseModel):
-    """A single event from the agent's output stream."""
-
-    # FIXME: Use an enum for this instead of a string.
-    stream: Literal["stdout", "stderr"]
-    line: str
 
 
 class CacheKey(BaseModel):
@@ -122,7 +113,9 @@ class AgentRunRecord(BaseModel):
     events: list[StreamEvent]
     devcontainer_tarball: bytes
     return_code: int
-    claude_dir_tarball: bytes | None = None  # Tarball of ~/.claude from Modal
+    agent_dir_tarball: bytes | None = (
+        None  # Tarball of agent state dirs (e.g. ~/.claude, ~/.codex) from Modal
+    )
     version_info: VersionInfo | None = None  # Version of the code that ran
 
 
@@ -169,9 +162,11 @@ def ensure_column_exists(engine: Engine, table: str, column: str, column_type: s
         # Check if column exists (works for SQLite and PostgreSQL)
         # Validate identifiers to prevent SQL injection (PRAGMA and ALTER TABLE
         # don't support parameter binding for identifiers).
-        for name in (table, column, column_type):
+        for name in (table, column):
             if not all(ch.isalnum() or ch == "_" for ch in name):
                 raise ValueError(f"Invalid SQL identifier: {name!r}")
+        if not all(ch.isalnum() or ch in "_, ()" for ch in column_type):
+            raise ValueError(f"Invalid SQL type: {column_type!r}")
 
         if engine.dialect.name == "sqlite":
             result = conn.execute(text(f"PRAGMA table_info({table})"))
@@ -179,22 +174,55 @@ def ensure_column_exists(engine: Engine, table: str, column: str, column_type: s
             if not columns:
                 # Table doesn't exist yet
                 return
+            if column not in columns:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}"))
+                conn.commit()
+        else:
+            # PostgreSQL supports ADD COLUMN IF NOT EXISTS directly
+            conn.execute(
+                text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {column_type}")
+            )
+            conn.commit()
+
+
+def rename_column_if_exists(
+    engine: Engine, table: str, old_column: str, new_column: str, column_type: str
+) -> None:
+    """Rename a column if the old name exists and the new name doesn't.
+
+    For SQLite < 3.25 (no ALTER TABLE RENAME COLUMN), adds the new column,
+    copies data, and leaves the old column in place.
+
+    Args:
+        engine: SQLAlchemy engine
+        table: Table name
+        old_column: Old column name
+        new_column: New column name
+        column_type: SQL type for the column (e.g., 'TEXT', 'BLOB')
+    """
+    for name in (table, old_column, new_column):
+        if not all(ch.isalnum() or ch == "_" for ch in name):
+            raise ValueError(f"Invalid SQL identifier: {name!r}")
+
+    with engine.connect() as conn:
+        if engine.dialect.name == "sqlite":
+            result = conn.execute(text(f"PRAGMA table_info({table})"))
+            columns = {row[1] for row in result}
+            if not columns or old_column not in columns or new_column in columns:
+                return
+            # SQLite 3.25+ supports RENAME COLUMN
+            try:
+                conn.execute(
+                    text(f"ALTER TABLE {table} RENAME COLUMN {old_column} TO {new_column}")
+                )
+            except Exception:
+                # Fallback: add new column and copy data
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {new_column} {column_type}"))
+                conn.execute(text(f"UPDATE {table} SET {new_column} = {old_column}"))
+            conn.commit()
         else:
             # PostgreSQL
-            result = conn.execute(
-                text(
-                    "SELECT column_name FROM information_schema.columns WHERE table_name = :table"
-                ),
-                {"table": table},
-            )
-            columns = {row[0] for row in result}
-            if not columns:
-                # Table doesn't exist yet
-                return
-
-        if column not in columns:
-            # FIXME: Could we simplify this and delete above code with some "IF NOT EXISTS" syntax here?
-            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}"))
+            conn.execute(text(f"ALTER TABLE {table} RENAME COLUMN {old_column} TO {new_column}"))
             conn.commit()
 
 
@@ -222,6 +250,35 @@ class AgentLog:
     Thread-safety: This class is NOT thread-safe. Use one instance per thread.
     """
 
+    _CREATE_TABLES_SQL: ClassVar[list[str]] = [
+        """\
+        CREATE TABLE IF NOT EXISTS agent_run (
+            cli_run_id TEXT,
+            timestamp TEXT,
+            git_tree_hash TEXT,
+            prompt_hash TEXT,
+            agent_config_json TEXT,
+            cache_version TEXT,
+            cache_key_hash TEXT,
+            events_json TEXT,
+            devcontainer_tarball BLOB,
+            return_code INTEGER,
+            agent_dir_tarball BLOB,
+            version_info_json TEXT
+        )
+        """,
+        """\
+        CREATE TABLE IF NOT EXISTS cli_run (
+            id TEXT,
+            timestamp TEXT,
+            cwd TEXT,
+            args_json TEXT,
+            cache_hit INTEGER,
+            bootstrap_result_json TEXT
+        )
+        """,
+    ]
+
     def __init__(self, db_url: str) -> None:
         """Open or create the log database.
 
@@ -231,6 +288,13 @@ class AgentLog:
                 - postgresql://...: Connects to PostgreSQL
         """
         self._engine = _create_engine(db_url)
+        self._ensure_tables()
+
+    def _ensure_tables(self) -> None:
+        """Create tables if they don't exist."""
+        with self._engine.begin() as conn:
+            for sql in self._CREATE_TABLES_SQL:
+                conn.execute(text(sql))
 
     def close(self) -> None:
         """Close the database connection."""
@@ -259,8 +323,12 @@ class AgentLog:
 
     def log_agent_run(self, record: AgentRunRecord) -> None:
         """Log an agent execution."""
-        # Ensure version_info column exists (schema migration)
+        # Schema migrations for older databases
         ensure_column_exists(self._engine, "agent_run", "version_info_json", "TEXT")
+        rename_column_if_exists(
+            self._engine, "agent_run", "claude_dir_tarball", "agent_dir_tarball", "BLOB"
+        )
+        ensure_column_exists(self._engine, "agent_run", "agent_dir_tarball", "BLOB")
 
         # Use current version if not provided
         version_info = record.version_info or get_version_info()
@@ -278,7 +346,7 @@ class AgentLog:
                     "events_json": json.dumps([e.model_dump() for e in record.events]),
                     "devcontainer_tarball": record.devcontainer_tarball,
                     "return_code": record.return_code,
-                    "claude_dir_tarball": record.claude_dir_tarball,
+                    "agent_dir_tarball": record.agent_dir_tarball,
                     "version_info_json": version_info.model_dump_json(),
                 }
             ]
@@ -292,10 +360,15 @@ class AgentLog:
         Only runs with return_code == 0 are considered for replay.
         """
         cache_hash = cache_key.compute_hash()
+        # Schema migration: rename old column if needed, ensure new column exists
+        rename_column_if_exists(
+            self._engine, "agent_run", "claude_dir_tarball", "agent_dir_tarball", "BLOB"
+        )
+        ensure_column_exists(self._engine, "agent_run", "agent_dir_tarball", "BLOB")
         query = text("""
             SELECT cli_run_id, timestamp,
                    git_tree_hash, prompt_hash, agent_config_json, cache_version,
-                   events_json, devcontainer_tarball, return_code, claude_dir_tarball
+                   events_json, devcontainer_tarball, return_code, agent_dir_tarball
             FROM agent_run
             WHERE cache_key_hash = :cache_hash AND return_code = 0
             ORDER BY timestamp DESC
@@ -314,7 +387,12 @@ class AgentLog:
             return None
 
         r = row._mapping
-        events_data = json.loads(r["events_json"])
+        try:
+            events_data = json.loads(r["events_json"])
+            events = [StreamEvent(**e) for e in events_data]
+        except Exception:
+            logger.exception("Corrupted cache row for hash %s — treating as cache miss", cache_hash)
+            return None
         return AgentRunRecord(
             cli_run_id=r["cli_run_id"],
             timestamp=datetime.fromisoformat(r["timestamp"]),
@@ -324,10 +402,10 @@ class AgentLog:
                 agent_config_json=r["agent_config_json"],
                 cache_version=r["cache_version"],
             ),
-            events=[StreamEvent(**e) for e in events_data],
+            events=events,
             devcontainer_tarball=r["devcontainer_tarball"],
             return_code=r["return_code"],
-            claude_dir_tarball=r["claude_dir_tarball"],
+            agent_dir_tarball=r["agent_dir_tarball"],
         )
 
 
@@ -350,4 +428,4 @@ def extract_devcontainer_tarball(tarball: bytes, project_root: Path) -> None:
 
     buf = io.BytesIO(tarball)
     with tarfile.open(fileobj=buf, mode="r:gz") as tar:
-        tar.extractall(project_root)
+        tar.extractall(project_root, filter="data")

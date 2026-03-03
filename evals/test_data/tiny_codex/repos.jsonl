@@ -1,0 +1,1 @@
+{"id": "requests", "rank": 1, "repo": "https://github.com/psf/requests", "language": "python", "build_system": "pip", "tests": "pytest", "difficulty": "easy", "notes": "Pure Python, minimal dependencies, fast test suite; ideal baseline container workload."}

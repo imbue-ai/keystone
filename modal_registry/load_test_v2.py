@@ -33,15 +33,7 @@ from keystone.modal.image import create_modal_image
 # every build must pull from Docker Hub.
 DOCKERFILE = textwrap.dedent("""\
     FROM python:3.12-slim
-
-    RUN apt-get update && apt-get install -y --no-install-recommends \\
-        curl git jq && \\
-        rm -rf /var/lib/apt/lists/*
-
-    RUN pip install --no-cache-dir requests flask
-
-    WORKDIR /workspace
-    COPY . .
+    RUN echo "built"
 """)
 
 DEVCONTAINER_JSON = textwrap.dedent("""\

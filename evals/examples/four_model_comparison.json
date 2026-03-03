@@ -1,52 +1,56 @@
 {
   "description": "Full four-model comparison across the standard repo set.",
-  "repo_list_path": "evals/examples/repos.jsonl",
-  "s3_output_prefix": "file:///tmp/keystone-evals/four-model-full/",
-  "s3_repo_cache_prefix": "file:///tmp/keystone-evals/repo-tarballs/",
+  "repo_list_path": "evals/examples/tiny_repos.jsonl",
+  "s3_output_prefix": "s3://int8-datasets/keystone/evals/2026-03-02_thad_v2/",
+  "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs/",
   "configs": [
     {
       "name": "claude-opus",
       "agent_config": {
         "provider": "claude",
-        "evaluator": true,
+        "evaluator": false,
+        "no_guardrail": true,
         "model": "claude-opus-4-6",
         "max_budget_usd": 10.0,
         "timeout_minutes": 60
       },
       "trials_per_repo": 1,
     },
-    {
-      "name": "claude-haiku",
-      "agent_config": {
-        "provider": "claude",
-        "evaluator": true,
-        "model": "claude-haiku-4-5-20251001",
-        "max_budget_usd": 10.0,
-        "timeout_minutes": 60
-      },
-      "trials_per_repo": 1,
-    },
-    {
-      "name": "codex-gpt-5.2",
-      "agent_config": {
-        "provider": "codex",
-        "evaluator": true,
-        "model": "gpt-5.2-codex",
-        "max_budget_usd": 10.0,
-        "timeout_minutes": 60
-      },
-      "trials_per_repo": 1,
-    },
-    {
-      "name": "codex-mini-gpt-5.1",
-      "agent_config": {
-        "provider": "codex",
-        "evaluator": true,
-        "model": "gpt-5.1-codex-mini",
-        "max_budget_usd": 10.0,
-        "timeout_minutes": 60
-      },
-      "trials_per_repo": 1,
-    }
+    // {
+    //   "name": "claude-haiku",
+    //   "agent_config": {
+    //     "provider": "claude",
+    //     "evaluator": false,
+    //     "no_guardrail": true,
+    //     "model": "claude-haiku-4-5-20251001",
+    //     "max_budget_usd": 10.0,
+    //     "timeout_minutes": 60
+    //   },
+    //   "trials_per_repo": 1,
+    // },
+    // {
+    //   "name": "codex-gpt-5.2",
+    //   "agent_config": {
+    //     "provider": "codex",
+    //     "evaluator": false,
+    //     "no_guardrail": true,
+    //     "model": "gpt-5.2-codex",
+    //     "max_budget_usd": 10.0,
+    //     "timeout_minutes": 60
+    //   },
+    //   "trials_per_repo": 1,
+    // },
+    // // {
+    //   "name": "codex-mini-gpt-5.1",
+    //   "agent_config": {
+    //     "provider": "codex",
+    //     "evaluator": false,
+    //     "no_guardrail": true,
+    //     "model": "gpt-5.1-codex-mini",
+    //     "max_budget_usd": 10.0,
+    //     "timeout_minutes": 60
+    //   },
+    //   "trials_per_repo": 1,
+    // }
   ]
 }

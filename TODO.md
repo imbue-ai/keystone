@@ -1,3 +1,4 @@
+* Unify the false/trueness of the guardrail/evaluator configs
 * Figure out which set of tests should be passing, make them stable and fast enough to run more often.
 * Run our experiments!
 

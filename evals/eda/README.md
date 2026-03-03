@@ -6,16 +6,19 @@ with a Plotly parallel coordinates plot to select evaluation candidates.
 ## Quick Start
 
 ```bash
-# 1. Install notebook dependencies
-uv pip install pandas plotly ipywidgets pyarrow requests numpy
+# 1. Install dependencies (including pyarrow for parquet)
+uv sync --extra eda
 
 # 2. Fetch repo metrics (needs a GitHub token with public repo access)
 export GITHUB_TOKEN=ghp_...
-uv run python evals/eda/fetch_repos.py --csv
+uv run python evals/eda/fetch_repos.py      # writes repos.parquet; cached to .api_cache/
 
 # 3. Open the notebook
 jupyter lab evals/eda/repo_explorer.ipynb
 ```
+
+API responses are cached to `evals/eda/.api_cache/` so reruns are instant.
+Use `--no-cache` to force fresh fetches.
 
 ## What it does
 

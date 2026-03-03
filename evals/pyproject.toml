@@ -21,6 +21,7 @@ keystone = { workspace = true }
 
 [project.optional-dependencies]
 dask = ["prefect-dask>=0.3"]
+eda = ["plotly>=5.0", "ipywidgets>=8.0", "pyarrow>=14.0", "numpy>=1.26"]
 
 [project.scripts]
 eval-harness = "eval_cli:app"

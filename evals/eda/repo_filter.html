@@ -75,11 +75,11 @@ function buildParcoords(rows, languages, langMap) {
     { label: "In Test Dirs (log)", values: rows.map(r => r.log_files_in_test_dirs) },
   ];
 
-  const langCodes = rows.map(r => r.lang_code);
+  const logStars = rows.map(r => r.log_stars);
 
   const trace = {
     type: "parcoords",
-    line: { color: langCodes, colorscale: "Portland", showscale: true, cmin: Math.min(...langCodes), cmax: Math.max(...langCodes) },
+    line: { color: logStars, colorscale: "Viridis", showscale: true, cmin: Math.min(...logStars), cmax: Math.max(...logStars), colorbar: { title: "Stars (log)" } },
     dimensions: dimensions,
     unselected: { line: { color: "lightgray", opacity: 0.3 } },
   };

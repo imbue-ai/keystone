@@ -11,7 +11,7 @@ REGISTRY_PORT = 5000
 
 # Persistent storage for cached layers
 registry_volume = modal.Volume.from_name(
-    "keystone-docker-registry-cache-volume",
+    "keystone-docker-registry-cache-volume-v2",
     create_if_missing=True,
 )
 

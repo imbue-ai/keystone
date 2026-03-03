@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Repo Filter</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@32.3.3/styles/ag-grid.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@32.3.3/styles/ag-theme-balham.css">
+<script src="https://cdn.jsdelivr.net/npm/ag-grid-community@32.3.3/dist/ag-grid-community.min.noStyle.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 16px; background: #fafafa; }
+  h1 { margin-bottom: 4px; }
+  .subtitle { color: #666; margin-bottom: 12px; }
+  #parcoords { width: 100%; height: 560px; margin-bottom: 8px; }
+  .controls { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .controls .status { font-size: 14px; color: #555; }
+  .controls button { padding: 6px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+  #exportBtn { background: #28a745; color: #fff; }
+  #exportBtn:hover { background: #218838; }
+  #resetBtn { background: #6c757d; color: #fff; }
+  #resetBtn:hover { background: #5a6268; }
+  #grid { width: 100%; height: 600px; }
+</style>
+</head>
+<body>
+
+<h1>Repo Filter</h1>
+<p class="subtitle">Drag ranges on axes to filter &bull; Click column headers to sort &bull; Use filter icons in grid</p>
+
+<div id="parcoords"></div>
+
+<div class="controls">
+  <span id="status" class="status">Loading&hellip;</span>
+  <button id="resetBtn" onclick="resetFilters()">Reset Filters</button>
+  <button id="exportBtn" onclick="exportJsonl()">Export Selected &rarr; JSONL</button>
+</div>
+
+<div id="grid" class="ag-theme-balham"></div>
+
+<script>
+// ── Data (injected or inline) ──
+const DATA = "__DATA_PLACEHOLDER__";
+
+// ── Helpers ──
+const LOG_COLS = ["stars", "size_mb", "recent_commits_90d", "test_files_total", "test_files_by_name", "files_in_test_dirs"];
+
+function prepareData(rows) {
+  const languages = [...new Set(rows.map(r => r.language))].sort();
+  const langMap = Object.fromEntries(languages.map((l, i) => [l, i]));
+
+  rows.forEach(r => {
+    r.lang_code = langMap[r.language] ?? -1;
+    LOG_COLS.forEach(c => { r["log_" + c] = Math.log1p(r[c] || 0); });
+  });
+
+  return { languages, langMap };
+}
+
+// ── Parallel Coordinates ──
+let plotDiv, allRows, gridApi;
+let currentMask; // boolean array, true = selected
+
+function buildParcoords(rows, languages, langMap) {
+  const langVals = Object.values(langMap);
+  const langTexts = Object.keys(langMap);
+
+  const dimensions = [
+    { label: "Language", values: rows.map(r => r.lang_code), tickvals: langVals, ticktext: langTexts },
+    { label: "Stars (log)", values: rows.map(r => r.log_stars) },
+    { label: "Size MB (log)", values: rows.map(r => r.log_size_mb) },
+    { label: "Commits 90d (log)", values: rows.map(r => r.log_recent_commits_90d) },
+    { label: "Test Files (log)", values: rows.map(r => r.log_test_files_total) },
+    { label: "Test by Name (log)", values: rows.map(r => r.log_test_files_by_name) },
+    { label: "In Test Dirs (log)", values: rows.map(r => r.log_files_in_test_dirs) },
+  ];
+
+  const langCodes = rows.map(r => r.lang_code);
+
+  const trace = {
+    type: "parcoords",
+    line: { color: langCodes, colorscale: "Portland", showscale: true, cmin: Math.min(...langCodes), cmax: Math.max(...langCodes) },
+    dimensions: dimensions,
+    unselected: { line: { color: "lightgray", opacity: 0.3 } },
+  };
+
+  const layout = {
+    title: "Repo Filter — Parallel Coordinates",
+    width: Math.max(document.body.clientWidth - 40, 800),
+    height: 540,
+    margin: { l: 80, r: 80, t: 50, b: 30 },
+  };
+
+  Plotly.newPlot(plotDiv, [trace], layout, { responsive: true });
+
+  // Listen for constraint changes
+  plotDiv.on("plotly_restyle", updateSelection);
+}
+
+function updateSelection() {
+  const dims = plotDiv.data[0].dimensions;
+  const axisKeys = ["lang_code", "log_stars", "log_size_mb", "log_recent_commits_90d", "log_test_files_total", "log_test_files_by_name", "log_files_in_test_dirs"];
+
+  currentMask = allRows.map((r, idx) => {
+    for (let i = 0; i < dims.length; i++) {
+      const cr = dims[i].constraintrange;
+      if (cr == null) continue;
+      const val = r[axisKeys[i]];
+      // constraintrange can be [lo, hi] or [[lo1,hi1],[lo2,hi2]]
+      if (typeof cr[0] === "number") {
+        if (val < cr[0] || val > cr[1]) return false;
+      } else {
+        let inAny = false;
+        for (const [lo, hi] of cr) { if (val >= lo && val <= hi) { inAny = true; break; } }
+        if (!inAny) return false;
+      }
+    }
+    return true;
+  });
+
+  const selected = allRows.filter((_, i) => currentMask[i]);
+  document.getElementById("status").textContent = `${selected.length} / ${allRows.length} repos selected`;
+
+  if (gridApi) {
+    gridApi.setGridOption("rowData", selected);
+  }
+}
+
+function resetFilters() {
+  const dims = plotDiv.data[0].dimensions.map(() => null);
+  Plotly.restyle(plotDiv, { "dimensions[0].constraintrange": null });
+  // Reset all dimensions
+  const update = {};
+  for (let i = 0; i < plotDiv.data[0].dimensions.length; i++) {
+    update[`dimensions[${i}].constraintrange`] = null;
+  }
+  Plotly.restyle(plotDiv, update, [0]);
+  currentMask = allRows.map(() => true);
+  document.getElementById("status").textContent = `${allRows.length} / ${allRows.length} repos selected`;
+  if (gridApi) {
+    gridApi.setGridOption("rowData", allRows);
+  }
+}
+
+// ── AG Grid ──
+function buildGrid(rows) {
+  const columnDefs = [
+    { headerName: "#", field: "rank", width: 60, sort: "asc" },
+    {
+      headerName: "Repo",
+      field: "repo",
+      width: 340,
+      cellRenderer: params => {
+        const name = (params.value || "").replace("https://github.com/", "");
+        return `<a href="${params.value}" target="_blank" style="color:#0366d6">${name}</a>`;
+      },
+    },
+    { headerName: "Language", field: "language", width: 120, filter: true },
+    { headerName: "Stars", field: "stars", width: 100, filter: "agNumberColumnFilter" },
+    { headerName: "Size MB", field: "size_mb", width: 100, filter: "agNumberColumnFilter" },
+    { headerName: "Commits 90d", field: "recent_commits_90d", width: 120, filter: "agNumberColumnFilter" },
+    { headerName: "Test Files", field: "test_files_total", width: 110, filter: "agNumberColumnFilter" },
+    { headerName: "By Name", field: "test_files_by_name", width: 100, filter: "agNumberColumnFilter" },
+    { headerName: "In Dirs", field: "files_in_test_dirs", width: 100, filter: "agNumberColumnFilter" },
+    { headerName: "Examples", field: "from_examples", width: 95, cellRenderer: p => p.value ? "✓" : "" },
+    { headerName: "Notes", field: "notes", width: 400, tooltipField: "notes" },
+  ];
+
+  const gridOptions = {
+    columnDefs,
+    rowData: rows,
+    defaultColDef: { sortable: true, resizable: true, filter: true },
+    domLayout: "normal",
+    animateRows: true,
+    tooltipShowDelay: 300,
+  };
+
+  const gridDiv = document.getElementById("grid");
+  gridApi = agGrid.createGrid(gridDiv, gridOptions);
+}
+
+// ── Export ──
+function exportJsonl() {
+  const selected = allRows.filter((_, i) => currentMask[i]);
+  const lines = selected.map((r, i) => {
+    const rec = {
+      rank: i + 1,
+      repo: r.repo,
+      language: r.language,
+      stars: r.stars,
+      size_mb: r.size_mb,
+      recent_commits_90d: r.recent_commits_90d,
+      test_files_total: r.test_files_total,
+      test_files_by_name: r.test_files_by_name,
+      files_in_test_dirs: r.files_in_test_dirs,
+      from_examples: r.from_examples,
+      notes: r.notes,
+    };
+    return JSON.stringify(rec);
+  });
+  const blob = new Blob([lines.join("\n") + "\n"], { type: "application/jsonl" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "filtered_repos.jsonl";
+  a.click();
+  URL.revokeObjectURL(url);
+  document.getElementById("status").textContent = `Exported ${selected.length} repos`;
+}
+
+// ── Init ──
+document.addEventListener("DOMContentLoaded", () => {
+  plotDiv = document.getElementById("parcoords");
+  allRows = (typeof DATA === "string") ? JSON.parse(DATA) : DATA;
+  currentMask = allRows.map(() => true);
+
+  const { languages, langMap } = prepareData(allRows);
+  buildParcoords(allRows, languages, langMap);
+  buildGrid(allRows);
+
+  document.getElementById("status").textContent = `${allRows.length} / ${allRows.length} repos selected`;
+});
+</script>
+</body>
+</html>

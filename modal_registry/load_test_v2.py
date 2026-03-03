@@ -110,7 +110,7 @@ def _build_loop_script(iterations: int, with_cache: bool) -> str:
             echo "=== Iteration $i/$ITERATIONS ==="
 
             START_NS=$(date +%s%N)
-            OUTPUT=$({build_cmd})
+            {build_cmd}
             EXIT_CODE=$?
             END_NS=$(date +%s%N)
             ELAPSED_MS=$(( (END_NS - START_NS) / 1000000 ))
@@ -122,9 +122,6 @@ def _build_loop_script(iterations: int, with_cache: bool) -> str:
                 FAIL=$((FAIL + 1))
                 echo "FAILED (exit=$EXIT_CODE, ${{ELAPSED_MS}}ms) [pass=$PASS fail=$FAIL]"
             fi
-            echo "--- build output ---"
-            echo "$OUTPUT"
-            echo "--- end output ---"
 
             # Prune everything so next iteration must pull fresh
             docker system prune -af --volumes >/dev/null 2>&1

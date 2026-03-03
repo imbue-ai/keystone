@@ -207,13 +207,24 @@ def run_load_test(iterations: int, with_cache: bool) -> None:
 
         proc = sb.exec("bash", "/tmp/_load_test_loop.sh")
 
-        # Just stream all output directly — the bash script handles formatting
+        # Stream output and track rate limiting on the Python side
+        rate_limit_hits = 0
         for line in proc.stdout:
             print(line, end="", file=sys.stderr)
+            if any(phrase in line.lower() for phrase in RATE_LIMIT_PHRASES):
+                rate_limit_hits += 1
         for line in proc.stderr:
             print(line, end="", file=sys.stderr)
+            if any(phrase in line.lower() for phrase in RATE_LIMIT_PHRASES):
+                rate_limit_hits += 1
 
         proc.wait()
+
+        if rate_limit_hits:
+            print(
+                f"\n🎯 Detected {rate_limit_hits} rate-limit message(s) in build output!",
+                file=sys.stderr,
+            )
 
     finally:
         print("\nTerminating sandbox...", file=sys.stderr)

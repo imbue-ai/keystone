@@ -5,6 +5,9 @@ Usage:
     uv run python evals/eda/fetch_repos.py            # writes evals/eda/repos.parquet
     uv run python evals/eda/fetch_repos.py --csv       # also writes repos.csv
 
+API responses are cached to evals/eda/.api_cache/ so reruns are fast.
+Use --no-cache to bypass the cache.
+
 The script samples repos stratified across star-count buckets and languages
 to avoid pure-popularity bias.
 """
@@ -12,6 +15,7 @@ to avoid pure-popularity bias.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -50,7 +54,9 @@ STAR_BUCKETS = [
     (50000, 500000),
 ]
 
-REPOS_PER_QUERY = 10  # GitHub search returns max 100; keep small to stay under rate limits
+REPOS_PER_QUERY = 30  # GitHub search returns max 100
+
+CACHE_DIR = Path(__file__).parent / ".api_cache"
 
 SEARCH_QUERY_TEMPLATE = """
 query($queryString: String!, $first: Int!, $after: String) {
@@ -105,8 +111,20 @@ def _token() -> str:
     return token
 
 
-def _graphql(query: str, variables: dict, token: str) -> dict:
-    """Execute a GraphQL query against GitHub."""
+def _cache_key(query: str, variables: dict) -> str:
+    """Deterministic hash for a query + variables pair."""
+    blob = json.dumps({"q": query, "v": variables}, sort_keys=True)
+    return hashlib.sha256(blob.encode()).hexdigest()[:16]
+
+
+def _graphql(query: str, variables: dict, token: str, *, use_cache: bool = True) -> dict:
+    """Execute a GraphQL query against GitHub, with optional disk cache."""
+    key = _cache_key(query, variables)
+    cache_path = CACHE_DIR / f"{key}.json"
+
+    if use_cache and cache_path.exists():
+        return json.loads(cache_path.read_text())
+
     resp = requests.post(
         GITHUB_GRAPHQL_URL,
         json={"query": query, "variables": variables},
@@ -117,6 +135,11 @@ def _graphql(query: str, variables: dict, token: str) -> dict:
     data = resp.json()
     if "errors" in data:
         raise RuntimeError(f"GraphQL errors: {json.dumps(data['errors'], indent=2)}")
+
+    if use_cache:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(json.dumps(data))
+
     return data
 
 
@@ -166,6 +189,7 @@ def fetch_repos(
     per_query: int = REPOS_PER_QUERY,
     max_size_kb: int = 500_000,  # skip repos > 500 MB
     recent_days: int = 90,
+    use_cache: bool = True,
 ) -> pd.DataFrame:
     """Fetch repos stratified by language x star bucket."""
     languages = languages or LANGUAGES
@@ -191,7 +215,12 @@ def fetch_repos(
             )
 
             try:
-                data = _graphql(query, {"queryString": q, "first": per_query, "after": None}, token)
+                data = _graphql(
+                    query,
+                    {"queryString": q, "first": per_query, "after": None},
+                    token,
+                    use_cache=use_cache,
+                )
             except Exception as e:
                 print(f"  ERROR: {e}")
                 continue
@@ -229,6 +258,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--csv", action="store_true", help="Also write CSV output")
     parser.add_argument(
+        "--no-cache", action="store_true", help="Bypass the disk cache for API calls"
+    )
+    parser.add_argument(
         "--per-query", type=int, default=REPOS_PER_QUERY, help="Repos per search query"
     )
     parser.add_argument(
@@ -245,7 +277,10 @@ def main() -> None:
     out = Path(args.out) if args.out else Path(__file__).parent / "repos.parquet"
 
     df = fetch_repos(
-        per_query=args.per_query, max_size_kb=args.max_size_mb * 1024, recent_days=args.recent_days
+        per_query=args.per_query,
+        max_size_kb=args.max_size_mb * 1024,
+        recent_days=args.recent_days,
+        use_cache=not args.no_cache,
     )
 
     df.to_parquet(out, index=False)

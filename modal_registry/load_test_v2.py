@@ -14,7 +14,6 @@ Prerequisites:
 """
 
 import argparse
-import contextlib
 import sys
 import textwrap
 
@@ -82,7 +81,6 @@ def _build_loop_script(iterations: int, with_cache: bool) -> str:
     Python↔Modal round-trips between iterations.  Each iteration:
       1. devcontainer build (pulls base image from Docker Hub)
       2. docker system prune -af + docker buildx prune -af
-    Results are printed as structured lines for parsing.
     """
     if with_cache:
         build_cmd = (
@@ -104,9 +102,12 @@ def _build_loop_script(iterations: int, with_cache: bool) -> str:
         set -uo pipefail
 
         ITERATIONS={iterations}
+        PASS=0
+        FAIL=0
 
         for i in $(seq 1 $ITERATIONS); do
-            echo "@@@ ITERATION $i/$ITERATIONS @@@"
+            echo ""
+            echo "=== Iteration $i/$ITERATIONS ==="
 
             START_NS=$(date +%s%N)
             OUTPUT=$({build_cmd})
@@ -114,27 +115,25 @@ def _build_loop_script(iterations: int, with_cache: bool) -> str:
             END_NS=$(date +%s%N)
             ELAPSED_MS=$(( (END_NS - START_NS) / 1000000 ))
 
-            # Check for rate limiting
-            RATE_LIMITED=0
-            if echo "$OUTPUT" | grep -qiE '429 too many requests|toomanyrequests|rate.limit|pull rate limit|retry-after'; then
-                RATE_LIMITED=1
-            fi
-
-            echo "@@@ RESULT iter=$i exit=$EXIT_CODE ms=$ELAPSED_MS rate_limited=$RATE_LIMITED @@@"
-            if [ "$EXIT_CODE" -ne 0 ]; then
-                echo "$OUTPUT" | tail -20 | while IFS= read -r errline; do
-                    echo "@@@ ERR $errline"
-                done
+            if [ "$EXIT_CODE" -eq 0 ]; then
+                PASS=$((PASS + 1))
+                echo "OK (exit=0, ${{ELAPSED_MS}}ms) [pass=$PASS fail=$FAIL]"
+            else
+                FAIL=$((FAIL + 1))
+                echo "FAILED (exit=$EXIT_CODE, ${{ELAPSED_MS}}ms) [pass=$PASS fail=$FAIL]"
+                echo "--- build output ---"
+                echo "$OUTPUT"
+                echo "--- end output ---"
             fi
 
             # Prune everything so next iteration must pull fresh
-            echo "@@@ PRUNING @@@"
             docker system prune -af --volumes >/dev/null 2>&1
             docker buildx prune -af >/dev/null 2>&1
-            echo "@@@ PRUNE_DONE @@@"
         done
 
-        echo "@@@ ALL_DONE @@@"
+        echo ""
+        echo "=== SUMMARY ==="
+        echo "Total: $ITERATIONS  Pass: $PASS  Fail: $FAIL"
     """)
 
 
@@ -211,90 +210,13 @@ def run_load_test(iterations: int, with_cache: bool) -> None:
 
         proc = sb.exec("bash", "/tmp/_load_test_loop.sh")
 
-        # Parse structured output as it streams
-        results: list[dict[str, int]] = []
+        # Just stream all output directly — the bash script handles formatting
         for line in proc.stdout:
-            text = line.strip()
-            if text.startswith("@@@ RESULT"):
-                # Parse: @@@ RESULT iter=1 exit=0 ms=12345 rate_limited=0 @@@
-                parts: dict[str, int] = {}
-                for token in text.split():
-                    if "=" in token:
-                        k, v = token.split("=", 1)
-                        with contextlib.suppress(ValueError):
-                            parts[k] = int(v)
-                results.append(parts)
-                rl = parts.get("rate_limited", 0)
-                ec = parts.get("exit", -1)
-                ms = parts.get("ms", 0)
-                status = "RATE LIMITED" if rl else ("OK" if ec == 0 else "FAILED")
-                print(
-                    f"  [{parts.get('iter', '?'):3}] {status} (exit={ec}, {ms / 1000:.1f}s)",
-                    file=sys.stderr,
-                )
-            elif text.startswith("@@@ ERR"):
-                print(f"    {text[8:]}", file=sys.stderr)
-            elif text.startswith("@@@ ITERATION"):
-                print(f"\n{text.strip('@ ')}", file=sys.stderr)
-            elif text.startswith("@@@"):
-                pass  # skip markers
-            else:
-                print(f"  {text}", file=sys.stderr)
+            print(line, end="", file=sys.stderr)
         for line in proc.stderr:
-            text = line.strip()
-            if text:
-                print(f"  [stderr] {text}", file=sys.stderr)
+            print(line, end="", file=sys.stderr)
 
         proc.wait()
-
-        # Summary
-        print(f"\n{'=' * 60}", file=sys.stderr)
-        print("LOAD TEST RESULTS", file=sys.stderr)
-        print(f"{'=' * 60}", file=sys.stderr)
-        total = len(results)
-        rate_limited_count = sum(1 for r in results if r.get("rate_limited"))
-        failed_count = sum(1 for r in results if r.get("exit", 1) != 0)
-        succeeded = total - failed_count
-        print(f"Total iterations:  {total}", file=sys.stderr)
-        print(f"Succeeded:         {succeeded}", file=sys.stderr)
-        print(f"Rate limited:      {rate_limited_count}", file=sys.stderr)
-        print(f"Other failures:    {failed_count - rate_limited_count}", file=sys.stderr)
-
-        if succeeded > 0:
-            ok_ms = sorted(r["ms"] for r in results if r.get("exit") == 0)
-            print(f"Build time (min):  {ok_ms[0] / 1000:.1f}s", file=sys.stderr)
-            print(f"Build time (med):  {ok_ms[len(ok_ms) // 2] / 1000:.1f}s", file=sys.stderr)
-            print(f"Build time (max):  {ok_ms[-1] / 1000:.1f}s", file=sys.stderr)
-
-        total_ms = sum(r.get("ms", 0) for r in results)
-        print(f"Total build time:  {total_ms / 1000:.1f}s", file=sys.stderr)
-
-        print(file=sys.stderr)
-        for r in results:
-            rl = r.get("rate_limited", 0)
-            ec = r.get("exit", -1)
-            ms = r.get("ms", 0)
-            flag = " ⚠️  RATE LIMITED" if rl else (" ❌ FAILED" if ec != 0 else " ✅")
-            print(
-                f"  #{r.get('iter', '?'):3}: exit={ec} time={ms / 1000:6.1f}s{flag}",
-                file=sys.stderr,
-            )
-
-        if rate_limited_count:
-            print(
-                f"\n🎯 {rate_limited_count}/{total} builds hit Docker Hub rate limits!",
-                file=sys.stderr,
-            )
-        elif failed_count:
-            print(
-                f"\n❌ {failed_count}/{total} builds failed (not rate-limited)",
-                file=sys.stderr,
-            )
-        else:
-            print(
-                "\n✅ All builds succeeded — no rate limiting observed",
-                file=sys.stderr,
-            )
 
     finally:
         print("\nTerminating sandbox...", file=sys.stderr)

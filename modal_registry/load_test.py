@@ -34,8 +34,8 @@ REGISTRY = "imbue--keystone-docker-registry-cache-registry.modal.run"
 DOCKERFILE_CONTENT = """\
 FROM python:3.12-slim
 RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
-COPY .devcontainer/run_all_tests.sh /run_all_tests.sh
-RUN chmod +x /run_all_tests.sh
+# COPY .devcontainer/run_all_tests.sh /run_all_tests.sh
+# RUN chmod +x /run_all_tests.sh
 """
 
 DEVCONTAINER_JSON = """\
@@ -43,10 +43,13 @@ DEVCONTAINER_JSON = """\
     "build": {{
         "dockerfile": "Dockerfile",
         "context": "..",
-        "cacheFrom": "type=registry,ref={registry}/load-test-cache:latest",
-        "cacheTo": "type=registry,ref={registry}/load-test-cache:latest,mode=max"
     }}
 }}
+"""
+
+EXTRA = """
+        "cacheFrom": "type=registry,ref={registry}/load-test-cache:latest",
+        "cacheTo": "type=registry,ref={registry}/load-test-cache:latest,mode=max"
 """
 
 RUN_ALL_TESTS_SH = """\
@@ -87,6 +90,8 @@ echo "$DOCKER_BUILD_CACHE_REGISTRY_PASSWORD" | \
 
 echo "=== Starting devcontainer build (sandbox {sandbox_id}) ==="
 START_TS=$(date +%s%N)
+
+docker pull python:3.12-slim
 
 devcontainer build \
     --workspace-folder /tmp/project \

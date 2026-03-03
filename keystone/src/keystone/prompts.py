@@ -21,6 +21,7 @@ def generate_devcontainer_json(cache_registry_url: str | None = None) -> str:
             [
                 f"--cache-from=type=registry,ref={cache_ref}",
                 f"--cache-to=type=registry,ref={cache_ref},mode=max",
+                "--load",  # Important to get the images into the local image list.
             ]
         )
 

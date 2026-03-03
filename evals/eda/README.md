@@ -7,7 +7,8 @@ with a Plotly parallel coordinates plot to select evaluation candidates.
 
 ```bash
 # 1. Install dependencies (including pyarrow for parquet)
-uv sync --extra eda
+uv sync              # pyarrow is a core dependency
+uv pip install plotly ipywidgets numpy  # for the notebook
 
 # 2. Fetch repo metrics (needs a GitHub token with public repo access)
 export GITHUB_TOKEN=ghp_...

@@ -5,8 +5,20 @@ followed by a full Docker prune. The entire build+prune loop runs as one
 bash script inside the sandbox (zero Python↔Modal round-trips in the hot
 loop), so the only time spent is actual Docker work.
 
+Without --with-cache, each iteration pulls python:3.12-slim fresh from
+Docker Hub, which should trigger rate limiting after ~40 pulls.
+
+With --with-cache, the devcontainer.json includes --cache-from/--cache-to
+build options pointing at our Modal registry cache. devcontainer build
+passes these through to docker buildx build, so layers are pulled from
+our cache registry instead of Docker Hub.
+
 Usage:
-    cd modal_registry && uv run python load_test_v2.py [--iterations 50] [--with-cache]
+    # Reproduce rate limiting (~40 iterations to trigger)
+    cd modal_registry && uv run python load_test_v2.py --iterations 111
+
+    # Test mitigation with registry cache
+    cd modal_registry && uv run python load_test_v2.py --iterations 111 --with-cache
 
 Prerequisites:
     - Modal configured (modal token set)

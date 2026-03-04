@@ -87,6 +87,10 @@ class AgentConfig(BaseModel):
         description="Enable or disable the LLM evaluator fix-up pass.",
     )
     no_guardrail: bool = Field(default=False, description="Skip guardrail structural checks")
+    use_agents_md: bool = Field(
+        default=False,
+        description="Use AGENTS.md file + short CLI prompt instead of full inline prompt (claude provider only)",
+    )
 
     # Docker build cache (Modal secret name)
     docker_cache_secret: str = Field(

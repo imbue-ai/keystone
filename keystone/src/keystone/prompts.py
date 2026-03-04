@@ -178,8 +178,11 @@ This will be copied to /run_all_tests.sh in the image by the final COPY command.
             For Jest: `npx jest --reporters=jest-junit` then `mv junit.xml /test_artifacts/junit/`
             For Mocha: `npx mocha --reporter mocha-junit-reporter --reporter-options mochaFile=/test_artifacts/junit/mocha.xml`
           - Rust: Use cargo-nextest (install: `RUN cargo install cargo-nextest --locked`)
-            Command: `cargo nextest run --profile default`
-            Copy report: `cp target/nextest/default/junit.xml /test_artifacts/junit/cargo.xml`
+            Command: `cargo nextest run --workspace --no-fail-fast --config 'profile.ci.junit.path = "/test_artifacts/junit/results.xml"' -P ci`
+            (nextest emits real per-test JUnit XML natively via the -P ci + --config flags; no extra copy step needed)
+          IMPORTANT: Do NOT hand-write or manually generate the JUnit XML. It must be produced
+          by the test framework itself. Hand-written XML that doesn't reflect actual test results
+          is considered cheating and will cause incorrect pass/fail reporting.
       ii. A file called /test_artifacts/final_result.json stating success/failure.
    d. run_all_tests.sh should forward enough information to stdout/stderr to enable debugging failing tests.
    e. run_all_tests.sh is allowed to fail early (before running all tests) if that helps complete the task faster.
@@ -328,7 +331,7 @@ def build_agent_prompt(agent_in_modal: bool) -> str:
 # as system-level context.
 # ---------------------------------------------------------------------------
 
-CODEX_AGENTS_MD = f"""\
+AGENTS_MD = f"""\
 # Bootstrap Devcontainer - Agent Instructions
 
 You are setting up a reproducible dev container so this project's test suite passes.
@@ -350,15 +353,23 @@ All files go inside `.devcontainer/` — nothing outside that directory is prese
    COPY .devcontainer/run_all_tests.sh /run_all_tests.sh
    RUN chmod +x /run_all_tests.sh
    ```
-   Use `WORKDIR /project_src` and copy source files explicitly (not `COPY . .`).
-   Do NOT create `.dockerignore` files.
+   - Copy source files explicitly — do NOT use `COPY . .`. You work inside `.devcontainer/`,
+     so `COPY . .` would include your own files and invalidate the layer cache on every change.
+     Instead: `COPY src/ ./src/`, `COPY pyproject.toml uv.lock ./`, etc.
+   - Do NOT create `.dockerignore` files.
+   - For compiled languages (Rust, Go, C++), run the build inside a Dockerfile layer so
+     artifacts are cached and tests don't need to recompile from scratch each run.
+   - If the project needs config files or test fixtures that don't exist in the repo,
+     create them in the Dockerfile (or in `run_all_tests.sh`) — changes outside `.devcontainer/` are lost.
 
 3. **`.devcontainer/run_all_tests.sh`** (executable) — runs the full test suite:
-   - Writes JUnit XML to `/test_artifacts/junit/*.xml`
-     (e.g. `pytest --junitxml=/test_artifacts/junit/pytest.xml`)
+   - Writes JUnit XML to `/test_artifacts/junit/*.xml` using the test framework's native output.
+     Do NOT hand-write or generate JUnit XML manually — it must come from the framework itself.
+     Examples: `pytest --junitxml=...`, `cargo nextest run -P ci --config 'profile.ci.junit.path=...'`
    - Writes `/test_artifacts/final_result.json` with `{{"success": true/false}}`
    - Use `set -euo pipefail`
    - `mkdir -p /test_artifacts/junit` at the top
+   - For polyglot projects (e.g. Python backend + JS frontend), run ALL test suites.
 
 ## Workflow
 
@@ -370,16 +381,22 @@ All files go inside `.devcontainer/` — nothing outside that directory is prese
    ```bash
    IMAGE_NAME="img-$(date +%s)"
    devcontainer build --image-name "$IMAGE_NAME" --workspace-folder .
-   docker run --network host --name "test-$(date +%s)" "$IMAGE_NAME" /run_all_tests.sh
+   CONTAINER="test-$(date +%s)"
+   docker run --network host --name "$CONTAINER" "$IMAGE_NAME" /run_all_tests.sh
+   # To inspect artifacts from a completed container:
+   docker cp "$CONTAINER:/test_artifacts" /tmp/test_artifacts
+   # No need to clean up — you're in an ephemeral sandbox.
    ```
 
 ## Key tips
 
-- Python: use `uv` for fast installs. Set `ENV UV_LINK_MODE=copy` in Dockerfile.
-  Set `PYTHONPATH=/project_src:${{PYTHONPATH:-}}` in run_all_tests.sh if needed.
-- Use `timeout` to prevent hung tests (e.g. `timeout 300 pytest`).
-- Disable coverage (`--no-cov`) to speed things up.
-- `docker run` must use `--network=host` in this environment.
+- **Python**: use `uv` for fast installs. Set `ENV UV_LINK_MODE=copy` in the Dockerfile —
+  without this, Modal's snapshotting breaks on symlinks (hard-won lesson).
+  Set `export PYTHONPATH=/project_src:${{PYTHONPATH:-}}` in `run_all_tests.sh` if tests
+  import from the project root without an installed package.
+- **Stuck tests**: use `timeout` to prevent hangs (e.g. `timeout 300 pytest tests/`).
+- **Coverage**: disable it (`--no-cov`, etc.) — it's slow and not needed here.
+- **`docker run`** must use `--network=host` in this environment.
 - Only changes inside `.devcontainer/` are preserved.
 
 ## Status updates
@@ -394,20 +411,25 @@ When done, emit:
 **You MUST run `./guardrail.sh` and get exit code 0 before finishing.**
 """
 
-CODEX_SHORT_PROMPT = (
+AGENTS_MD_SHORT_PROMPT = (
     "Set up a .devcontainer with Dockerfile and test runner for this project. "
     "Read the AGENTS.md file first for detailed instructions, then explore the repo and create the files."
 )
 
 
-def build_codex_prompt(agent_in_modal: bool) -> tuple[str, str]:
-    """Return (agents_md_content, short_cli_prompt) for codex providers.
+def build_agents_md_prompt(agent_in_modal: bool) -> tuple[str, str]:
+    """Return (agents_md_content, short_cli_prompt) for providers that use AGENTS.md.
 
-    The AGENTS.md is written to the project root before launching codex,
-    keeping the CLI prompt short so codex-mini doesn't exhaust its output
-    budget on prompt comprehension.
+    The AGENTS.md is written to the project root before launching the agent,
+    keeping the CLI prompt short so agents don't exhaust their output budget
+    on prompt comprehension. Used by both codex and claude (use_agents_md) providers.
     """
-    agents_md = CODEX_AGENTS_MD
+    agents_md = AGENTS_MD
     if agent_in_modal:
         agents_md += "\n\nIMPORTANT: You are in a Modal sandbox. Use `--network=host` for all docker run commands.\n"
-    return agents_md, CODEX_SHORT_PROMPT
+    return agents_md, AGENTS_MD_SHORT_PROMPT
+
+
+# Aliases for backwards compatibility
+build_codex_prompt = build_agents_md_prompt
+build_claude_agents_md_prompt = build_agents_md_prompt

@@ -42,7 +42,7 @@ from keystone.llm_provider import (
 )
 from keystone.logging_utils import ISOFormatter
 from keystone.modal.modal_runner import ModalAgentRunner
-from keystone.prompts import build_agent_prompt, build_codex_prompt
+from keystone.prompts import build_agent_prompt, build_claude_agents_md_prompt, build_codex_prompt
 from keystone.schema import (
     AgentConfig,
     AgentExecution,
@@ -159,6 +159,11 @@ def bootstrap(
         "--guardrail/--no_guardrail",
         help="Enable or disable guardrail structural checks.",
     ),
+    use_agents_md: bool = typer.Option(
+        False,
+        "--use_agents_md/--no_use_agents_md",
+        help="Use AGENTS.md file + short CLI prompt instead of full inline prompt (claude provider only).",
+    ),
 ) -> None:
     """Bootstrap a devcontainer for a project."""
     logging.info(
@@ -192,10 +197,13 @@ def bootstrap(
         test_artifacts_dir = test_artifacts_dir.resolve()
         test_artifacts_dir.mkdir(parents=True, exist_ok=True)
 
-    # Build prompt — codex providers get a short CLI prompt + AGENTS.md file
+    # Build prompt — codex providers get a short CLI prompt + AGENTS.md file;
+    # claude providers can opt in to the same approach via --use_agents_md.
     agents_md_content: str | None = None
     if provider_name == "codex":
         agents_md_content, prompt = build_codex_prompt(agent_in_modal)
+    elif use_agents_md:
+        agents_md_content, prompt = build_claude_agents_md_prompt(agent_in_modal)
     else:
         prompt = build_agent_prompt(agent_in_modal)
 

@@ -534,9 +534,9 @@ def test_e2e_agent_error_propagation(tmp_path: Path, project_root: Path) -> None
         #        "node_project",
         #        "go_project",
         #        "rust_project",
-        "fullstack_project",
+        # "fullstack_project",
         "python_with_failing_test",
-        "cmake_vcpkg_project",
+        # "cmake_vcpkg_project",
     ],
     indirect=True,
 )

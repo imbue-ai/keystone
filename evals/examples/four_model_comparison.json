@@ -9,7 +9,7 @@
       "agent_config": {
         "provider": "claude",
         "evaluator": false,
-        "no_guardrail": true,
+        "guardrail": false,
         "model": "claude-opus-4-6",
         "max_budget_usd": 10.0,
         "timeout_minutes": 60
@@ -21,7 +21,7 @@
     //   "agent_config": {
     //     "provider": "claude",
     //     "evaluator": false,
-    //     "no_guardrail": true,
+    //     "guardrail": false,
     //     "model": "claude-haiku-4-5-20251001",
     //     "max_budget_usd": 10.0,
     //     "timeout_minutes": 60
@@ -33,7 +33,7 @@
     //   "agent_config": {
     //     "provider": "codex",
     //     "evaluator": false,
-    //     "no_guardrail": true,
+    //     "guardrail": false,
     //     "model": "gpt-5.2-codex",
     //     "max_budget_usd": 10.0,
     //     "timeout_minutes": 60
@@ -45,7 +45,7 @@
     //   "agent_config": {
     //     "provider": "codex",
     //     "evaluator": false,
-    //     "no_guardrail": true,
+    //     "guardrail": false,
     //     "model": "gpt-5.1-codex-mini",
     //     "max_budget_usd": 10.0,
     //     "timeout_minutes": 60

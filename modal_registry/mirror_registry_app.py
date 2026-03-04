@@ -31,12 +31,13 @@ mirror_volume = modal.Volume.from_name(
     create_if_missing=True,
 )
 
-# Same base image as the build-cache registry: registry binary + deps
+# v3.0.0 fixes OCI index handling in pull-through cache mode (v2.8.x
+# returned "OCI index found, but accept header does not support OCI indexes").
 mirror_image = (
     modal.Image.debian_slim(python_version="3.12")
     .apt_install("ca-certificates", "wget")
     .run_commands(
-        "wget -O /tmp/registry.tar.gz https://github.com/distribution/distribution/releases/download/v2.8.3/registry_2.8.3_linux_amd64.tar.gz",
+        "wget -O /tmp/registry.tar.gz https://github.com/distribution/distribution/releases/download/v3.0.0/registry_3.0.0_linux_amd64.tar.gz",
         "tar -xzf /tmp/registry.tar.gz -C /usr/local/bin",
         "chmod +x /usr/local/bin/registry",
         "rm /tmp/registry.tar.gz",

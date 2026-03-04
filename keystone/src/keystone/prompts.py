@@ -5,31 +5,15 @@ import json
 from keystone.constants import STATUS_MARKER, SUMMARY_MARKER
 
 
-def generate_devcontainer_json(cache_registry_url: str | None = None) -> str:
-    """Generate the devcontainer.json content.
-
-    When *cache_registry_url* is provided, ``--cache-from`` and ``--cache-to``
-    build options are included so that ``devcontainer build`` (and any
-    ``docker build`` the agent runs) benefits from the remote registry cache.
-    """
-    build_options: list[str] = [
-        "--network=host",
-    ]
-    if cache_registry_url is not None:
-        cache_ref = f"{cache_registry_url}/buildcache:latest"
-        build_options.extend(
-            [
-                f"--cache-from=type=registry,ref={cache_ref}",
-                f"--cache-to=type=registry,ref={cache_ref},mode=max",
-                "--load",  # Important to get the images into the local image list.
-            ]
-        )
-
+def generate_devcontainer_json() -> str:
+    """Generate the devcontainer.json content."""
     devcontainer: dict[str, object] = {
         "build": {
             "dockerfile": "Dockerfile",
             "context": "..",
-            "options": build_options,
+            "options": [
+                "--network=host",
+            ],
         },
         "runArgs": [
             "--network=host",

@@ -1,6 +1,7 @@
 """Configuration schemas for the eval harness."""
 
 from enum import Enum
+from itertools import product
 from pathlib import Path
 from typing import Any
 
@@ -84,18 +85,20 @@ class AgentConfig(BaseModel):
     # Feature toggles
     evaluator: bool = Field(
         ...,
-        description="Enable or disable the LLM evaluator fix-up pass.",
+        description="Run the LLM evaluator fix-up pass after agent execution.",
     )
-    no_guardrail: bool = Field(default=False, description="Skip guardrail structural checks")
+    guardrail: bool = Field(
+        default=True, description="Run guardrail structural checks before evaluation."
+    )
     use_agents_md: bool = Field(
         default=False,
         description="Use AGENTS.md file + short CLI prompt instead of full inline prompt (claude provider only)",
     )
 
-    # Docker build cache (Modal secret name)
-    docker_cache_secret: str = Field(
-        default="keystone-docker-registry-config",
-        description="Modal secret name with DOCKER_BUILD_CACHE_REGISTRY_{URL,USERNAME,PASSWORD}",
+    # Docker Hub mirror for pull-through caching
+    docker_registry_mirror: str = Field(
+        default="https://mirror.gcr.io",
+        description="URL of Docker Hub pull-through cache mirror (default: Google's mirror.gcr.io)",
     )
 
 
@@ -173,6 +176,17 @@ class EvalRunConfig(BaseModel):
         description="Global S3 prefix for cached repo tarballs (shared across all configs).",
     )
 
+    flag_matrix: list[dict[str, Any]] | None = Field(
+        default=None,
+        description=(
+            "Optional list of AgentConfig override dicts. Each entry may include a 'label' key "
+            "(used as a name suffix) plus any AgentConfig boolean flags to override. "
+            "The system cross-products every base config with every matrix entry, "
+            "generating len(configs) x len(flag_matrix) total runs. "
+            'Example: [{"guardrail": true, "evaluator": false, "label": "no-eval"}, ...]'
+        ),
+    )
+
     def resolve_config(self, eval_config: EvalConfig, index: int) -> EvalConfig:
         """Return a copy with s3 prefixes built from the global values."""
         name = eval_config.name or f"config-{index}"
@@ -183,6 +197,39 @@ class EvalRunConfig(BaseModel):
                 "s3_repo_cache_prefix": self.s3_repo_cache_prefix,
             }
         )
+
+    def expand_configs(self) -> list[EvalConfig]:
+        """Return the full list of resolved configs, cross-producted with flag_matrix if set."""
+        base_configs = [self.resolve_config(cfg, i) for i, cfg in enumerate(self.configs)]
+        if not self.flag_matrix:
+            return base_configs
+
+        expanded: list[EvalConfig] = []
+        for cfg, overrides in product(base_configs, self.flag_matrix):
+            label = overrides.get("label")
+            agent_overrides = {k: v for k, v in overrides.items() if k != "label"}
+            new_agent = cfg.agent_config.model_copy(update=agent_overrides)
+            suffix = (
+                f"_{label}"
+                if label
+                else "_"
+                + "_".join(
+                    f"{k}={'on' if v else 'off'}" for k, v in sorted(agent_overrides.items())
+                )
+            )
+            base_s3 = self.s3_output_prefix.rstrip("/")
+            base_name = cfg.name or "config"
+            new_name = f"{base_name}{suffix}"
+            expanded.append(
+                cfg.model_copy(
+                    update={
+                        "name": new_name,
+                        "agent_config": new_agent,
+                        "s3_output_prefix": f"{base_s3}/{new_name}/",
+                    }
+                )
+            )
+        return expanded
 
 
 def resolve_path(path: str | Path) -> Path:

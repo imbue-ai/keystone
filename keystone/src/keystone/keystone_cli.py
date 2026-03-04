@@ -140,13 +140,14 @@ def bootstrap(
         "--test_timeout_seconds",
         help="Maximum seconds for running tests",
     ),
-    docker_cache_secret: str | None = typer.Option(
-        None,
-        "--docker_cache_secret",
+    docker_registry_mirror: str | None = typer.Option(
+        "https://mirror.gcr.io",
+        "--docker_registry_mirror",
         help=(
-            "Name of a Modal secret containing DOCKER_BUILD_CACHE_REGISTRY_URL, "
-            "DOCKER_BUILD_CACHE_REGISTRY_USERNAME, and DOCKER_BUILD_CACHE_REGISTRY_PASSWORD. "
-            "Enables registry-based Docker build caching when running in Modal."
+            "URL of a Docker Hub pull-through cache mirror.  The Docker daemon is configured "
+            "to check this mirror first for all image pulls, avoiding Docker Hub rate limits.  "
+            "Default: https://mirror.gcr.io (Google's free public mirror).  "
+            "Pass --docker_registry_mirror='' to disable."
         ),
     ),
     evaluator: bool = typer.Option(
@@ -167,7 +168,7 @@ def bootstrap(
 ) -> None:
     """Bootstrap a devcontainer for a project."""
     logging.info(
-        f"Starting keystone CLI, version: {Path.cwd()=}, {project_root=}, {test_artifacts_dir=}, {agent_cmd=}, {provider_name=}, {model=}, {max_budget_usd=}, {log_db=}, {require_cache_hit=}, {no_cache_replay=}, {cache_version=}, {output_file=}, {agent_in_modal=}, {agent_time_limit_seconds=}, {image_build_timeout_seconds=}, {test_timeout_seconds=}, {docker_cache_secret=}, {evaluator=}, {guardrail=}, {get_version_info()=}"
+        f"Starting keystone CLI, version: {Path.cwd()=}, {project_root=}, {test_artifacts_dir=}, {agent_cmd=}, {provider_name=}, {model=}, {max_budget_usd=}, {log_db=}, {require_cache_hit=}, {no_cache_replay=}, {cache_version=}, {output_file=}, {agent_in_modal=}, {agent_time_limit_seconds=}, {image_build_timeout_seconds=}, {test_timeout_seconds=}, {docker_registry_mirror=}, {evaluator=}, {guardrail=}, {get_version_info()=}"
     )
     assert project_root is not None, "--project_root is required"
     project_root = project_root.resolve()
@@ -212,18 +213,16 @@ def bootstrap(
 
     # Set up runner based on --agent_in_modal flag
     if agent_in_modal:
-        if docker_cache_secret:
-            console.print(
-                f"[blue]Docker build cache:[/blue] using Modal secret '{docker_cache_secret}'"
-            )
+        if docker_registry_mirror:
+            console.print(f"[blue]Docker Hub mirror:[/blue] {docker_registry_mirror}")
         else:
-            console.print("[dim]Docker build cache: not configured[/dim]")
+            console.print("[dim]Docker Hub mirror: disabled[/dim]")
 
-        inner_runner = ModalAgentRunner(docker_cache_secret=docker_cache_secret)
+        inner_runner = ModalAgentRunner(docker_registry_mirror=docker_registry_mirror or None)
     else:
-        if docker_cache_secret:
+        if docker_registry_mirror:
             console.print(
-                "[yellow]Warning:[/yellow] --docker_cache_secret is ignored when running locally"
+                "[yellow]Warning:[/yellow] --docker_registry_mirror is ignored when running locally"
             )
         inner_runner = LocalAgentRunner()
 

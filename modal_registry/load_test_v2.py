@@ -5,13 +5,8 @@ followed by a full Docker prune. The entire build+prune loop runs as one
 bash script inside the sandbox (zero Python↔Modal round-trips in the hot
 loop), so the only time spent is actual Docker work.
 
-Without --with-cache, each iteration pulls python:3.12-slim fresh from
+Without --with-mirror, each iteration pulls python:3.12-slim fresh from
 Docker Hub, which should trigger rate limiting after ~40 pulls.
-
-With --with-cache, the devcontainer.json includes --cache-from/--cache-to
-build options pointing at our Modal registry cache. devcontainer build
-passes these through to docker buildx build, so layers are pulled from
-our cache registry instead of Docker Hub.
 
 With --with-mirror, the Docker daemon is configured to use a pull-through
 cache registry as a mirror.  All Docker Hub pulls go through the mirror
@@ -29,16 +24,12 @@ Usage:
     # Subsequent run — reuse the same sandbox (same IP, rate limits accumulate)
     cd modal_registry && uv run python load_test_v2.py --iterations 30 --sandbox sb-xxx...
 
-    # Test mitigation with build layer cache
-    cd modal_registry && uv run python load_test_v2.py --iterations 111 --with-cache
-
     # Test mitigation with Docker Hub mirror (pull-through cache)
     cd modal_registry && uv run python load_test_v2.py --iterations 111 \\
         --with-mirror https://imbue--keystone-docker-hub-mirror-q7x3p-registry.modal.run
 
 Prerequisites:
     - Modal configured (modal token set)
-    - For --with-cache: registry deployed and secret configured (see README.md)
     - For --with-mirror: mirror deployed (modal deploy mirror_registry_app.py)
 """
 
@@ -103,8 +94,6 @@ def _build_loop_script(iterations: int) -> str:
       1. devcontainer build (pulls base image from Docker Hub)
       2. docker system prune -af + docker buildx prune -af
     """
-    # Both paths use devcontainer build; the --with-cache variant bakes
-    # --cache-from / --cache-to into devcontainer.json build.options.
     build_cmd = "devcontainer build --workspace-folder /project --image-name loadtest:latest 2>&1"
 
     return textwrap.dedent(f"""\
@@ -144,8 +133,8 @@ def _build_loop_script(iterations: int) -> str:
     """)
 
 
-def _setup_sandbox(sb: modal.Sandbox, with_cache: bool, mirror_url: str | None = None) -> None:
-    """One-time setup for a newly created sandbox: start Docker, login, write project files."""
+def _setup_sandbox(sb: modal.Sandbox, mirror_url: str | None = None) -> None:
+    """One-time setup for a newly created sandbox: start Docker and write project files."""
     # Configure Docker Hub mirror BEFORE starting the daemon.
     # The mirror is a pull-through cache — Docker checks it first for any
     # Docker Hub image, so cached pulls never touch Docker Hub at all.
@@ -165,26 +154,6 @@ def _setup_sandbox(sb: modal.Sandbox, with_cache: bool, mirror_url: str | None =
     if exit_code != 0:
         raise RuntimeError("Docker daemon failed to start")
 
-    # Docker login for cache registry (if enabled).
-    # Uses the same approach as ModalAgentRunner._docker_login().
-    if with_cache:
-        print("Logging into cache registry...", file=sys.stderr)
-        login_script = (
-            "#!/bin/bash\n"
-            "set -euo pipefail\n"
-            ': "${DOCKER_BUILD_CACHE_REGISTRY_URL:?must be set}"\n'
-            ': "${DOCKER_BUILD_CACHE_REGISTRY_USERNAME:?must be set}"\n'
-            ': "${DOCKER_BUILD_CACHE_REGISTRY_PASSWORD:?must be set}"\n'
-            'echo "$DOCKER_BUILD_CACHE_REGISTRY_PASSWORD" | \\\n'
-            "    docker login \\\n"
-            '        --username "$DOCKER_BUILD_CACHE_REGISTRY_USERNAME" \\\n'
-            "        --password-stdin \\\n"
-            '        "$DOCKER_BUILD_CACHE_REGISTRY_URL"\n'
-        )
-        exit_code, _ = _exec_script(sb, login_script, label="docker-login")
-        if exit_code != 0:
-            raise RuntimeError("Docker login failed")
-
     # Set up project directory
     print("Setting up project...", file=sys.stderr)
     _exec_script(sb, "mkdir -p /project/.devcontainer", label="setup")
@@ -192,37 +161,12 @@ def _setup_sandbox(sb: modal.Sandbox, with_cache: bool, mirror_url: str | None =
         f.write(DOCKERFILE)
     with sb.open("/project/README.md", "w") as f:
         f.write("# load test project\n")
-
-    if with_cache:
-        # Write devcontainer.json from inside the sandbox so we can
-        # template in $DOCKER_BUILD_CACHE_REGISTRY_URL.
-        _exec_script(
-            sb,
-            "cat > /project/.devcontainer/devcontainer.json << DCEOF\n"
-            "{\n"
-            '  "name": "load-test",\n'
-            '  "build": {\n'
-            '    "dockerfile": "Dockerfile",\n'
-            '    "context": "..",\n'
-            '    "options": [\n'
-            '      "--network=host",\n'
-            '      "--cache-from=type=registry,ref=$DOCKER_BUILD_CACHE_REGISTRY_URL/loadtest-cache:latest",\n'
-            '      "--cache-to=type=registry,ref=$DOCKER_BUILD_CACHE_REGISTRY_URL/loadtest-cache:latest,mode=max",\n'
-            '      "--load"\n'
-            "    ]\n"
-            "  }\n"
-            "}\n"
-            "DCEOF",
-            label="setup-devcontainer",
-        )
-    else:
-        with sb.open("/project/.devcontainer/devcontainer.json", "w") as f:
-            f.write(DEVCONTAINER_JSON)
+    with sb.open("/project/.devcontainer/devcontainer.json", "w") as f:
+        f.write(DEVCONTAINER_JSON)
 
 
 def run_load_test(
     iterations: int,
-    with_cache: bool,
     sandbox_id: str | None = None,
     mirror_url: str | None = None,
 ) -> None:
@@ -230,10 +174,6 @@ def run_load_test(
 
     app = modal.App.lookup("keystone-load-test-v2", create_if_missing=True)
     image = create_modal_image()
-
-    secrets: list[modal.Secret] = []
-    if with_cache:
-        secrets.append(modal.Secret.from_name("keystone-docker-registry-config"))
 
     # -------------------------------------------------------------------
     # Sandbox acquisition.  Docker Hub tracks rate limits per IP address.
@@ -263,7 +203,6 @@ def run_load_test(
             # to reuse the same IP and accumulate rate-limit consumption.
             timeout=60 * 60,
             region="us-west-2",
-            secrets=secrets,
             experimental_options={"enable_docker": True},
         )
 
@@ -271,13 +210,13 @@ def run_load_test(
 
     try:
         if needs_setup:
-            _setup_sandbox(sb, with_cache, mirror_url=mirror_url)
+            _setup_sandbox(sb, mirror_url=mirror_url)
 
         # Run the entire loop as a single bash script inside the sandbox
         print(f"\n{'=' * 60}", file=sys.stderr)
         print(
             f"Running {iterations} sequential build+prune cycles"
-            f" (with_cache={with_cache}, mirror={'yes' if mirror_url else 'no'})...",
+            f" (mirror={'yes' if mirror_url else 'no'})...",
             file=sys.stderr,
         )
         print(f"{'=' * 60}\n", file=sys.stderr)
@@ -316,11 +255,6 @@ def main() -> None:
         help="Number of build+prune cycles (default: 50)",
     )
     parser.add_argument(
-        "--with-cache",
-        action="store_true",
-        help="Use the Modal registry cache (to test mitigation)",
-    )
-    parser.add_argument(
         "--sandbox",
         type=str,
         default=None,
@@ -343,7 +277,6 @@ def main() -> None:
     args = parser.parse_args()
     run_load_test(
         iterations=args.iterations,
-        with_cache=args.with_cache,
         sandbox_id=args.sandbox,
         mirror_url=args.with_mirror,
     )

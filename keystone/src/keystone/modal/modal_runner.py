@@ -152,10 +152,10 @@ class ModalAgentRunner(AgentRunner):
     def __init__(
         self,
         timeout_seconds: int = 3600,
-        docker_cache_secret: str | None = None,
+        docker_registry_mirror: str | None = "https://mirror.gcr.io",
     ) -> None:
         self._timeout_seconds = timeout_seconds
-        self._docker_cache_secret = docker_cache_secret
+        self._docker_registry_mirror = docker_registry_mirror
         self._exit_code: int = 1
         self._devcontainer_tarball: bytes = b""
         self._sandbox: modal.Sandbox | None = None
@@ -171,18 +171,11 @@ class ModalAgentRunner(AgentRunner):
         app = modal.App.lookup("keystone-sandbox", create_if_missing=True)
         image = create_modal_image()
 
-        # Attach the docker cache secret (if any) so its env vars are
-        # available inside the sandbox for docker login / cache flags.
-        secrets: list[modal.Secret] = []
-        if self._docker_cache_secret:
-            secrets.append(modal.Secret.from_name(self._docker_cache_secret))
-
         self._sandbox = modal.Sandbox.create(
             app=app,
             image=image,
             timeout=self._timeout_seconds,
             region="us-west-2",
-            secrets=secrets,
             experimental_options={"enable_docker": True},
         )
 
@@ -194,66 +187,21 @@ class ModalAgentRunner(AgentRunner):
         )
         print(f"  Shell:     modal shell {sandbox_id}", file=sys.stderr)
 
+        # Configure Docker Hub mirror BEFORE starting the daemon.  The mirror is a
+        # pull-through cache — Docker checks it first for all images, so cached
+        # pulls never touch Docker Hub (metadata or layers).  Default: mirror.gcr.io.
+        if self._docker_registry_mirror:
+            logger.info("Configuring Docker Hub mirror: %s", self._docker_registry_mirror)
+            mirror_config = f'{{"registry-mirrors": ["{self._docker_registry_mirror}"]}}'
+            with self._sandbox.open("/etc/docker/daemon.json", "w") as f:
+                f.write(mirror_config)
+
         # Start Docker daemon
         run_modal_command(self._sandbox, "/start-dockerd.sh", name="dockerd")
         logger.info("Waiting for Docker daemon to be ready...")
         run_modal_command(self._sandbox, "/wait_for_docker.sh", name="docker-wait").wait()
 
-        # Configure Docker build cache registry if secret was provided.
-        # The secret injects env vars into the sandbox; all cache operations
-        # reference those env vars via scripts executed inside the sandbox.
-        if self._docker_cache_secret:
-            self._docker_login()
-
         return self._sandbox
-
-    @property
-    def _has_docker_cache(self) -> bool:
-        """Whether docker build cache is configured."""
-        return self._docker_cache_secret is not None
-
-    def _docker_login(self) -> None:
-        """Run ``docker login`` inside the sandbox for both root and agent users.
-
-        Uses env vars injected by the Modal secret:
-        ``$DOCKER_BUILD_CACHE_REGISTRY_{URL,USERNAME,PASSWORD}``.
-        """
-        assert self._sandbox is not None
-        sb = self._sandbox
-
-        # The login script references env vars directly - no need to read them
-        # back to the host.  The script also validates that all vars are set.
-        login_script = """\
-#!/bin/bash
-set -euo pipefail
-: "${DOCKER_BUILD_CACHE_REGISTRY_URL:?must be set}"
-: "${DOCKER_BUILD_CACHE_REGISTRY_USERNAME:?must be set}"
-: "${DOCKER_BUILD_CACHE_REGISTRY_PASSWORD:?must be set}"
-
-echo "$DOCKER_BUILD_CACHE_REGISTRY_PASSWORD" | \
-    docker login \
-        --username "$DOCKER_BUILD_CACHE_REGISTRY_USERNAME" \
-        --password-stdin \
-        "$DOCKER_BUILD_CACHE_REGISTRY_URL"
-
-# Also log in as the agent user
-su agent -c "$(printf 'echo %q | docker login --username %q --password-stdin %q' \
-    "$DOCKER_BUILD_CACHE_REGISTRY_PASSWORD" \
-    "$DOCKER_BUILD_CACHE_REGISTRY_USERNAME" \
-    "$DOCKER_BUILD_CACHE_REGISTRY_URL")"
-"""
-        with sb.open("/tmp/_docker_login.sh", "w") as f:
-            f.write(login_script)
-        run_modal_command(sb, "chmod", "+x", "/tmp/_docker_login.sh", name="docker-login").wait()
-        proc = run_modal_command(sb, "/tmp/_docker_login.sh", name="docker-login")
-        exit_code = proc.wait()
-        if exit_code != 0:
-            raise RuntimeError(
-                f"docker login failed (exit {exit_code}). "
-                f"Check that Modal secret '{self._docker_cache_secret}' has "
-                "DOCKER_BUILD_CACHE_REGISTRY_{URL,USERNAME,PASSWORD}"
-            )
-        logger.info("Docker login successful")
 
     def upload_project(self, project_archive: bytes, agents_md: str | None = None) -> None:
         """Upload project archive to sandbox."""
@@ -276,42 +224,9 @@ su agent -c "$(printf 'echo %q | docker login --username %q --password-stdin %q'
         ).wait()
 
         # Write pre-generated devcontainer.json for the agent to copy into .devcontainer/.
-        # When docker cache is configured, we generate it inside the sandbox so it can
-        # reference $DOCKER_BUILD_CACHE_REGISTRY_URL from the injected secret.
-        if self._has_docker_cache:
-            gen_script = """\
-#!/bin/bash
-set -euo pipefail
-URL="$DOCKER_BUILD_CACHE_REGISTRY_URL"
-cat > /devcontainer.json <<ENDJSON
-{
-  "build": {
-    "dockerfile": "Dockerfile",
-    "context": "..",
-    "options": [
-      "--network=host",
-      "--cache-from=type=registry,ref=$URL/buildcache:latest",
-      "--cache-to=type=registry,ref=$URL/buildcache:latest,mode=max"
-    ]
-  },
-  "runArgs": [
-    "--network=host"
-  ]
-}
-ENDJSON
-"""
-            with sb.open("/tmp/_gen_devcontainer.sh", "w") as f:
-                f.write(gen_script)
-            run_modal_command(
-                sb, "chmod", "+x", "/tmp/_gen_devcontainer.sh", name="gen-devcontainer"
-            ).wait()
-            proc = run_modal_command(sb, "/tmp/_gen_devcontainer.sh", name="gen-devcontainer")
-            if proc.wait() != 0:
-                raise RuntimeError("Failed to generate /devcontainer.json in sandbox")
-        else:
-            devcontainer_json = generate_devcontainer_json()
-            with sb.open("/devcontainer.json", "w") as f:
-                f.write(devcontainer_json)
+        devcontainer_json = generate_devcontainer_json()
+        with sb.open("/devcontainer.json", "w") as f:
+            f.write(devcontainer_json)
         logger.info("Wrote /devcontainer.json to sandbox")
 
         # Also place helpers inside /project/ so agents that restrict CWD access
@@ -524,45 +439,22 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
         container_name = "keystone-verify-container"
 
         # 1. Build the image
-        # When docker cache is configured, we build via a script that references
-        # $DOCKER_BUILD_CACHE_REGISTRY_URL for --cache-from / --cache-to.
         logger.info("Building devcontainer image with docker...")
         build_start = time.time()
 
-        if self._has_docker_cache:
-            build_script = f"""\
-#!/bin/bash
-set -euo pipefail
-CACHE_REF="$DOCKER_BUILD_CACHE_REGISTRY_URL/buildcache:latest"
-exec timeout {image_build_timeout_seconds} docker build \
-    --network=host \
-    --cache-from "type=registry,ref=$CACHE_REF" \
-    --cache-to "type=registry,ref=$CACHE_REF,mode=max" \
-    -t {image_name} \
-    -f /project/.devcontainer/Dockerfile \
-    /project
-"""
-            logger.info("Using Docker build cache registry (from sandbox env)")
-            with sb.open("/tmp/_docker_build.sh", "w") as f:
-                f.write(build_script)
-            run_modal_command(
-                sb, "chmod", "+x", "/tmp/_docker_build.sh", name="docker-build-setup"
-            ).wait()
-            build_proc = run_modal_command(sb, "/tmp/_docker_build.sh", name="docker-build")
-        else:
-            build_cmd = [
-                "timeout",
-                str(image_build_timeout_seconds),
-                "docker",
-                "build",
-                "--network=host",
-                "-t",
-                image_name,
-                "-f",
-                "/project/.devcontainer/Dockerfile",
-                "/project",
-            ]
-            build_proc = run_modal_command(sb, *build_cmd, name="docker-build")
+        build_cmd = [
+            "timeout",
+            str(image_build_timeout_seconds),
+            "docker",
+            "build",
+            "--network=host",
+            "-t",
+            image_name,
+            "-f",
+            "/project/.devcontainer/Dockerfile",
+            "/project",
+        ]
+        build_proc = run_modal_command(sb, *build_cmd, name="docker-build")
         build_exit = build_proc.wait()
         image_build_seconds = time.time() - build_start
         if build_exit == TIMEOUT_EXIT_CODE:

@@ -19,8 +19,6 @@ from keystone.version import _UNKNOWN_VERSION, get_version_info
 
 logger = logging.getLogger(__name__)
 
-DOCKER_CACHE_SECRET = "keystone-docker-registry-config"
-
 
 def test_cli_help() -> None:
     result = CliRunner().invoke(app, ["--help"])
@@ -176,7 +174,7 @@ def test_e2e_fake_agent(
     This tests the devcontainer build and test execution without LLM dependencies.
 
     Parameterized to run both locally (--run_agent_locally_with_dangerously_skip_permissions)
-    and on Modal (--agent_in_modal with --docker_cache_secret for registry cache).
+    and on Modal (--agent_in_modal with --docker_registry_mirror).
     """
     use_modal = execution_mode == "modal"
     test_artifacts_dir = tmp_path / "test_artifacts"
@@ -203,7 +201,7 @@ def test_e2e_fake_agent(
         str(cache_file),
     ]
     if use_modal:
-        cmd += ["--agent_in_modal", "--docker_cache_secret", DOCKER_CACHE_SECRET]
+        cmd += ["--agent_in_modal", "--docker_registry_mirror", "https://mirror.gcr.io"]
     else:
         cmd += ["--run_agent_locally_with_dangerously_skip_permissions"]
 
@@ -212,17 +210,6 @@ def test_e2e_fake_agent(
 
     assert result.exit_code == 0, f"Process failed: {result.stderr}"
     assert "CACHE MISS" in result.stderr, "Expected cache miss on first run"
-
-    if use_modal:
-        # Verify BuildKit registry cache integration is working.
-        # These lines appear in docker build output logged by keystone.modal logger.
-        all_logs = caplog.text
-        assert "importing cache manifest from" in all_logs, (
-            "Expected BuildKit to import cache manifest (--cache-from)"
-        )
-        assert "exporting cache to registry" in all_logs, (
-            "Expected BuildKit to export cache to registry (--cache-to)"
-        )
 
     # Check that status lines were emitted to stdout (rich prints in blue)
     if "BOOTSTRAP_DEVCONTAINER_STATUS:" not in result.stdout:
@@ -312,7 +299,7 @@ def test_e2e_fake_agent(
         str(cache_file),
     ]
     if use_modal:
-        cmd2 += ["--agent_in_modal", "--docker_cache_secret", DOCKER_CACHE_SECRET]
+        cmd2 += ["--agent_in_modal", "--docker_registry_mirror", "https://mirror.gcr.io"]
     else:
         cmd2 += ["--run_agent_locally_with_dangerously_skip_permissions"]
 
@@ -407,8 +394,8 @@ def test_e2e_codex_on_modal(tmp_path: Path, project_root: Path) -> None:
         "--provider",
         "codex",
         "--agent_in_modal",
-        "--docker_cache_secret",
-        DOCKER_CACHE_SECRET,
+        "--docker_registry_mirror",
+        "https://mirror.gcr.io",
         "--no_cache_replay",
     ]
 
@@ -482,8 +469,8 @@ def test_e2e_agent_error_propagation(tmp_path: Path, project_root: Path) -> None
         "--agent_cmd",
         agent_cmd,
         "--agent_in_modal",
-        "--docker_cache_secret",
-        DOCKER_CACHE_SECRET,
+        "--docker_registry_mirror",
+        "https://mirror.gcr.io",
         "--no_cache_replay",
     ]
 
@@ -567,8 +554,6 @@ def test_e2e_sample_projects(
 
     logger.info("Running: keystone %s", " ".join(cmd))
 
-    # Note: Docker build caching is configured via --docker_cache_secret (Modal secret name),
-    # not via environment variables. See ModalAgentRunner for details.
     result = CliRunner().invoke(app, cmd)
 
     sample_name = request.node.callspec.params["project_root"]
@@ -623,98 +608,6 @@ def _parse_bootstrap_result(stdout: str) -> BootstrapResult:
     assert json_start is not None, "Could not find JSON output in stdout"
     json_str = "\n".join(stdout_lines[json_start:])
     return BootstrapResult.model_validate_json(json_str)
-
-
-@pytest.mark.manual
-@pytest.mark.parametrize("project_root", ["python_project"], indirect=True)
-def test_e2e_docker_build_cache(tmp_path: Path, project_root: Path) -> None:
-    """Verify that the docker build cache is populated on first run and hit on second run.
-
-    Run 1: Fresh agent run (--no_cache_replay) with --docker_cache_secret.
-            This populates both the agent inference cache and the docker build cache.
-    Run 2: Replay the cached agent output (cache hit) with --docker_cache_secret.
-            The docker image build should be significantly faster due to registry cache hits.
-    """
-    cache_file = tmp_path / "test_log.sqlite"
-
-    base_cmd = [
-        "--project_root",
-        str(project_root),
-        "--test_artifacts_dir",
-        str(tmp_path / "artifacts"),
-        "--log_db",
-        str(cache_file),
-        "--docker_cache_secret",
-        DOCKER_CACHE_SECRET,
-    ]
-
-    # --- Run 1: Fresh agent run (populates both caches) ---
-    logger.info("=" * 60)
-    logger.info("Docker Build Cache Test — Run 1 (fresh, populates caches)")
-    logger.info("=" * 60)
-
-    run1_result = CliRunner().invoke(app, [*base_cmd, "--no_cache_replay"])
-    assert run1_result.exit_code == 0, f"Run 1 failed with exit code {run1_result.exit_code}"
-    output1 = _parse_bootstrap_result(run1_result.stdout)
-    assert output1.verification is not None
-    assert output1.verification.success, (
-        f"Run 1 verification failed: {output1.verification.error_message}"
-    )
-    run1_build_seconds = output1.verification.image_build_seconds
-    assert run1_build_seconds is not None, "Run 1 should report image_build_seconds"
-    logger.info("Run 1 image build: %.1f seconds", run1_build_seconds)
-
-    # --- Run 2: Cache hit (agent replayed, docker cache should be warm) ---
-    logger.info("=" * 60)
-    logger.info("Docker Build Cache Test — Run 2 (cached agent, warm docker cache)")
-    logger.info("=" * 60)
-
-    # Use a fresh artifacts dir so there's no leftover state
-    run2_artifacts = tmp_path / "artifacts_run2"
-    run2_cmd = [
-        "--project_root",
-        str(project_root),
-        "--test_artifacts_dir",
-        str(run2_artifacts),
-        "--log_db",
-        str(cache_file),
-        "--docker_cache_secret",
-        DOCKER_CACHE_SECRET,
-        # Don't pass --no_cache_replay: this should be a cache hit for the agent
-    ]
-
-    run2_result = CliRunner().invoke(app, run2_cmd)
-    assert run2_result.exit_code == 0, f"Run 2 failed with exit code {run2_result.exit_code}"
-    output2 = _parse_bootstrap_result(run2_result.stdout)
-    assert output2.verification is not None
-    assert output2.verification.success, (
-        f"Run 2 verification failed: {output2.verification.error_message}"
-    )
-    run2_build_seconds = output2.verification.image_build_seconds
-    assert run2_build_seconds is not None, "Run 2 should report image_build_seconds"
-    logger.info("Run 2 image build: %.1f seconds", run2_build_seconds)
-
-    # --- Verify the docker build was faster on run 2 ---
-    logger.info(
-        "Build time comparison: Run 1 = %.1fs, Run 2 = %.1fs (%.1f%% of run 1)",
-        run1_build_seconds,
-        run2_build_seconds,
-        (run2_build_seconds / run1_build_seconds * 100) if run1_build_seconds > 0 else 0,
-    )
-    # The cached build should be at least 2x faster. In practice it's often 5-10x.
-    # However, if run 1 was already fast (< 20s) due to a warm local cache,
-    # the comparison is meaningless — both runs are already cached.
-    if run1_build_seconds >= 20:
-        assert run2_build_seconds < run1_build_seconds * 0.5, (
-            f"Expected run 2 build ({run2_build_seconds:.1f}s) to be at least 2x faster "
-            f"than run 1 ({run1_build_seconds:.1f}s) due to docker registry cache"
-        )
-    else:
-        logger.info(
-            "Skipping build time comparison: run 1 was already fast (%.1fs), "
-            "likely due to warm local cache",
-            run1_build_seconds,
-        )
 
 
 def _validate_status_messages(output: BootstrapResult) -> None:

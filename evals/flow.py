@@ -252,8 +252,8 @@ def process_repo_task(
                 cmd.extend(
                     [
                         "--agent_in_modal",
-                        "--docker_cache_secret",
-                        agent_config.docker_cache_secret,
+                        "--docker_registry_mirror",
+                        agent_config.docker_registry_mirror,
                     ]
                 )
 
@@ -269,7 +269,7 @@ def process_repo_task(
                 cmd.append("--require_cache_hit")
             if agent_config.no_cache_replay:
                 cmd.append("--no_cache_replay")
-            if agent_config.no_guardrail:
+            if not agent_config.guardrail:
                 cmd.append("--no_guardrail")
             if agent_config.use_agents_md:
                 cmd.append("--use_agents_md")

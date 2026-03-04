@@ -265,10 +265,10 @@
       'exit_code': 0,
       'status_messages': list([
         'Exploring repository structure to identify file types and test locations.',
-        'Creating the .devcontainer directory and required files.',
-        'Running guardrail check to validate setup.',
+        'Creating .devcontainer directory and files for a simple Python project.',
+        'Running guardrail check to validate files.',
       ]),
-      'summary': 'Everything worked. Simple Python project with uv, pytest runs 2 tests successfully. Used uv for fast dependency installation with layer caching via pyproject.toml/uv.lock copied before source code.',
+      'summary': 'Everything worked on the first try. Simple Python 3.11 project with uv for dependency management; uv venv pre-created in the Dockerfile for fast layer caching; pytest with --junitxml for JUnit output. Tip: the project is minimal (app.py + tests/test_app.py) with pytest and pytest-json-report as the only dependencies.',
       'timed_out': False,
     }),
     'error_message': None,
@@ -305,18 +305,13 @@
         # Install dependencies first (without the project itself) to maximize layer caching.
         COPY pyproject.toml uv.lock /tmp/deps/
         ENV UV_PROJECT_ENVIRONMENT=/venv
-        RUN cd /tmp/deps && \
-            uv sync --locked --no-install-project && \
+        RUN cd /tmp/deps && uv sync --locked --no-install-project && \
             echo "Python virtual environment created successfully at $UV_PROJECT_ENVIRONMENT"
         
         # Copy source code (these won't change during agent work)
         WORKDIR /project_src
         COPY app.py ./
         COPY tests/ ./tests/
-        COPY pyproject.toml uv.lock ./
-        
-        # Install the project itself
-        RUN uv sync --locked
         
         # Copy the test runner script last (this changes often during development)
         COPY .devcontainer/run_all_tests.sh /run_all_tests.sh
@@ -329,26 +324,23 @@
         
         mkdir -p /test_artifacts/junit
         
-        cd /project_src
-        
         export PYTHONPATH=/project_src:${PYTHONPATH:-}
         
         echo "Running pytest..."
-        /venv/bin/pytest tests/ \
+        timeout 120 /venv/bin/pytest /project_src/tests/ \
             --junitxml=/test_artifacts/junit/pytest.xml \
             --no-header \
             -v
         
-        # Write final result
-        if [ $? -eq 0 ]; then
+        TEST_EXIT=$?
+        
+        if [ $TEST_EXIT -eq 0 ]; then
             echo '{"success": true}' > /test_artifacts/final_result.json
         else
             echo '{"success": false}' > /test_artifacts/final_result.json
-            exit 1
         fi
         
-        echo "All tests passed!"
-        echo '{"success": true}' > /test_artifacts/final_result.json
+        exit $TEST_EXIT
   
       ''',
     }),

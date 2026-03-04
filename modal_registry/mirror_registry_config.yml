@@ -1,0 +1,21 @@
+version: 0.1
+
+log:
+  level: info
+
+storage:
+  filesystem:
+    rootdirectory: /var/lib/registry
+
+http:
+  addr: 0.0.0.0:5000
+  secret: keystone-mirror-registry-secret-v1
+  relativeurls: true
+  headers:
+    X-Content-Type-Options: [nosniff]
+
+# Pull-through cache: proxy requests to Docker Hub and cache the results.
+# No auth section — Docker daemon's "registry-mirrors" sends unauthenticated
+# requests, so the mirror must be open.
+proxy:
+  remoteurl: https://registry-1.docker.io

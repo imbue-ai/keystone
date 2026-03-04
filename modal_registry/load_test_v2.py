@@ -13,6 +13,11 @@ build options pointing at our Modal registry cache. devcontainer build
 passes these through to docker buildx build, so layers are pulled from
 our cache registry instead of Docker Hub.
 
+With --with-mirror, the Docker daemon is configured to use a pull-through
+cache registry as a mirror.  All Docker Hub pulls go through the mirror
+first — if cached, Docker Hub is never contacted (metadata or layers).
+Deploy the mirror with: modal deploy mirror_registry_app.py
+
 Sandboxes self-destruct after 60 minutes but are NOT terminated when the
 script exits. This lets you reuse a sandbox across runs with --sandbox,
 keeping the same IP address (Docker Hub rate-limits per IP).
@@ -24,12 +29,17 @@ Usage:
     # Subsequent run — reuse the same sandbox (same IP, rate limits accumulate)
     cd modal_registry && uv run python load_test_v2.py --iterations 30 --sandbox sb-xxx...
 
-    # Test mitigation with registry cache
+    # Test mitigation with build layer cache
     cd modal_registry && uv run python load_test_v2.py --iterations 111 --with-cache
+
+    # Test mitigation with Docker Hub mirror (pull-through cache)
+    cd modal_registry && uv run python load_test_v2.py --iterations 111 \\
+        --with-mirror https://imbue--keystone-docker-hub-mirror-q7x3p-registry.modal.run
 
 Prerequisites:
     - Modal configured (modal token set)
     - For --with-cache: registry deployed and secret configured (see README.md)
+    - For --with-mirror: mirror deployed (modal deploy mirror_registry_app.py)
 """
 
 import argparse
@@ -134,8 +144,20 @@ def _build_loop_script(iterations: int) -> str:
     """)
 
 
-def _setup_sandbox(sb: modal.Sandbox, with_cache: bool) -> None:
+def _setup_sandbox(sb: modal.Sandbox, with_cache: bool, mirror_url: str | None = None) -> None:
     """One-time setup for a newly created sandbox: start Docker, login, write project files."""
+    # Configure Docker Hub mirror BEFORE starting the daemon.
+    # The mirror is a pull-through cache — Docker checks it first for any
+    # Docker Hub image, so cached pulls never touch Docker Hub at all.
+    if mirror_url:
+        print(f"Configuring Docker Hub mirror: {mirror_url}", file=sys.stderr)
+        _exec_script(
+            sb,
+            f'mkdir -p /etc/docker && '
+            f'echo \'{{"registry-mirrors": ["{mirror_url}"]}}\' > /etc/docker/daemon.json',
+            label="mirror-config",
+        )
+
     # Start Docker daemon
     print("Starting Docker daemon...", file=sys.stderr)
     sb.exec("/start-dockerd.sh")
@@ -199,7 +221,10 @@ def _setup_sandbox(sb: modal.Sandbox, with_cache: bool) -> None:
 
 
 def run_load_test(
-    iterations: int, with_cache: bool, sandbox_id: str | None = None
+    iterations: int,
+    with_cache: bool,
+    sandbox_id: str | None = None,
+    mirror_url: str | None = None,
 ) -> None:
     modal.enable_output()
 
@@ -246,12 +271,13 @@ def run_load_test(
 
     try:
         if needs_setup:
-            _setup_sandbox(sb, with_cache)
+            _setup_sandbox(sb, with_cache, mirror_url=mirror_url)
 
         # Run the entire loop as a single bash script inside the sandbox
         print(f"\n{'=' * 60}", file=sys.stderr)
         print(
-            f"Running {iterations} sequential build+prune cycles (with_cache={with_cache})...",
+            f"Running {iterations} sequential build+prune cycles"
+            f" (with_cache={with_cache}, mirror={'yes' if mirror_url else 'no'})...",
             file=sys.stderr,
         )
         print(f"{'=' * 60}\n", file=sys.stderr)
@@ -303,11 +329,23 @@ def main() -> None:
             "(same IP) so Docker Hub rate-limit consumption accumulates."
         ),
     )
+    parser.add_argument(
+        "--with-mirror",
+        type=str,
+        default=None,
+        metavar="URL",
+        help=(
+            "URL of a Docker Hub pull-through cache (mirror).  The Docker "
+            "daemon is configured to check this mirror first for all Docker "
+            "Hub images, avoiding Docker Hub entirely when cached."
+        ),
+    )
     args = parser.parse_args()
     run_load_test(
         iterations=args.iterations,
         with_cache=args.with_cache,
         sandbox_id=args.sandbox,
+        mirror_url=args.with_mirror,
     )
 
 

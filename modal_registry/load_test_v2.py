@@ -13,9 +13,16 @@ build options pointing at our Modal registry cache. devcontainer build
 passes these through to docker buildx build, so layers are pulled from
 our cache registry instead of Docker Hub.
 
+Sandboxes self-destruct after 60 minutes but are NOT terminated when the
+script exits. This lets you reuse a sandbox across runs with --sandbox,
+keeping the same IP address (Docker Hub rate-limits per IP).
+
 Usage:
-    # Reproduce rate limiting (~40 iterations to trigger)
-    cd modal_registry && uv run python load_test_v2.py --iterations 111
+    # First run — creates a new sandbox and prints its ID
+    cd modal_registry && uv run python load_test_v2.py --iterations 30
+
+    # Subsequent run — reuse the same sandbox (same IP, rate limits accumulate)
+    cd modal_registry && uv run python load_test_v2.py --iterations 30 --sandbox sb-xxx...
 
     # Test mitigation with registry cache
     cd modal_registry && uv run python load_test_v2.py --iterations 111 --with-cache
@@ -127,8 +134,73 @@ def _build_loop_script(iterations: int) -> str:
     """)
 
 
-def run_load_test(iterations: int, with_cache: bool) -> None:
-    """Run sequential devcontainer builds in a single sandbox."""
+def _setup_sandbox(sb: modal.Sandbox, with_cache: bool) -> None:
+    """One-time setup for a newly created sandbox: start Docker, login, write project files."""
+    # Start Docker daemon
+    print("Starting Docker daemon...", file=sys.stderr)
+    sb.exec("/start-dockerd.sh")
+    exit_code, _ = _exec_script(sb, "/wait_for_docker.sh", label="docker-wait")
+    if exit_code != 0:
+        raise RuntimeError("Docker daemon failed to start")
+
+    # Docker login for cache registry (if enabled).
+    # Uses the same approach as ModalAgentRunner._docker_login().
+    if with_cache:
+        print("Logging into cache registry...", file=sys.stderr)
+        login_script = (
+            "#!/bin/bash\n"
+            "set -euo pipefail\n"
+            ': "${DOCKER_BUILD_CACHE_REGISTRY_URL:?must be set}"\n'
+            ': "${DOCKER_BUILD_CACHE_REGISTRY_USERNAME:?must be set}"\n'
+            ': "${DOCKER_BUILD_CACHE_REGISTRY_PASSWORD:?must be set}"\n'
+            'echo "$DOCKER_BUILD_CACHE_REGISTRY_PASSWORD" | \\\n'
+            "    docker login \\\n"
+            '        --username "$DOCKER_BUILD_CACHE_REGISTRY_USERNAME" \\\n'
+            "        --password-stdin \\\n"
+            '        "$DOCKER_BUILD_CACHE_REGISTRY_URL"\n'
+        )
+        exit_code, _ = _exec_script(sb, login_script, label="docker-login")
+        if exit_code != 0:
+            raise RuntimeError("Docker login failed")
+
+    # Set up project directory
+    print("Setting up project...", file=sys.stderr)
+    _exec_script(sb, "mkdir -p /project/.devcontainer", label="setup")
+    with sb.open("/project/.devcontainer/Dockerfile", "w") as f:
+        f.write(DOCKERFILE)
+    with sb.open("/project/README.md", "w") as f:
+        f.write("# load test project\n")
+
+    if with_cache:
+        # Write devcontainer.json from inside the sandbox so we can
+        # template in $DOCKER_BUILD_CACHE_REGISTRY_URL.
+        _exec_script(
+            sb,
+            "cat > /project/.devcontainer/devcontainer.json << DCEOF\n"
+            "{\n"
+            '  "name": "load-test",\n'
+            '  "build": {\n'
+            '    "dockerfile": "Dockerfile",\n'
+            '    "context": "..",\n'
+            '    "options": [\n'
+            '      "--network=host",\n'
+            '      "--cache-from=type=registry,ref=$DOCKER_BUILD_CACHE_REGISTRY_URL/loadtest-cache:latest",\n'
+            '      "--cache-to=type=registry,ref=$DOCKER_BUILD_CACHE_REGISTRY_URL/loadtest-cache:latest,mode=max",\n'
+            '      "--load"\n'
+            "    ]\n"
+            "  }\n"
+            "}\n"
+            "DCEOF",
+            label="setup-devcontainer",
+        )
+    else:
+        with sb.open("/project/.devcontainer/devcontainer.json", "w") as f:
+            f.write(DEVCONTAINER_JSON)
+
+
+def run_load_test(
+    iterations: int, with_cache: bool, sandbox_id: str | None = None
+) -> None:
     modal.enable_output()
 
     app = modal.App.lookup("keystone-load-test-v2", create_if_missing=True)
@@ -138,83 +210,46 @@ def run_load_test(iterations: int, with_cache: bool) -> None:
     if with_cache:
         secrets.append(modal.Secret.from_name("keystone-docker-registry-config"))
 
-    print(
-        f"Creating Modal sandbox (iterations={iterations}, with_cache={with_cache})...",
-        file=sys.stderr,
-    )
-    sb = modal.Sandbox.create(
-        app=app,
-        image=image,
-        timeout=60 * 60 * 2,  # 2 hours
-        region="us-west-2",
-        secrets=secrets,
-        experimental_options={"enable_docker": True},
-    )
-    sandbox_id = sb.object_id
-    print(f"Sandbox created: {sandbox_id}", file=sys.stderr)
-    print(f"  Shell: modal shell {sandbox_id}", file=sys.stderr)
+    # -------------------------------------------------------------------
+    # Sandbox acquisition.  Docker Hub tracks rate limits per IP address.
+    # Reusing a sandbox keeps the same IP, so rate-limit consumption
+    # accumulates across runs — which is what we want for this test.
+    #
+    # Pass --sandbox <id> to reuse a sandbox from a previous run.
+    # The sandbox ID is printed at the end of each run.
+    # -------------------------------------------------------------------
+    needs_setup = True
+
+    if sandbox_id:
+        print(f"Reconnecting to sandbox: {sandbox_id}", file=sys.stderr)
+        sb = modal.Sandbox.from_id(sandbox_id)
+        # Health-check: verify sandbox is still alive.
+        exit_code, _ = _exec_script(sb, "echo ok", label="health")
+        if exit_code != 0:
+            raise RuntimeError(f"Sandbox {sandbox_id} is not healthy (exit {exit_code})")
+        needs_setup = False
+    else:
+        print(
+            f"Creating Modal sandbox (iterations={iterations}, with_cache={with_cache})...",
+            file=sys.stderr,
+        )
+        sb = modal.Sandbox.create(
+            app=app,
+            image=image,
+            # 60-minute timeout.  The sandbox is NOT terminated when the
+            # script exits — pass its ID back via --sandbox on the next run
+            # to reuse the same IP and accumulate rate-limit consumption.
+            timeout=60 * 60,
+            region="us-west-2",
+            secrets=secrets,
+            experimental_options={"enable_docker": True},
+        )
+
+    print(f"Sandbox ID: {sb.object_id}", file=sys.stderr)
 
     try:
-        # Start Docker daemon
-        print("Starting Docker daemon...", file=sys.stderr)
-        sb.exec("/start-dockerd.sh")
-        exit_code, _ = _exec_script(sb, "/wait_for_docker.sh", label="docker-wait")
-        if exit_code != 0:
-            raise RuntimeError("Docker daemon failed to start")
-
-        # Docker login for cache registry (if enabled).
-        # Uses the same approach as ModalAgentRunner._docker_login().
-        if with_cache:
-            print("Logging into cache registry...", file=sys.stderr)
-            login_script = (
-                "#!/bin/bash\n"
-                "set -euo pipefail\n"
-                ': "${DOCKER_BUILD_CACHE_REGISTRY_URL:?must be set}"\n'
-                ': "${DOCKER_BUILD_CACHE_REGISTRY_USERNAME:?must be set}"\n'
-                ': "${DOCKER_BUILD_CACHE_REGISTRY_PASSWORD:?must be set}"\n'
-                'echo "$DOCKER_BUILD_CACHE_REGISTRY_PASSWORD" | \\\n'
-                "    docker login \\\n"
-                '        --username "$DOCKER_BUILD_CACHE_REGISTRY_USERNAME" \\\n'
-                "        --password-stdin \\\n"
-                '        "$DOCKER_BUILD_CACHE_REGISTRY_URL"\n'
-            )
-            exit_code, _ = _exec_script(sb, login_script, label="docker-login")
-            if exit_code != 0:
-                raise RuntimeError("Docker login failed")
-
-        # Set up project directory
-        print("Setting up project...", file=sys.stderr)
-        _exec_script(sb, "mkdir -p /project/.devcontainer", label="setup")
-        with sb.open("/project/.devcontainer/Dockerfile", "w") as f:
-            f.write(DOCKERFILE)
-        with sb.open("/project/README.md", "w") as f:
-            f.write("# load test project\n")
-
-        if with_cache:
-            # Write devcontainer.json from inside the sandbox so we can
-            # template in $DOCKER_BUILD_CACHE_REGISTRY_URL.
-            _exec_script(
-                sb,
-                "cat > /project/.devcontainer/devcontainer.json << DCEOF\n"
-                "{\n"
-                '  "name": "load-test",\n'
-                '  "build": {\n'
-                '    "dockerfile": "Dockerfile",\n'
-                '    "context": "..",\n'
-                '    "options": [\n'
-                '      "--network=host",\n'
-                '      "--cache-from=type=registry,ref=$DOCKER_BUILD_CACHE_REGISTRY_URL/loadtest-cache:latest",\n'
-                '      "--cache-to=type=registry,ref=$DOCKER_BUILD_CACHE_REGISTRY_URL/loadtest-cache:latest,mode=max",\n'
-                '      "--load"\n'
-                "    ]\n"
-                "  }\n"
-                "}\n"
-                "DCEOF",
-                label="setup-devcontainer",
-            )
-        else:
-            with sb.open("/project/.devcontainer/devcontainer.json", "w") as f:
-                f.write(DEVCONTAINER_JSON)
+        if needs_setup:
+            _setup_sandbox(sb, with_cache)
 
         # Run the entire loop as a single bash script inside the sandbox
         print(f"\n{'=' * 60}", file=sys.stderr)
@@ -238,8 +273,15 @@ def run_load_test(iterations: int, with_cache: bool) -> None:
         proc.wait()
 
     finally:
-        print("\nTerminating sandbox...", file=sys.stderr)
-        sb.terminate()
+        # Do NOT terminate — leave the sandbox running so it keeps its IP.
+        # It will self-destruct after the 60-minute timeout.
+        print(file=sys.stderr)
+        print("=" * 60, file=sys.stderr)
+        print(f"Sandbox left running (self-destructs in ≤60 min)", file=sys.stderr)
+        print(f"  ID:    {sb.object_id}", file=sys.stderr)
+        print(f"  Reuse: --sandbox {sb.object_id}", file=sys.stderr)
+        print(f"  Shell: modal shell {sb.object_id}", file=sys.stderr)
+        print("=" * 60, file=sys.stderr)
 
 
 def main() -> None:
@@ -255,8 +297,21 @@ def main() -> None:
         action="store_true",
         help="Use the Modal registry cache (to test mitigation)",
     )
+    parser.add_argument(
+        "--sandbox",
+        type=str,
+        default=None,
+        help=(
+            "Sandbox ID from a previous run.  Reuses the same sandbox "
+            "(same IP) so Docker Hub rate-limit consumption accumulates."
+        ),
+    )
     args = parser.parse_args()
-    run_load_test(iterations=args.iterations, with_cache=args.with_cache)
+    run_load_test(
+        iterations=args.iterations,
+        with_cache=args.with_cache,
+        sandbox_id=args.sandbox,
+    )
 
 
 if __name__ == "__main__":

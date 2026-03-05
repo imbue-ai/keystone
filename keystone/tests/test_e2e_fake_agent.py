@@ -70,8 +70,8 @@ def test_e2e_fake_agent(
         "--agent_cmd",
         shlex.quote(agent_cmd_str),
         "--log_db",
-        "--no_evaluator",
         str(cache_file),
+        "--no_evaluator",
     ]
     if use_modal:
         cmd += ["--agent_in_modal", "--docker_registry_mirror", "https://mirror.gcr.io"]

@@ -260,18 +260,58 @@
 # name: test_e2e_sample_projects[python_project]
   dict({
     'agent': dict({
+      'cost': dict({
+        'ccusage_raw': None,
+        'cost_usd': 0.0,
+        'cost_usd_computed': 0.0,
+        'token_spending': dict({
+          'cache_creation': 0,
+          'cached': 0,
+          'input': 0,
+          'output': 0,
+        }),
+      }),
+      'duration_seconds': 0.036527832999126986,
+      'end_time': datetime.datetime(2026, 3, 5, 0, 1, 50, 370819, tzinfo=TzInfo(0)),
       'error_messages': list([
       ]),
       'exit_code': 0,
+      'start_time': datetime.datetime(2026, 3, 5, 0, 1, 22, 661476, tzinfo=TzInfo(0)),
       'status_messages': list([
-        'Exploring repository structure to identify file types and test locations.',
-        'Creating .devcontainer directory and files for a simple Python project.',
-        'Running guardrail check to validate files.',
+        dict({
+          'message': 'Exploring repository structure to identify file types and test locations.',
+          'timestamp': datetime.datetime(2026, 3, 5, 0, 1, 22, 697257, tzinfo=TzInfo(0)),
+        }),
+        dict({
+          'message': 'Creating .devcontainer directory and files for a simple Python project.',
+          'timestamp': datetime.datetime(2026, 3, 5, 0, 1, 22, 697636, tzinfo=TzInfo(0)),
+        }),
+        dict({
+          'message': 'Running guardrail check to validate files.',
+          'timestamp': datetime.datetime(2026, 3, 5, 0, 1, 22, 697819, tzinfo=TzInfo(0)),
+        }),
       ]),
-      'summary': 'Everything worked on the first try. Simple Python 3.11 project with uv for dependency management; uv venv pre-created in the Dockerfile for fast layer caching; pytest with --junitxml for JUnit output. Tip: the project is minimal (app.py + tests/test_app.py) with pytest and pytest-json-report as the only dependencies.',
+      'summary': dict({
+        'message': 'Everything worked on the first try. Simple Python 3.11 project with uv for dependency management; uv venv pre-created in the Dockerfile for fast layer caching; pytest with --junitxml for JUnit output. Tip: the project is minimal (app.py + tests/test_app.py) with pytest and pytest-json-report as the only dependencies.',
+        'timestamp': datetime.datetime(2026, 3, 5, 0, 1, 22, 697880, tzinfo=TzInfo(0)),
+      }),
       'timed_out': False,
     }),
+    'cli_args': list([
+      '/Users/thad/.sculptor_data/workspaces/b47b86b763664e0fbc602fc0aad5bc89/code/.venv/bin/pytest',
+      'keystone/tests/test_bootstrap.py::test_e2e_sample_projects',
+      '--snapshot-update',
+      '-v',
+    ]),
     'error_message': None,
+    'evaluator': dict({
+      'cost_usd': 0.0,
+      'issues': list([
+      ]),
+      'model': '',
+      'passed': True,
+      'reasoning': 'Skipped: ANTHROPIC_API_KEY not available',
+    }),
     'generated_files': dict({
       'devcontainer_json': '''
         {
@@ -347,7 +387,9 @@
     'success': True,
     'verification': dict({
       'error_message': None,
+      'image_build_seconds': 7.176905870437622,
       'success': True,
+      'test_execution_seconds': 1.3024802207946777,
       'test_results': list([
         dict({
           'name': 'tests.test_app::test_add',

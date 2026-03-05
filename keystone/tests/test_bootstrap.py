@@ -3,11 +3,11 @@ import logging
 import shlex
 import shutil
 from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 from conftest import SAMPLES_DIR, init_git_repo
+from snapshot_ext import SoftAmberExtension
 from syrupy.assertion import SnapshotAssertion
 from typer.testing import CliRunner
 
@@ -18,6 +18,38 @@ from keystone.schema import BootstrapResult
 from keystone.version import _UNKNOWN_VERSION, get_version_info
 
 logger = logging.getLogger(__name__)
+
+
+class BootstrapSnapshotExtension(SoftAmberExtension):
+    """Snapshot extension for bootstrap e2e tests.
+
+    Soft fields are stored in the snapshot for eyeballing diffs but do not
+    cause assertion failures if they change between runs.
+    """
+
+    soft_fields = frozenset(
+        {
+            # Timing
+            "agent.duration_seconds",
+            "agent.start_time",
+            "agent.end_time",
+            # Cost
+            "agent.cost",
+            # LLM-generated content (non-deterministic across runs)
+            "agent.status_messages",
+            "agent.summary",
+            "agent.error_messages",
+            "agent.model",
+            "generated_files",
+            # Environment-specific
+            "cli_args",
+            # LLM evaluator output
+            "evaluator",
+            # Verification timing
+            "verification.image_build_seconds",
+            "verification.test_execution_seconds",
+        }
+    )
 
 
 def test_cli_help() -> None:
@@ -595,9 +627,8 @@ def test_e2e_sample_projects(
     else:
         logger.warning("Skipping ccusage cost assertions (likely a cached replay)")
 
-    # Snapshot test - strip non-deterministic fields
-    snapshot_data = _strip_nondeterministic_fields(output)
-    assert snapshot_data == snapshot
+    # Snapshot test — full data stored, soft fields ignored during comparison
+    assert output.model_dump() == snapshot(extension_class=BootstrapSnapshotExtension)
 
 
 def _parse_bootstrap_result(stdout: str) -> BootstrapResult:
@@ -630,34 +661,6 @@ def _validate_status_messages(output: BootstrapResult) -> None:
     # Cost data is now computed post-hoc via ccusage (only available on Modal).
     # For local/test runs, cost will be zero — no assertion on cost values here.
 
-
-def _strip_nondeterministic_fields(output: BootstrapResult) -> dict[str, Any]:
-    """Remove timing and cost fields that vary between runs."""
-    result = output.model_dump()
-    # Remove agent timing/cost fields
-    if "agent" in result:
-        result["agent"].pop("duration_seconds", None)
-        result["agent"].pop("start_time", None)
-        result["agent"].pop("end_time", None)
-        result["agent"].pop("cost", None)
-        # Status messages contain timestamps and cumulative costs that vary
-        # Extract just the message text for deterministic comparison
-        if "status_messages" in result["agent"]:
-            result["agent"]["status_messages"] = [
-                msg["message"] for msg in result["agent"]["status_messages"]
-            ]
-        # Same for summary
-        if result["agent"].get("summary") is not None:
-            result["agent"]["summary"] = result["agent"]["summary"]["message"]
-    # Remove CLI args (they include pytest flags that vary between runs)
-    result.pop("cli_args", None)
-    # Remove evaluator result (LLM output is non-deterministic)
-    result.pop("evaluator", None)
-    # Remove verification timing fields (nested in verification)
-    if result.get("verification"):
-        result["verification"].pop("image_build_seconds", None)
-        result["verification"].pop("test_execution_seconds", None)
-    return result
 
 
 def test_max_budget_zero_fails(tmp_path: Path, project_root: Path) -> None:

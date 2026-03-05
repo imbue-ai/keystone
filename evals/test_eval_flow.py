@@ -135,7 +135,8 @@ def test_eval_flow_fake_agent(sample_repos: tuple[Path, list[str]], tmp_path: Pa
 
     # Verify per-repo results were written to "S3" (local filesystem)
     for result in output.results:
-        repo_output_dir = s3_output_dir / result.repo_entry.id
+        trial_index = result.trial_index if result.trial_index is not None else 0
+        repo_output_dir = s3_output_dir / result.repo_entry.id / f"trial_{trial_index}"
         result_file = repo_output_dir / "eval_result.json"
         # Result files may exist even for failures
         if result.success:

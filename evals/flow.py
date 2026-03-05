@@ -501,6 +501,72 @@ def _archive_repos(
     return archives
 
 
+DEFAULT_MAX_CONCURRENT_KEYSTONE: int = 100
+"""Maximum number of process_repo tasks running concurrently (across all configs)."""
+
+
+def _submit_with_concurrency_limit(
+    archives: list[tuple[RepoEntry, str, str]],
+    eval_config: EvalConfig,
+    trials_per_repo: int,
+    max_concurrent: int,
+    log: Any,
+) -> list[tuple[RepoEntry, int, PrefectFuture[RepoResult]]]:
+    """Submit process_repo tasks with a sliding-window concurrency limit.
+
+    At most *max_concurrent* tasks will be running (not yet finished) at any
+    time.  As running tasks complete, new ones are submitted to fill the
+    available slots.
+    """
+    # Build the full work list up front so ordering is deterministic.
+    work_items: list[tuple[RepoEntry, str, str, int]] = [
+        (repo_entry, s3_path, commit_hash, trial)
+        for repo_entry, s3_path, commit_hash in archives
+        for trial in range(trials_per_repo)
+    ]
+
+    all_futures: list[tuple[RepoEntry, int, PrefectFuture[RepoResult]]] = []
+    pending_futures: list[PrefectFuture[RepoResult]] = []
+    work_iter = iter(work_items)
+
+    def _submit_next() -> bool:
+        """Submit the next work item. Returns False when exhausted."""
+        item = next(work_iter, None)
+        if item is None:
+            return False
+        repo_entry, s3_path, commit_hash, trial = item
+        future = process_repo_task.submit(
+            repo_entry=repo_entry,
+            s3_tarball_path=s3_path,
+            commit_hash=commit_hash,
+            eval_config=eval_config,
+            trial=trial,
+        )
+        all_futures.append((repo_entry, trial, future))
+        pending_futures.append(future)
+        return True
+
+    # Fill initial window
+    for _ in range(min(max_concurrent, len(work_items))):
+        _submit_next()
+
+    log.info(
+        f"Submitted initial batch of {len(pending_futures)} tasks "
+        f"(max_concurrent={max_concurrent}, total={len(work_items)})"
+    )
+
+    # As tasks finish, submit replacements
+    while pending_futures:
+        done, not_done = wait(pending_futures)
+        pending_futures = list(not_done)
+        # Fill freed slots
+        for _ in range(len(done)):
+            if not _submit_next():
+                break
+
+    return all_futures
+
+
 def _run_eval_phase(
     archives: list[tuple[RepoEntry, str, str]],
     eval_config: EvalConfig,
@@ -526,20 +592,13 @@ def _run_eval_phase(
         f"Running keystone on {total} repos"
         f" ({trials_per_repo} trial(s) each, {total_tasks} total tasks)..."
     )
-    process_futures: list[tuple[RepoEntry, int, PrefectFuture[RepoResult]]] = []
-    for repo_entry, s3_path, commit_hash in archives:
-        for trial in range(trials_per_repo):
-            future = process_repo_task.submit(
-                repo_entry=repo_entry,
-                s3_tarball_path=s3_path,
-                commit_hash=commit_hash,
-                eval_config=eval_config,
-                trial=trial,
-            )
-            process_futures.append((repo_entry, trial, future))
-
-    # Collect results as they complete
-    wait([f for _, _, f in process_futures])
+    process_futures = _submit_with_concurrency_limit(
+        archives=archives,
+        eval_config=eval_config,
+        trials_per_repo=trials_per_repo,
+        max_concurrent=DEFAULT_MAX_CONCURRENT_KEYSTONE,
+        log=log,
+    )
     results: list[RepoResult] = []
     succeeded = 0
     failed = 0
@@ -675,6 +734,7 @@ def eval_flow(
     eval_configs: list[EvalConfig],
     s3_repo_cache_prefix: str,
     limit: int | None = None,
+    max_concurrent: int = DEFAULT_MAX_CONCURRENT_KEYSTONE,
 ) -> list[EvalOutput]:
     """Main evaluation flow.
 
@@ -689,14 +749,14 @@ def eval_flow(
     # Phase 1: Archive repos once (shared across all configs)
     archives = _archive_repos(repos, s3_repo_cache_prefix, log)
 
-    # Phase 2: Submit all configs' tasks concurrently, then collect results.
-    # Each config gets its own list of futures so results can be grouped later.
-    config_futures: list[
-        tuple[EvalConfig, list[tuple[RepoEntry, int, PrefectFuture[RepoResult]]]]
-    ] = []
+    # Phase 2: Submit all configs' tasks with a shared concurrency limit.
+    # Build work items across all configs, then use a sliding window to limit
+    # the number of concurrently running keystone tasks.
+    resolved_eval_configs: list[EvalConfig] = []
+    work_items: list[tuple[int, RepoEntry, str, str, int]] = []  # (config_idx, ...)
     for i, eval_config in enumerate(eval_configs):
         label = eval_config.name or f"config-{i}"
-        log.info(f"--- Submitting eval [{label}] ---")
+        log.info(f"--- Preparing eval [{label}] ---")
 
         trials_per_repo = eval_config.trials_per_repo
         if trials_per_repo > 1 and not eval_config.agent_config.no_cache_replay:
@@ -708,23 +768,54 @@ def eval_flow(
                     )
                 }
             )
+        resolved_eval_configs.append(eval_config)
 
-        futures: list[tuple[RepoEntry, int, PrefectFuture[RepoResult]]] = []
         for repo_entry, s3_path, commit_hash in archives:
             for trial in range(trials_per_repo):
-                future = process_repo_task.submit(
-                    repo_entry=repo_entry,
-                    s3_tarball_path=s3_path,
-                    commit_hash=commit_hash,
-                    eval_config=eval_config,
-                    trial=trial,
-                )
-                futures.append((repo_entry, trial, future))
-        config_futures.append((eval_config, futures))
+                work_items.append((i, repo_entry, s3_path, commit_hash, trial))
 
-    # Wait for ALL futures across all configs
-    all_futures = [f for _, group in config_futures for _, _, f in group]
-    wait(all_futures)
+    # Submit with sliding-window concurrency limit
+    all_tagged: list[tuple[int, RepoEntry, int, PrefectFuture[RepoResult]]] = []
+    pending_futures: list[PrefectFuture[RepoResult]] = []
+    work_iter = iter(work_items)
+
+    def _submit_next_item() -> bool:
+        item = next(work_iter, None)
+        if item is None:
+            return False
+        cfg_idx, repo_entry, s3_path, commit_hash, trial = item
+        future = process_repo_task.submit(
+            repo_entry=repo_entry,
+            s3_tarball_path=s3_path,
+            commit_hash=commit_hash,
+            eval_config=resolved_eval_configs[cfg_idx],
+            trial=trial,
+        )
+        all_tagged.append((cfg_idx, repo_entry, trial, future))
+        pending_futures.append(future)
+        return True
+
+    for _ in range(min(max_concurrent, len(work_items))):
+        _submit_next_item()
+
+    log.info(
+        f"Submitted initial batch of {len(pending_futures)} tasks "
+        f"(max_concurrent={max_concurrent}, total={len(work_items)})"
+    )
+
+    while pending_futures:
+        done, not_done = wait(pending_futures)
+        pending_futures = list(not_done)
+        for _ in range(len(done)):
+            if not _submit_next_item():
+                break
+
+    # Group futures by config index
+    config_futures: list[
+        tuple[EvalConfig, list[tuple[RepoEntry, int, PrefectFuture[RepoResult]]]]
+    ] = [(cfg, []) for cfg in resolved_eval_configs]
+    for cfg_idx, repo_entry, trial, future in all_tagged:
+        config_futures[cfg_idx][1].append((repo_entry, trial, future))
 
     # Collect results per config
     outputs: list[EvalOutput] = []

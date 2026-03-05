@@ -6,7 +6,7 @@ from pathlib import Path
 import json5
 import typer
 from config import EvalConfig, EvalOutput, EvalRunConfig
-from flow import eval_flow
+from flow import DEFAULT_MAX_CONCURRENT_KEYSTONE, eval_flow
 from rich.console import Console
 
 # Configure logging: WARNING for third-party, INFO for our code and prefect
@@ -56,6 +56,11 @@ def run(
     no_evaluator: bool = typer.Option(False, "--no_evaluator", help="Skip LLM evaluator"),
     no_guardrail: bool = typer.Option(False, "--no_guardrail", help="Skip guardrail checks"),
     limit: int | None = typer.Option(None, "--limit", help="Limit to first N repos"),
+    max_concurrent: int = typer.Option(
+        DEFAULT_MAX_CONCURRENT_KEYSTONE,
+        "--max_concurrent",
+        help="Max number of keystone tasks running concurrently.",
+    ),
 ) -> None:
     """Run the eval harness on a list of repos.
 
@@ -110,6 +115,7 @@ def run(
         eval_configs=resolved_configs,
         s3_repo_cache_prefix=run_config.s3_repo_cache_prefix,
         limit=effective_limit,
+        max_concurrent=max_concurrent,
     )
 
     _print_results(outputs, resolved_configs)

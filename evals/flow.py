@@ -305,6 +305,12 @@ def process_repo_task(
             if agent_config.run_agent_locally:
                 cmd.append("--run_agent_locally_with_dangerously_skip_permissions")
             else:
+                if not agent_config.docker_registry_mirror:
+                    raise RuntimeError(
+                        "DOCKER_REGISTRY_MIRROR environment variable is not set. "
+                        "Export it (e.g. export DOCKER_REGISTRY_MIRROR=https://mirror.gcr.io) "
+                        "or pass docker_registry_mirror in the agent config."
+                    )
                 cmd.extend(
                     [
                         "--agent_in_modal",

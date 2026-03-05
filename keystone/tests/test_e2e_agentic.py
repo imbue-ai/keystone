@@ -11,6 +11,7 @@ Markers:
 """
 
 import logging
+import os
 from pathlib import Path
 
 import pytest
@@ -102,7 +103,7 @@ def test_e2e_codex_on_modal(tmp_path: Path, project_root: Path) -> None:
         "codex",
         "--agent_in_modal",
         "--docker_registry_mirror",
-        "https://mirror.gcr.io",
+        os.environ["DOCKER_REGISTRY_MIRROR"],
         "--no_cache_replay",
     ]
 

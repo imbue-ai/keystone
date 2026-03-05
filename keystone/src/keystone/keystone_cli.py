@@ -1,6 +1,7 @@
 """Main user entry point for the Keystone CLI."""
 
 import logging
+import os
 import sys
 import time
 from datetime import UTC, datetime
@@ -141,12 +142,12 @@ def bootstrap(
         help="Maximum seconds for running tests",
     ),
     docker_registry_mirror: str | None = typer.Option(
-        "https://mirror.gcr.io",
+        os.environ.get("DOCKER_REGISTRY_MIRROR"),
         "--docker_registry_mirror",
         help=(
             "URL of a Docker Hub pull-through cache mirror.  The Docker daemon is configured "
             "to check this mirror first for all image pulls, avoiding Docker Hub rate limits.  "
-            "Default: https://mirror.gcr.io (Google's free public mirror).  "
+            "Reads from DOCKER_REGISTRY_MIRROR env var if not passed explicitly.  "
             "Pass --docker_registry_mirror='' to disable."
         ),
     ),
@@ -216,7 +217,13 @@ def bootstrap(
         if docker_registry_mirror:
             console.print(f"[blue]Docker Hub mirror:[/blue] {docker_registry_mirror}")
         else:
-            console.print("[dim]Docker Hub mirror: disabled[/dim]")
+            console.print(
+                "[bold red]Error:[/bold red] No Docker registry mirror configured. "
+                "Set the DOCKER_REGISTRY_MIRROR environment variable "
+                "(e.g. export DOCKER_REGISTRY_MIRROR=https://mirror.gcr.io) "
+                "or pass --docker_registry_mirror explicitly."
+            )
+            raise typer.Exit(code=1)
 
         inner_runner = ModalAgentRunner(docker_registry_mirror=docker_registry_mirror or None)
     else:

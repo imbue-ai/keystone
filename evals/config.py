@@ -1,5 +1,6 @@
 """Configuration schemas for the eval harness."""
 
+import os
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -99,8 +100,11 @@ class AgentConfig(BaseModel):
 
     # Docker Hub mirror for pull-through caching
     docker_registry_mirror: str = Field(
-        default="https://mirror.gcr.io",
-        description="URL of Docker Hub pull-through cache mirror (default: Google's mirror.gcr.io)",
+        default_factory=lambda: os.environ.get("DOCKER_REGISTRY_MIRROR", ""),
+        description=(
+            "URL of Docker Hub pull-through cache mirror.  "
+            "Set the DOCKER_REGISTRY_MIRROR environment variable or pass explicitly."
+        ),
     )
 
 

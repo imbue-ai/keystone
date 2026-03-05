@@ -152,7 +152,7 @@ class ModalAgentRunner(AgentRunner):
     def __init__(
         self,
         timeout_seconds: int = 3600,
-        docker_registry_mirror: str | None = "https://mirror.gcr.io",
+        docker_registry_mirror: str | None = None,
     ) -> None:
         self._timeout_seconds = timeout_seconds
         self._docker_registry_mirror = docker_registry_mirror

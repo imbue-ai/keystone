@@ -1,0 +1,50 @@
+#!/bin/bash
+set -eo pipefail
+# Run tests in increasing order of heaviness:
+#   1. Fast unmarked tests (< 2s, no infra needed)
+#   2. local_docker tests (need Docker daemon)
+#   3. modal tests without agentic (deterministic, need Modal)
+#   4. agentic tests (non-deterministic, need Modal + LLM keys)
+#
+# Pass --skip-agentic to stop before the non-deterministic tier.
+# Any extra args are forwarded to every pytest invocation.
+
+SKIP_AGENTIC=false
+EXTRA_ARGS=()
+for arg in "$@"; do
+  case "$arg" in
+    --skip-agentic) SKIP_AGENTIC=true ;;
+    *) EXTRA_ARGS+=("$arg") ;;
+  esac
+done
+
+header() { printf '\n\033[1;34m=== %s ===\033[0m\n' "$1"; }
+
+header "Fast tests (no markers)"
+uv run pytest \
+  --ignore=samples --ignore=github_datasets \
+  -m "not modal and not local_docker and not agentic and not manual" \
+  -q "${EXTRA_ARGS[@]}"
+
+header "local_docker tests"
+uv run pytest \
+  --ignore=samples --ignore=github_datasets \
+  -m "local_docker" \
+  -v "${EXTRA_ARGS[@]}"
+
+header "modal tests (deterministic, no agentic)"
+uv run pytest \
+  --ignore=samples --ignore=github_datasets \
+  -m "modal and not agentic" \
+  -v "${EXTRA_ARGS[@]}"
+
+if [ "$SKIP_AGENTIC" = true ]; then
+  header "Skipping agentic tests (--skip-agentic)"
+  exit 0
+fi
+
+header "agentic tests (non-deterministic)"
+uv run pytest \
+  --ignore=samples --ignore=github_datasets \
+  -m "agentic" \
+  -v "${EXTRA_ARGS[@]}"

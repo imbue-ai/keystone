@@ -5,6 +5,7 @@ Per-repo results are uploaded to S3 as they complete.
 """
 
 import contextlib
+import datetime
 import json
 import logging
 import subprocess
@@ -61,6 +62,66 @@ def _s3_read_bytes(path: str) -> bytes:
     """Read bytes from an S3 path using fsspec."""
     with fsspec.open(path, "rb") as f:
         return f.read()  # type: ignore[union-attr]
+
+
+def _get_git_info() -> tuple[str, bool]:
+    """Return (commit_hash, is_dirty) for the current repo."""
+    try:
+        repo_root = Path(__file__).parent.parent
+        commit = _run_git(["rev-parse", "HEAD"], cwd=repo_root, check=False)
+        commit_hash = commit.stdout.strip() if commit.returncode == 0 else "unknown"
+        status = _run_git(["status", "--porcelain"], cwd=repo_root, check=False)
+        is_dirty = bool(status.stdout.strip()) if status.returncode == 0 else False
+        return commit_hash, is_dirty
+    except Exception:
+        return "unknown", False
+
+
+def _save_rerun_manifest(
+    eval_config: "EvalConfig",
+    repo_list_path: str,
+    limit: int | None,
+    git_commit: str,
+    git_is_dirty: bool,
+    log: Any,
+) -> None:
+    """Save a rerun.json manifest to S3 so this eval can be exactly reproduced."""
+    s3_prefix = eval_config.s3_output_prefix.rstrip("/")
+    name = eval_config.name or ""
+
+    # Reconstruct parent prefix (strip trailing /{name})
+    if name and s3_prefix.endswith(f"/{name}"):
+        parent_prefix = s3_prefix[: -len(f"/{name}")]
+    else:
+        parent_prefix = s3_prefix
+
+    # Build a valid EvalRunConfig JSON (extra fields are ignored by EvalRunConfig parser)
+    config_dict = {
+        k: v
+        for k, v in eval_config.model_dump().items()
+        if k not in ("s3_output_prefix", "s3_repo_cache_prefix")
+    }
+    manifest = {
+        "description": (
+            f"Rerun of '{name}' "
+            f"(originally {datetime.datetime.now(datetime.UTC).strftime('%Y-%m-%dT%H:%M:%SZ')})"
+        ),
+        "repo_list_path": repo_list_path,
+        "limit": limit,
+        "s3_output_prefix": parent_prefix + "/",
+        "s3_repo_cache_prefix": eval_config.s3_repo_cache_prefix,
+        "configs": [config_dict],
+        # Extra metadata read by the viewer (ignored by EvalRunConfig)
+        "git_commit": git_commit,
+        "git_is_dirty": git_is_dirty,
+    }
+
+    rerun_path = f"{s3_prefix}/rerun.json"
+    try:
+        _s3_write_text(rerun_path, json.dumps(manifest, indent=2))
+        log.info(f"Saved rerun manifest to {rerun_path}")
+    except Exception as e:
+        log.warning(f"Failed to save rerun manifest: {e}")
 
 
 def _tarball_cache_key(
@@ -540,6 +601,10 @@ def _collect_eval_results(
     eval_config: EvalConfig,
     process_futures: list[tuple[RepoEntry, int, PrefectFuture[RepoResult]]],
     log: Any,
+    repo_list_path: str | None = None,
+    limit: int | None = None,
+    git_commit: str = "unknown",
+    git_is_dirty: bool = False,
 ) -> EvalOutput:
     """Collect results from already-completed futures and build EvalOutput."""
     total_tasks = len(process_futures)
@@ -596,6 +661,10 @@ def _collect_eval_results(
     except Exception as e:
         log.warning(f"Failed to upload eval summary to S3: {e}")
 
+    # Save rerun manifest so this eval can be exactly reproduced
+    if repo_list_path:
+        _save_rerun_manifest(eval_config, repo_list_path, limit, git_commit, git_is_dirty, log)
+
     log.info(f"Complete: {succeeded}/{total_tasks} succeeded, {failed}/{total_tasks} failed")
     return output
 
@@ -612,6 +681,8 @@ def eval_flow(
     Archives repos once, then runs each eval config against the same archives.
     """
     log = get_run_logger()
+    git_commit, git_is_dirty = _get_git_info()
+    log.info(f"Git state: {git_commit[:12]} {'(dirty)' if git_is_dirty else '(clean)'}")
     repos = _load_repos(repo_list_path, limit)
     log.info(f"Loaded {len(repos)} repos from {repo_list_path}")
 
@@ -658,7 +729,15 @@ def eval_flow(
     # Collect results per config
     outputs: list[EvalOutput] = []
     for eval_config, futures in config_futures:
-        output = _collect_eval_results(eval_config, futures, log)
+        output = _collect_eval_results(
+            eval_config,
+            futures,
+            log,
+            repo_list_path=repo_list_path,
+            limit=limit,
+            git_commit=git_commit,
+            git_is_dirty=git_is_dirty,
+        )
         outputs.append(output)
 
     return outputs

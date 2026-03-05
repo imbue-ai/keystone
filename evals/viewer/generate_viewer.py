@@ -96,8 +96,11 @@ def load_run_local(run_dir: Path) -> dict:
     return models
 
 
-def load_run_s3(run_name: str, s3_prefix: str) -> dict:
-    """Load all results from S3 for a given run, return {model: {repo: result}}."""
+def load_run_s3(run_name: str, s3_prefix: str) -> tuple[dict, dict]:
+    """Load all results from S3 for a given run.
+
+    Returns ({model: {repo: result}}, {model: rerun_meta}).
+    """
     import s3fs
 
     fs = s3fs.S3FileSystem(anon=False)
@@ -109,10 +112,11 @@ def load_run_s3(run_name: str, s3_prefix: str) -> dict:
     run_prefix = f"{fs_prefix}/{run_name}"
 
     models: dict[str, dict] = {}
+    rerun_meta: dict[str, dict] = {}
     try:
         model_dirs = fs.ls(run_prefix, detail=False)
     except FileNotFoundError:
-        return models
+        return models, rerun_meta
 
     for model_path in sorted(model_dirs):
         model_name = model_path.rstrip("/").split("/")[-1]
@@ -127,7 +131,22 @@ def load_run_s3(run_name: str, s3_prefix: str) -> dict:
             if fs.exists(result_path):
                 with fs.open(result_path) as f:
                     models[model_name][repo_name] = json.load(f)
-    return models
+
+        # Try to load rerun manifest for this model
+        rerun_path = f"{model_path}/rerun.json"
+        if fs.exists(rerun_path):
+            try:
+                with fs.open(rerun_path) as f:
+                    data = json.load(f)
+                rerun_meta[model_name] = {
+                    "s3_uri": f"s3://{rerun_path}",
+                    "git_commit": data.get("git_commit", "unknown"),
+                    "git_is_dirty": data.get("git_is_dirty", False),
+                }
+            except Exception:
+                pass
+
+    return models, rerun_meta
 
 
 def extract_summary(result: dict) -> dict:
@@ -177,15 +196,17 @@ def build_data(
 ) -> dict:
     """Build the full data dict for embedding in HTML."""
     runs: dict[str, dict] = {}
+    rerun_meta: dict[str, dict] = {}
     all_repos: set[str] = set()
 
     for run_name in run_names:
         if use_s3:
             print(f"  Loading {run_name} from S3...")
-            models = load_run_s3(run_name, s3_prefix)
+            models, run_rerun = load_run_s3(run_name, s3_prefix)
             if not models:
                 print(f"  [skip] {run_name} not found on S3")
                 continue
+            rerun_meta[run_name] = run_rerun
         else:
             run_dir = EVALS_DIR / run_name
             if not run_dir.exists():
@@ -193,6 +214,7 @@ def build_data(
                 continue
             print(f"  Loading {run_name} from local disk...")
             models = load_run_local(run_dir)
+            rerun_meta[run_name] = {}
 
         # Collect repo names
         for repos in models.values():
@@ -213,6 +235,7 @@ def build_data(
         "run_labels": RUN_LABELS,
         "repo_list": repo_list,
         "model_meta": MODEL_META,
+        "rerun_meta": rerun_meta,
     }
 
 
@@ -338,10 +361,47 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .chevron { display: inline-block; transition: transform .2s; margin-left: 6px;
              color: #475569; font-size: 11px; }
   .expanded .chevron { transform: rotate(90deg); }
+
+  .rerun-btn { background: none; border: 1px solid #3d4163; border-radius: 4px;
+               color: #64748b; cursor: pointer; font-size: 13px; padding: 1px 5px;
+               line-height: 1; transition: all .15s; }
+  .rerun-btn:hover { border-color: #6366f1; color: #a78bfa; background: #1e2235; }
+
+  .rerun-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6);
+                   z-index: 1000; display: flex; align-items: center; justify-content: center; }
+  .rerun-overlay.hidden { display: none; }
+  .rerun-box { background: #1a1d27; border: 1px solid #3d4163; border-radius: 10px;
+               padding: 20px 24px; max-width: 600px; width: 90%; }
+  .rerun-box h2 { font-size: 15px; color: #a78bfa; margin-bottom: 12px; }
+  .rerun-git { font-size: 12px; color: #64748b; margin-bottom: 12px; font-family: monospace; }
+  .rerun-git .dirty { color: #fb923c; }
+  .rerun-cmd-label { font-size: 12px; color: #94a3b8; margin-bottom: 6px; }
+  .rerun-cmd { background: #0f1117; border: 1px solid #2d3148; border-radius: 6px;
+               padding: 10px 12px; font-family: monospace; font-size: 12px; color: #c7d2fe;
+               word-break: break-all; white-space: pre-wrap; margin-bottom: 12px; }
+  .rerun-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .btn { padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px;
+         border: 1px solid #3d4163; background: #1e2235; color: #94a3b8; transition: all .15s; }
+  .btn:hover { background: #272b42; color: #e2e8f0; }
+  .btn.primary { background: #312e81; border-color: #6366f1; color: #c7d2fe; }
+  .btn.primary:hover { background: #3730a3; }
 </style>
 </head>
 <body>
 <div id="seg-tooltip"></div>
+
+<div class="rerun-overlay hidden" id="rerunOverlay" onclick="closeRerun(event)">
+  <div class="rerun-box" onclick="event.stopPropagation()">
+    <h2>Rerun <span id="rerunModelName"></span></h2>
+    <div class="rerun-git" id="rerunGitInfo"></div>
+    <div class="rerun-cmd-label">Run this command from the repo root:</div>
+    <pre class="rerun-cmd" id="rerunCmd"></pre>
+    <div class="rerun-actions">
+      <button class="btn" onclick="closeRerun()">Close</button>
+      <button class="btn primary" id="rerunCopyBtn" onclick="copyRerunCmd()">Copy command</button>
+    </div>
+  </div>
+</div>
 
 <header>
   <h1>Keystone Eval Viewer</h1>
@@ -458,11 +518,17 @@ function renderStats() {
     const totalCost = Object.values(repos).reduce((sum, r) => sum + (r.cost_usd || 0), 0);
     const costStr = "$" + totalCost.toFixed(2);
     const meta = getModelMeta(model);
+    const hasRerun = !!((DATA.rerun_meta[currentRun] || {})[model]);
+    const rerunBtn = hasRerun
+      ? `<button class="rerun-btn" title="Rerun this config"
+           onclick="showRerun(event,'${currentRun}','${model}')">&#x21ba;</button>`
+      : "";
     return `<div class="stat-chip">
       <div class="dot" style="background:${meta.color}"></div>
       <span class="pct" style="color:${meta.color}">${pct}%</span>
       <span class="label">${meta.label} (${passed}/${total})</span>
       <span class="cost">· ${costStr}</span>
+      ${rerunBtn}
     </div>`;
   }).join("");
   bar.innerHTML = chips + `<span class="stats-chevron" id="statsChevron">${breakdownOpen ? "▲ breakdown" : "▼ breakdown"}</span>`;
@@ -735,6 +801,37 @@ document.addEventListener("mousemove", e => {
 function escHtml(s) {
   return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
           .replace(/"/g,"&quot;").replace(/\\n/g,"<br>");
+}
+
+function showRerun(e, run, model) {
+  e.stopPropagation();
+  const meta = (DATA.rerun_meta[run] || {})[model];
+  if (!meta) return;
+  const displayModel = getModelMeta(model).label;
+  document.getElementById("rerunModelName").textContent = displayModel;
+  const commit = meta.git_commit.length > 12 ? meta.git_commit.slice(0, 12) : meta.git_commit;
+  const dirtyHtml = meta.git_is_dirty
+    ? ' <span class="dirty">&#9888; uncommitted changes at run time</span>'
+    : "";
+  document.getElementById("rerunGitInfo").innerHTML = "git: " + commit + dirtyHtml;
+  const cmd = "uv run python evals/eval_cli.py --config_file " + meta.s3_uri;
+  document.getElementById("rerunCmd").textContent = cmd;
+  document.getElementById("rerunCopyBtn").textContent = "Copy command";
+  document.getElementById("rerunOverlay").classList.remove("hidden");
+}
+
+function closeRerun(e) {
+  if (e && e.target !== document.getElementById("rerunOverlay")) return;
+  document.getElementById("rerunOverlay").classList.add("hidden");
+}
+
+function copyRerunCmd() {
+  const cmd = document.getElementById("rerunCmd").textContent;
+  navigator.clipboard.writeText(cmd).then(() => {
+    const btn = document.getElementById("rerunCopyBtn");
+    btn.textContent = "Copied!";
+    setTimeout(() => { btn.textContent = "Copy command"; }, 1500);
+  });
 }
 
 // Init

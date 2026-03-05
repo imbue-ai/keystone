@@ -63,7 +63,14 @@ def run(
     CLI flags ``--no_cache_replay``, ``--require_cache_hit``, and ``--limit``
     are applied as overrides on top of the config file.
     """
-    raw: dict = json5.loads(config_file.read_text())  # type: ignore[assignment]
+    config_path = str(config_file)
+    if config_path.startswith("s3://"):
+        import fsspec
+
+        with fsspec.open(config_path, "r") as f:
+            raw: dict = json5.loads(f.read())  # type: ignore[assignment]
+    else:
+        raw: dict = json5.loads(config_file.read_text())  # type: ignore[assignment]
     run_config = EvalRunConfig(**raw)
 
     effective_limit = limit if limit is not None else run_config.limit

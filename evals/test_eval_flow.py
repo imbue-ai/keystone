@@ -12,9 +12,9 @@ from pathlib import Path
 
 import pytest
 from config import AgentConfig, EvalConfig
+from keystone.constants import DEFAULT_TESTING_LOG_PATH
 from flow import eval_flow
 
-from keystone.constants import DEFAULT_TESTING_LOG_PATH
 
 SAMPLES_DIR = Path(__file__).parent.parent / "samples"
 FAKE_CLAUDE_AGENT = Path(__file__).parent.parent / "keystone" / "tests" / "fake_claude_agent.py"

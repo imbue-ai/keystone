@@ -6,6 +6,11 @@ set -eo pipefail
 #   3. modal tests without agentic (deterministic, need Modal)
 #   4. agentic tests (non-deterministic, need Modal + LLM keys)
 #
+# All tiers run with -n auto (pytest-xdist). Parallelism is relatively safe
+# because most of the actual work happens in isolated Modal sandboxes — each
+# test gets its own sandbox, so there is no shared Docker state between workers.
+# Tests that run locally use tmp_path fixtures, which are always worker-unique.
+#
 # Pass --skip-agentic to stop before the non-deterministic tier.
 # Any extra args are forwarded to every pytest invocation.
 
@@ -21,22 +26,22 @@ done
 header() { printf '\n\033[1;34m=== %s ===\033[0m\n' "$1"; }
 
 header "Fast tests (no markers)"
-uv run pytest \
+uv run --all-packages pytest \
   --ignore=samples --ignore=github_datasets \
   -m "not modal and not local_docker and not agentic and not manual" \
-  -q "${EXTRA_ARGS[@]}"
+  -n auto -q "${EXTRA_ARGS[@]}"
 
 header "local_docker tests"
-uv run pytest \
+uv run --all-packages pytest \
   --ignore=samples --ignore=github_datasets \
   -m "local_docker" \
-  -v "${EXTRA_ARGS[@]}"
+  -n auto -v "${EXTRA_ARGS[@]}"
 
 header "modal tests (deterministic, no agentic)"
-uv run pytest \
+uv run --all-packages pytest \
   --ignore=samples --ignore=github_datasets \
   -m "modal and not agentic" \
-  -v "${EXTRA_ARGS[@]}"
+  -n auto -v "${EXTRA_ARGS[@]}"
 
 if [ "$SKIP_AGENTIC" = true ]; then
   header "Skipping agentic tests (--skip-agentic)"
@@ -44,7 +49,7 @@ if [ "$SKIP_AGENTIC" = true ]; then
 fi
 
 header "agentic tests (non-deterministic)"
-uv run pytest \
+uv run --all-packages pytest \
   --ignore=samples --ignore=github_datasets \
   -m "agentic" \
-  -v "${EXTRA_ARGS[@]}"
+  -n auto -v "${EXTRA_ARGS[@]}"

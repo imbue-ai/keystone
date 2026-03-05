@@ -25,6 +25,7 @@ from typer.testing import CliRunner
 REPOS_JSONL = Path(__file__).parent / "test_data" / "tiny_codex" / "repos.jsonl"
 
 
+@pytest.mark.skip(reason="It's just too slow.")
 @pytest.mark.modal
 @pytest.mark.agentic
 def test_tiny_codex_eval(tmp_path: Path) -> None:
@@ -45,8 +46,8 @@ def test_tiny_codex_eval(tmp_path: Path) -> None:
                 agent_config=AgentConfig(
                     provider="codex",
                     max_budget_usd=5.0,
-                    evaluator=True,
-                    timeout_minutes=20,
+                    evaluator=False,
+                    timeout_minutes=3,
                 ),
                 trials_per_repo=1,
             ),

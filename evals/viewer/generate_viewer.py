@@ -18,12 +18,14 @@ RUN_NAMES = [
     "2026-03-02_cat_v1",
     "2026-03-02_cat_v1_opencode",
     "2026-03-03_cat_v1_agents_md",
+    "2026-03-04_cat_v1",
 ]
 
 RUN_LABELS = {
     "2026-03-02_cat_v1": "Native (baseline)",
     "2026-03-02_cat_v1_opencode": "OpenCode",
     "2026-03-03_cat_v1_agents_md": "AGENTS.md ablation",
+    "2026-03-04_cat_v1": "Native 2026-03-04",
 }
 
 # Canonical model display order & colors per run

@@ -16,7 +16,7 @@ import shutil
 from pathlib import Path
 
 import pytest
-from conftest import SAMPLES_DIR, init_git_repo
+from conftest import SAMPLES_DIR, init_git_repo, parse_bootstrap_result
 from typer.testing import CliRunner
 
 from keystone.keystone_cli import app
@@ -47,6 +47,7 @@ def test_e2e_fake_agent(
     Parameterized to run both locally (--run_agent_locally_with_dangerously_skip_permissions)
     and on Modal (--agent_in_modal with --docker_registry_mirror).
     """
+    del caplog
     use_modal = execution_mode == "modal"
     test_artifacts_dir = tmp_path / "test_artifacts"
     fake_agent_src = Path(__file__).parent / "fake_claude_agent.py"
@@ -69,6 +70,7 @@ def test_e2e_fake_agent(
         "--agent_cmd",
         shlex.quote(agent_cmd_str),
         "--log_db",
+        "--no_evaluator",
         str(cache_file),
     ]
     if use_modal:
@@ -251,7 +253,6 @@ def test_e2e_agent_error_propagation(tmp_path: Path, project_root: Path) -> None
     3. The error_message includes both the verification failure AND the agent error.
     4. agent.error_messages contains the structured error from the agent.
     """
-    from conftest import parse_bootstrap_result
 
     test_artifacts_dir = tmp_path / "test_artifacts"
     cache_file = tmp_path / "codex_error_cache.sqlite"

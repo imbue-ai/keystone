@@ -240,7 +240,7 @@ def bootstrap(
     def _make_status_message(message: str) -> AgentStatusMessage:
         """Create an AgentStatusMessage with current timestamp."""
         return AgentStatusMessage(
-            timestamp=datetime.now(UTC),
+            timestamp=datetime.now(UTC).isoformat(),
             message=message,
         )
 
@@ -609,8 +609,8 @@ def bootstrap(
         error_message=error_message,
         cli_args=sys.argv,
         agent=AgentExecution(
-            start_time=start_datetime,
-            end_time=datetime.now(UTC),
+            start_time=start_datetime.isoformat(),
+            end_time=datetime.now(UTC).isoformat(),
             duration_seconds=agent_work_seconds,
             exit_code=exit_code,
             timed_out=agent_timed_out,

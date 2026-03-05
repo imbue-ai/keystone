@@ -2,8 +2,21 @@
 
 from datetime import datetime
 from enum import Enum
+from typing import Annotated
 
-from pydantic import BaseModel
+from pydantic import BaseModel, BeforeValidator
+
+
+def _ensure_iso_string(v: object) -> str:
+    """Convert datetime objects to ISO strings; pass through strings."""
+    if isinstance(v, datetime):
+        return v.isoformat()
+    if isinstance(v, str):
+        return v
+    raise TypeError(f"Expected datetime or str, got {type(v)}")
+
+
+ISOTimestamp = Annotated[str, BeforeValidator(_ensure_iso_string)]
 
 
 class StreamType(str, Enum):
@@ -78,7 +91,7 @@ class InferenceCost(BaseModel):
 class AgentStatusMessage(BaseModel):
     """A status message from the agent with timestamp."""
 
-    timestamp: datetime
+    timestamp: ISOTimestamp
     message: str
 
 
@@ -110,8 +123,8 @@ class VerificationResult(BaseModel):
 class AgentExecution(BaseModel):
     """Details about the agent's execution."""
 
-    start_time: datetime
-    end_time: datetime
+    start_time: ISOTimestamp
+    end_time: ISOTimestamp
     duration_seconds: float
     exit_code: int
     timed_out: bool = False

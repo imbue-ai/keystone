@@ -172,8 +172,15 @@ def archive_repo_task(
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         clone_path = Path(tmp_dir) / repo_id
-        log.info(f"Cloning {repo_url}...")
-        _run_git(["clone", "--depth=1", repo_url, str(clone_path)])
+        pinned_hash = repo_entry.commit_hash
+        if pinned_hash:
+            # Clone full history so we can check out the pinned commit
+            log.info(f"Cloning {repo_url} (pinned to {pinned_hash[:12]})...")
+            _run_git(["clone", repo_url, str(clone_path)])
+            _run_git(["checkout", pinned_hash], cwd=clone_path)
+        else:
+            log.info(f"Cloning {repo_url} (HEAD)...")
+            _run_git(["clone", "--depth=1", repo_url, str(clone_path)])
 
         # Get HEAD commit
         result = _run_git(["rev-parse", "HEAD"], cwd=clone_path)

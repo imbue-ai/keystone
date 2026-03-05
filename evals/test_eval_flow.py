@@ -158,8 +158,8 @@ def test_eval_flow_fake_agent(sample_repos: tuple[Path, list[str]], tmp_path: Pa
 
 @pytest.mark.modal
 @pytest.mark.agentic
-def test_eval_flow_modal(sample_repos: tuple[Path, list[str]], tmp_path: Path) -> None:
-    """End-to-end test with real agent on Modal.
+def test_eval_flow_claude_on_modal(sample_repos: tuple[Path, list[str]], tmp_path: Path) -> None:
+    """End-to-end test with real Claude agent on Modal.
 
     This test:
     1. Creates local git repos from samples (python_project, go_project)

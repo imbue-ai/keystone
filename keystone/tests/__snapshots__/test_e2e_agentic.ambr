@@ -1,5 +1,5 @@
 # serializer version: 1
-# name: test_e2e_sample_projects[cmake_vcpkg_project]
+# name: test_e2e_claude_on_modal_sample_projects[cmake_vcpkg_project]
   dict({
     'agent': dict({
       'exit_code': 0,
@@ -120,7 +120,7 @@
     }),
   })
 # ---
-# name: test_e2e_sample_projects[fullstack_project]
+# name: test_e2e_claude_on_modal_sample_projects[fullstack_project]
   dict({
     'agent': dict({
       'exit_code': 0,
@@ -257,7 +257,7 @@
     }),
   })
 # ---
-# name: test_e2e_sample_projects[python_project]
+# name: test_e2e_claude_on_modal_sample_projects[python_project]
   dict({
     'agent': dict({
       'cost': dict({
@@ -299,7 +299,7 @@
     }),
     'cli_args': list([
       '/Users/thad/.sculptor_data/workspaces/b47b86b763664e0fbc602fc0aad5bc89/code/.venv/bin/pytest',
-      'keystone/tests/test_bootstrap.py::test_e2e_sample_projects',
+      'keystone/tests/test_bootstrap.py::test_e2e_claude_on_modal_sample_projects',
       '--snapshot-update',
       '-v',
     ]),
@@ -408,7 +408,7 @@
     }),
   })
 # ---
-# name: test_e2e_sample_projects[python_with_failing_test]
+# name: test_e2e_claude_on_modal_sample_projects[python_with_failing_test]
   dict({
     'agent': dict({
       'exit_code': 0,

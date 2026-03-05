@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from keystone.schema import BootstrapResult
+
 # Path to samples directory
 SAMPLES_DIR = Path(__file__).parent.parent.parent / "samples"
 
@@ -58,6 +60,19 @@ def init_git_repo(path: Path, add_all: bool = True, commit: bool = True) -> None
             )
     except subprocess.CalledProcessError as e:
         raise GitError(f"Failed to initialize git repo: {e.stderr}") from e
+
+
+def parse_bootstrap_result(stdout: str) -> BootstrapResult:
+    """Extract and parse the JSON BootstrapResult from CLI stdout."""
+    stdout_lines = stdout.strip().split("\n")
+    json_start = None
+    for i, line in enumerate(stdout_lines):
+        if line.strip() == "{":
+            json_start = i
+            break
+    assert json_start is not None, "Could not find JSON output in stdout"
+    json_str = "\n".join(stdout_lines[json_start:])
+    return BootstrapResult.model_validate_json(json_str)
 
 
 @pytest.fixture

@@ -70,6 +70,7 @@ class RepoEntry(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+# FIXME: Move this into src/keystone/schema.py, and having Keystone's CLI args be converted into this type before being passed onwards to the rest of the Keystone app.  Make sure there's not already a similar/overlapping/conficting type like this.  LLMModel would have to move as well -- I thought we already had one like that.  In fact we do.
 class KeystoneConfig(BaseModel):
     """Configuration for a single Keystone CLI invocation.
 

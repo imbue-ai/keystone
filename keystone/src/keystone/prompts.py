@@ -3,10 +3,19 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+from pydantic import BaseModel
+
 from keystone.constants import STATUS_MARKER, SUMMARY_MARKER
 
 if TYPE_CHECKING:
     from keystone.schema import AgentConfig
+
+
+class Prompt(BaseModel):
+    """The assembled prompt output from :func:`build_prompt`."""
+
+    cli_prompt: str
+    agents_md: str | None = None
 
 
 def generate_devcontainer_json() -> str:
@@ -321,13 +330,22 @@ RUN chown user:group /path/file.txt
 """
 
 
-def build_agent_prompt(config: AgentConfig) -> str:
-    """Build the inline agent prompt from *config*.
+def build_prompt(config: AgentConfig) -> Prompt:
+    """Build the prompt for the agent from *config*.
 
-    The prompt is assembled from sections so that optional parts (e.g. the
-    guardrail script instructions) can be included or excluded based on
-    the configuration.
+    When ``config.use_agents_md`` is True, the returned :class:`Prompt` has
+    ``agents_md`` set to write to the project root and a short
+    ``cli_prompt``.  Otherwise ``agents_md`` is ``None`` and ``cli_prompt``
+    is the full inline prompt.
     """
+    if config.use_agents_md:
+        agents_md, cli_prompt = _build_agents_md_prompt(config)
+        return Prompt(cli_prompt=cli_prompt, agents_md=agents_md)
+    return Prompt(cli_prompt=_build_inline_prompt(config))
+
+
+def _build_inline_prompt(config: AgentConfig) -> str:
+    """Build the full inline agent prompt."""
     prompt = AGENT_PROMPT_TEMPLATE.replace(
         "{GUARDRAIL_SECTION}",
         _INLINE_GUARDRAIL if config.guardrail else "\n",
@@ -430,13 +448,8 @@ AGENTS_MD_SHORT_PROMPT = (
 )
 
 
-def build_agents_md_prompt(config: AgentConfig) -> tuple[str, str]:
-    """Return (agents_md_content, short_cli_prompt) for providers that use AGENTS.md.
-
-    The AGENTS.md is written to the project root before launching the agent,
-    keeping the CLI prompt short so agents don't exhaust their output budget
-    on prompt comprehension. Used by both codex and claude (use_agents_md) providers.
-    """
+def _build_agents_md_prompt(config: AgentConfig) -> tuple[str, str]:
+    """Return (agents_md_content, short_cli_prompt) for the AGENTS.md path."""
     agents_md = AGENTS_MD.replace(
         "{GUARDRAIL_WORKFLOW_STEP}",
         _AGENTS_MD_GUARDRAIL_WORKFLOW_STEP if config.guardrail else "",

@@ -43,7 +43,7 @@ from keystone.llm_provider import (
 )
 from keystone.logging_utils import ISOFormatter
 from keystone.modal.modal_runner import ModalAgentRunner
-from keystone.prompts import build_agent_prompt, build_agents_md_prompt
+from keystone.prompts import build_prompt
 from keystone.schema import (
     AgentConfig,
     AgentExecution,
@@ -213,15 +213,7 @@ def bootstrap(
         use_agents_md=use_agents_md,
     )
 
-    # Build prompt — controlled by the --use_agents_md flag, not the provider.
-    # When use_agents_md is True, we write an AGENTS.md file and use a short
-    # CLI prompt; otherwise we send the full inline prompt.  This keeps the
-    # experimental variation explicit so it can be reported across all models.
-    agents_md_content: str | None = None
-    if use_agents_md:
-        agents_md_content, prompt = build_agents_md_prompt(agent_config)
-    else:
-        prompt = build_agent_prompt(agent_config)
+    prompt_result = build_prompt(agent_config)
 
     start_time = time.monotonic()
     start_datetime = datetime.now(UTC)
@@ -318,7 +310,9 @@ def bootstrap(
         effective_agent_cmd = agent_config.agent_cmd or provider.default_cmd
 
         # Compute cache key
-        cache_key = compute_cache_key(prompt, project_root, agent_config, cache_version)
+        cache_key = compute_cache_key(
+            prompt_result.cli_prompt, project_root, agent_config, cache_version
+        )
         print(
             f"Cache key - git tree: {cache_key.git_tree_hash}, "
             f"prompt MD5: {cache_key.prompt_hash}, "
@@ -344,13 +338,13 @@ def bootstrap(
         # Run agent (or replay from cache — the caller doesn't need to know)
         try:
             for event in runner.run(
-                prompt,
+                prompt_result.cli_prompt,
                 project_archive,
                 max_budget_usd,
                 effective_agent_cmd,
                 agent_time_limit_seconds,
                 provider,
-                agents_md=agents_md_content,
+                agents_md=prompt_result.agents_md,
                 guardrail=guardrail,
             ):
                 if event.stream == "stdout":

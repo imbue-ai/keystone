@@ -78,7 +78,7 @@ def run(
         raw: dict = json5.loads(config_file.read_text())  # type: ignore[assignment]
     run_config = EvalRunConfig(**raw)
 
-    effective_limit = limit if limit is not None else run_config.limit
+    effective_limit = limit if limit is not None else run_config.limit_to_first_n_repos
 
     resolved_configs = [
         run_config.resolve_config(cfg, i) for i, cfg in enumerate(run_config.configs)

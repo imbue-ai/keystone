@@ -45,11 +45,26 @@ class RepoEntry(BaseModel):
     )
 
 
+# FIXME: Would it make sense to call this KeystoneConfig?  These are the options that feed the Keystone CLI, I believe.
 class AgentConfig(BaseModel):
     """Configuration for the agent execution."""
 
-    max_budget_usd: float = Field(default=1.0, description="Maximum budget per repo")
-    timeout_minutes: int = Field(default=30, description="Timeout per repo in minutes")
+    max_budget_usd: float = Field(..., description="Maximum budget per repo")
+    timeout_minutes: int = Field(..., description="Timeout per repo in minutes")
+
+    # Log database.
+    log_db: str | None = Field(
+        default=None,
+        description="Database for logging/caching. SQLite path or postgresql:// URL",
+    )
+
+    # Cache settings.
+    require_cache_hit: bool = Field(
+        default=False, description="Fail if cache miss (for CI/testing)"
+    )
+    no_cache_replay: bool = Field(
+        default=False, description="Skip cache lookup, force fresh execution"
+    )
 
     # Provider and agent command
     provider: str = Field(
@@ -58,21 +73,6 @@ class AgentConfig(BaseModel):
     agent_cmd: str | None = Field(
         default=None, description="Agent command override (default: inferred from provider)"
     )
-
-    # Log database (shared with CLI)
-    log_db: str | None = Field(
-        default=None,
-        description="Database for logging/caching. SQLite path or postgresql:// URL",
-    )
-
-    # Cache settings
-    require_cache_hit: bool = Field(
-        default=False, description="Fail if cache miss (for CI/testing)"
-    )
-    no_cache_replay: bool = Field(
-        default=False, description="Skip cache lookup, force fresh execution"
-    )
-
     # Model selection
     model: LLMModel | None = Field(
         default=None,
@@ -90,14 +90,13 @@ class AgentConfig(BaseModel):
         ...,
         description="Enable or disable the LLM evaluator fix-up pass.",
     )
-    guardrail: bool = Field(
-        default=True, description="Enable or disable guardrail structural checks"
-    )
+    guardrail: bool = Field(..., description="Enable or disable guardrail structural checks")
     use_agents_md: bool = Field(
-        default=True,
+        ...,
         description="Use AGENTS.md file + short CLI prompt instead of full inline prompt",
     )
 
+    # FIXME: This should be specified at the level of EvalRunConfig.  Whenever we're launching Keystone, we should propagate those "wider-scoped" configs down into the relevant code so that they're avaiable to configure parameters.
     # Docker Hub mirror for pull-through caching
     docker_registry_mirror: str = Field(
         default_factory=lambda: os.environ.get("DOCKER_REGISTRY_MIRROR", ""),
@@ -108,51 +107,73 @@ class AgentConfig(BaseModel):
     )
 
 
+# FIXME: This is the EvalConfig only for a single AgentConfig (which might be renamed to KeystoneConfig) -- maybe this should be called EvalConfiguration?
 class EvalConfig(BaseModel):
     """Top-level eval configuration."""
 
     # Optional human-readable name for this eval configuration
-    name: str | None = Field(default=None, description="Name for this eval configuration")
+    name: str | None = Field(..., description="Name for this eval configuration")
 
+    # FIXME: Maybe should be called KeystoneConfig?
     agent_config: AgentConfig = Field(...)
+
     trials_per_repo: int = Field(
         default=1,
         description="Number of trials per repo. When >1, caching is automatically disabled.",
     )
+    # FIXME: It doesn't make sense to have this value here.
     # These are computed from EvalRunConfig globals; not set directly in config files.
     s3_output_prefix: str = Field(
-        default="",
+        ...,
         description="S3 prefix for per-repo results (set by EvalRunConfig, not manually).",
     )
     s3_repo_cache_prefix: str = Field(
-        default="",
+        ...,
         description="S3 prefix for cached repo tarballs (set by EvalRunConfig, not manually).",
     )
 
 
+# FIXME: rename to KeystoneRepoResult
 class RepoResult(BaseModel):
-    """Result from processing a single repo."""
+    """Result from one trial: a single application of Keystone with a particular configuration to a single repo."""
 
     repo_entry: RepoEntry
-    success: bool
-    error_message: str | None = None
-    bootstrap_result: dict[str, Any] | None = None
     agent_config: AgentConfig | None = None
     trial_index: int | None = None
 
+    # Differs from agent_config.success? -- Keystone can succeed but we can fail to package the result?
+    # FIXME: Actually, document what causes this to be False.
+    success: bool
 
+    error_message: str | None = None
+
+    # FIXME: Use the proper type here: BootstrapResult
+    bootstrap_result: dict[str, Any] | None = None
+
+
+# FIXME: Let's be consistent with naming and use a Result suffix instead of Output.
 class EvalOutput(BaseModel):
-    """Output of the entire eval run."""
+    """Output of the entire eval run.
 
+    This type is less important because we want to be able to analyze a partially completed run before this global summary is available.
+    """
+
+    # FIXME: Let's use a proper type here: VersionInfo
     keystone_version: dict[str, Any]
+
+    # FIXME: This doesn't make sense to use a dict here.  Use a proper type.  I think this should be EvalRunConfig.  It shouldn't ever be None.
     eval_config: dict[str, Any] | None = Field(
         default=None,
         description="Snapshot of the EvalConfig used for this run.",
     )
+
+    # FIXME: We don't need repos here anymore -- the versions are already pre-pinned.  Delete this field.
     repos: list[RepoEntry]  # Input repos with commit_hash pinned
+
     results: list[RepoResult]
 
 
+# FIXME: Move all the input/config classes above all of the output/result classes.
 class EvalRunConfig(BaseModel):
     """Top-level configuration file supporting multiple eval configurations.
 
@@ -168,11 +189,11 @@ class EvalRunConfig(BaseModel):
 
     description: str = Field(
         ...,
-        description="Free-text summary of what this experiment is about.",
+        description="Free-text summary of what this whole experiment is about.",
     )
     repo_list_path: str = Field(..., description="Path to repo_list.jsonl")
     configs: list[EvalConfig] = Field(..., description="List of eval configurations to run")
-    limit: int | None = Field(default=None, description="Limit to first N repos")
+    limit_to_first_n_repos: int | None = Field(default=None, description="Limit to first N repos")
     s3_output_prefix: str = Field(
         ...,
         description="Global S3 output prefix. Each config gets a subdirectory named after the config.",

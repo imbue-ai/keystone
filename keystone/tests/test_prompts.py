@@ -6,7 +6,7 @@ Run with --snapshot-update to regenerate goldens after intentional changes.
 import pytest
 from syrupy.assertion import SnapshotAssertion
 
-from keystone.prompts import build_agent_prompt, build_agents_md_prompt
+from keystone.prompts import build_prompt
 from keystone.schema import AgentConfig
 
 
@@ -28,7 +28,7 @@ def _make_config(
     )
 
 
-# -- Inline prompt (build_agent_prompt) ------------------------------------
+# -- Inline prompt (use_agents_md=False) -----------------------------------
 
 
 @pytest.mark.parametrize(
@@ -52,11 +52,11 @@ def test_inline_prompt(
     snapshot: SnapshotAssertion,
 ) -> None:
     config = _make_config(guardrail=guardrail, agent_in_modal=agent_in_modal)
-    prompt = build_agent_prompt(config)
-    assert prompt == snapshot
+    result = build_prompt(config)
+    assert result.cli_prompt == snapshot
 
 
-# -- AGENTS.md prompt (build_agents_md_prompt) ------------------------------
+# -- AGENTS.md prompt (use_agents_md=True) ---------------------------------
 
 
 @pytest.mark.parametrize(
@@ -79,6 +79,6 @@ def test_agents_md_prompt(
     agent_in_modal: bool,
     snapshot: SnapshotAssertion,
 ) -> None:
-    config = _make_config(guardrail=guardrail, agent_in_modal=agent_in_modal)
-    agents_md, short_prompt = build_agents_md_prompt(config)
-    assert {"agents_md": agents_md, "short_prompt": short_prompt} == snapshot
+    config = _make_config(guardrail=guardrail, agent_in_modal=agent_in_modal, use_agents_md=True)
+    result = build_prompt(config)
+    assert {"agents_md": result.agents_md, "short_prompt": result.cli_prompt} == snapshot

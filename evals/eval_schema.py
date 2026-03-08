@@ -34,6 +34,14 @@ class RepoEntry(BaseModel):
     tests: str | None = None
     difficulty: str | None = None
     notes: str | None = None
+    # Metrics from GitHub (optional, populated by merge_repo_lists.py)
+    stars: int | None = None
+    size_mb: float | None = None
+    recent_commits_90d: int | None = None
+    test_files_total: int | None = None
+    test_files_by_name: int | None = None
+    files_in_test_dirs: int | None = None
+    from_examples: bool | None = None
     # Pinned commit — the clone checks out this exact commit for reproducibility
     commit_hash: str = Field(
         ...,

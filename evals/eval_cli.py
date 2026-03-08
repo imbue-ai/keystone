@@ -7,6 +7,7 @@ import json5
 import typer
 from eval_schema import EvalConfig, EvalResult, EvalRunConfig
 from flow import DEFAULT_MAX_CONCURRENT_KEYSTONE, eval_flow
+from prefect.task_runners import ThreadPoolTaskRunner
 from rich.console import Console
 
 # Configure logging: WARNING for third-party, INFO for our code and prefect
@@ -52,10 +53,10 @@ def run(
         help="Path to JSON config file (EvalRunConfig).",
     ),
     no_cache_replay: bool = typer.Option(False, "--no_cache_replay", help="Force fresh execution"),
-    require_cache_hit: bool = typer.Option(False, "--require_cache_hit", help="Fail if cache miss"),
-    no_evaluator: bool = typer.Option(False, "--no_evaluator", help="Skip LLM evaluator"),
-    no_guardrail: bool = typer.Option(False, "--no_guardrail", help="Disable guardrail checks"),
-    limit: int | None = typer.Option(None, "--limit", help="Limit to first N repos"),
+    # require_cache_hit: bool = typer.Option(False, "--require_cache_hit", help="Fail if cache miss"),
+    # no_evaluator: bool = typer.Option(False, "--no_evaluator", help="Skip LLM evaluator"),
+    # no_guardrail: bool = typer.Option(False, "--no_guardrail", help="Disable guardrail checks"),
+    # limit: int | None = typer.Option(None, "--limit", help="Limit to first N repos"),
     max_concurrent: int = typer.Option(
         DEFAULT_MAX_CONCURRENT_KEYSTONE,
         "--max_concurrent",
@@ -78,7 +79,7 @@ def run(
         raw: dict = json5.loads(config_file.read_text())  # type: ignore[assignment]
     run_config = EvalRunConfig(**raw)
 
-    effective_limit = limit if limit is not None else run_config.limit_to_first_n_repos
+    # effective_limit = limit if limit is not None else run_config.limit_to_first_n_repos
 
     resolved_configs = [
         run_config.resolve_config(cfg, i) for i, cfg in enumerate(run_config.configs)
@@ -88,17 +89,17 @@ def run(
     if no_cache_replay:
         for cfg in resolved_configs:
             cfg.keystone_config = cfg.keystone_config.model_copy(update={"no_cache_replay": True})
-    if require_cache_hit:
-        for cfg in resolved_configs:
-            cfg.keystone_config = cfg.keystone_config.model_copy(update={"require_cache_hit": True})
-    if no_evaluator:
-        for cfg in resolved_configs:
-            ac = cfg.keystone_config.agent_config.model_copy(update={"evaluator": False})
-            cfg.keystone_config = cfg.keystone_config.model_copy(update={"agent_config": ac})
-    if no_guardrail:
-        for cfg in resolved_configs:
-            ac = cfg.keystone_config.agent_config.model_copy(update={"guardrail": False})
-            cfg.keystone_config = cfg.keystone_config.model_copy(update={"agent_config": ac})
+    # if require_cache_hit:
+    #     for cfg in resolved_configs:
+    #         cfg.keystone_config = cfg.keystone_config.model_copy(update={"require_cache_hit": True})
+    # if no_evaluator:
+    #     for cfg in resolved_configs:
+    #         ac = cfg.keystone_config.agent_config.model_copy(update={"evaluator": False})
+    #         cfg.keystone_config = cfg.keystone_config.model_copy(update={"agent_config": ac})
+    # if no_guardrail:
+    #     for cfg in resolved_configs:
+    #         ac = cfg.keystone_config.agent_config.model_copy(update={"guardrail": False})
+    #         cfg.keystone_config = cfg.keystone_config.model_copy(update={"agent_config": ac})
 
     # Print plan
     console.print(f"\n[bold]Eval run: {len(resolved_configs)} configs[/bold]")
@@ -112,11 +113,14 @@ def run(
             f"model={cfg.keystone_config.agent_config.model.value if cfg.keystone_config.agent_config.model else 'default'}"
         )
 
-    outputs = eval_flow(
+    configured_flow = eval_flow.with_options(
+        task_runner=ThreadPoolTaskRunner(max_workers=max_concurrent),  # type: ignore[reportArgumentType]
+    )
+    outputs = configured_flow(  # type: ignore[reportCallIssue]
         repo_list_path=run_config.repo_list_path,
         eval_configs=resolved_configs,
         s3_repo_cache_prefix=run_config.s3_repo_cache_prefix,
-        limit=effective_limit,
+        limit=run_config.limit_to_first_n_repos,
         max_concurrent=max_concurrent,
         docker_registry_mirror=run_config.docker_registry_mirror,
     )

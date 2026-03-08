@@ -207,7 +207,8 @@ def _process_repo_task_name(parameters: dict[str, object]) -> str:
     repo_entry: RepoEntry = parameters["repo_entry"]  # type: ignore[assignment]
     eval_config: EvalConfig = parameters["eval_config"]  # type: ignore[assignment]
     trial: int | None = parameters.get("trial")  # type: ignore[assignment]
-    return f"{eval_config.name or 'default'}/{repo_entry.id}/t{trial}"
+    assert eval_config.name, "Must have a name!"
+    return f"{eval_config.name}/{repo_entry.id}/t{trial}"
 
 
 @task(
@@ -220,8 +221,8 @@ def process_repo_task(
     repo_entry: RepoEntry,
     s3_tarball_path: str,
     eval_config: EvalConfig,
-    trial: int = 0,
-    docker_registry_mirror: str = "",
+    trial: int,
+    docker_registry_mirror: str,
 ) -> KeystoneRepoResult:
     """Process a single repo.
 
@@ -264,6 +265,7 @@ def process_repo_task(
                 check=True,
             )
 
+            # TODO: Are the tarballs in S3 not actually git repos?  I thought they were.
             # Init as git repo (keystone requires it)
             _run_git(["init"], cwd=work_path)
             _run_git(["add", "-A"], cwd=work_path)
@@ -588,9 +590,9 @@ def eval_flow(
     repo_list_path: str,
     eval_configs: list[EvalConfig],
     s3_repo_cache_prefix: str,
-    limit: int | None = None,
-    max_concurrent: int = DEFAULT_MAX_CONCURRENT_KEYSTONE,
-    docker_registry_mirror: str = "",
+    limit_to_first_n_repos: int | None,
+    max_concurrent: int,
+    docker_registry_mirror: str,
 ) -> list[EvalResult]:
     """Main evaluation flow.
 
@@ -599,7 +601,7 @@ def eval_flow(
     log = get_run_logger()
     git_commit, git_is_dirty = _get_git_info()
     log.info(f"Git state: {git_commit[:12]} {'(dirty)' if git_is_dirty else '(clean)'}")
-    repos = _load_repos(repo_list_path, limit)
+    repos = _load_repos(repo_list_path, limit_to_first_n_repos)
     log.info(f"Loaded {len(repos)} repos from {repo_list_path}")
 
     # Phase 1: Archive repos once (shared across all configs)
@@ -632,16 +634,10 @@ def eval_flow(
             for trial in range(eval_config.trials_per_repo):
                 work_items.append((i, repo_entry, s3_path, trial))
 
-    # Submit with sliding-window concurrency limit
+    # Submit all work items; concurrency is bounded by the flow's
+    # ThreadPoolTaskRunner(max_workers=max_concurrent).
     all_tagged: list[tuple[int, RepoEntry, int, PrefectFuture[KeystoneRepoResult]]] = []
-    pending_futures: list[PrefectFuture[KeystoneRepoResult]] = []
-    work_iter = iter(work_items)
-
-    def _submit_next_item() -> bool:
-        item = next(work_iter, None)
-        if item is None:
-            return False
-        cfg_idx, repo_entry, s3_path, trial = item
+    for cfg_idx, repo_entry, s3_path, trial in work_items:
         future = process_repo_task.submit(
             repo_entry=repo_entry,
             s3_tarball_path=s3_path,
@@ -650,23 +646,11 @@ def eval_flow(
             docker_registry_mirror=docker_registry_mirror,
         )
         all_tagged.append((cfg_idx, repo_entry, trial, future))
-        pending_futures.append(future)
-        return True
-
-    for _ in range(min(max_concurrent, len(work_items))):
-        _submit_next_item()
 
     log.info(
-        f"Submitted initial batch of {len(pending_futures)} tasks "
+        f"Submitted {len(all_tagged)} tasks "
         f"(max_concurrent={max_concurrent}, total={len(work_items)})"
     )
-
-    while pending_futures:
-        done, not_done = wait(pending_futures, timeout=5)
-        pending_futures = list(not_done)
-        for _ in range(len(done)):
-            if not _submit_next_item():
-                break
 
     # Group futures by config index
     config_futures: list[
@@ -683,7 +667,7 @@ def eval_flow(
             futures,
             log,
             repo_list_path=repo_list_path,
-            limit=limit,
+            limit=limit_to_first_n_repos,
             git_commit=git_commit,
             git_is_dirty=git_is_dirty,
         )

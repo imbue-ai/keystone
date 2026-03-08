@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 from eval_schema import EvalConfig
 from flow import eval_flow
+from prefect.task_runners import ThreadPoolTaskRunner
 
 from keystone.constants import DEFAULT_TESTING_LOG_PATH
 from keystone.schema import AgentConfig, KeystoneConfig
@@ -120,10 +121,16 @@ def test_eval_flow_fake_agent(sample_repos: tuple[Path, list[str]], tmp_path: Pa
         s3_output_prefix=s3_output_dir.as_uri() + "/",
     )
 
-    outputs = eval_flow(
+    configured_flow = eval_flow.with_options(
+        task_runner=ThreadPoolTaskRunner(max_workers=2),  # type: ignore[reportArgumentType]
+    )
+    outputs = configured_flow(
         repo_list_path=str(repo_list_path),
         eval_configs=[eval_config],
         s3_repo_cache_prefix=s3_cache_dir.as_uri() + "/",
+        limit_to_first_n_repos=None,
+        max_concurrent=2,
+        docker_registry_mirror="",
     )
 
     assert len(outputs) == 1
@@ -206,10 +213,16 @@ def test_eval_flow_claude_on_modal(sample_repos: tuple[Path, list[str]], tmp_pat
         s3_output_prefix=s3_output_dir.as_uri() + "/",
     )
 
-    outputs = eval_flow(
+    configured_flow = eval_flow.with_options(
+        task_runner=ThreadPoolTaskRunner(max_workers=2),  # type: ignore[reportArgumentType]
+    )
+    outputs = configured_flow(
         repo_list_path=str(repo_list_path),
         eval_configs=[eval_config],
         s3_repo_cache_prefix=s3_cache_dir.as_uri() + "/",
+        limit_to_first_n_repos=None,
+        max_concurrent=2,
+        docker_registry_mirror="",
     )
 
     assert len(outputs) == 1

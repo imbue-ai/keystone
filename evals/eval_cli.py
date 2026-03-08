@@ -120,7 +120,7 @@ def run(
         repo_list_path=run_config.repo_list_path,
         eval_configs=resolved_configs,
         s3_repo_cache_prefix=run_config.s3_repo_cache_prefix,
-        limit=run_config.limit_to_first_n_repos,
+        limit_to_first_n_repos=run_config.limit_to_first_n_repos,
         max_concurrent=max_concurrent,
         docker_registry_mirror=run_config.docker_registry_mirror,
     )

@@ -9,17 +9,21 @@ Markers:
   - modal: tests that run on Modal (deterministic)
 """
 
+import io
 import json
 import logging
 import os
 import shlex
 import shutil
+import subprocess
+import tarfile
 from pathlib import Path
 
 import pytest
 from conftest import SAMPLES_DIR, init_git_repo, parse_bootstrap_result
 from typer.testing import CliRunner
 
+from keystone.junit_report_parser import parse_junit_xml
 from keystone.keystone_cli import app
 from keystone.process_runner import run_process
 from keystone.schema import BootstrapResult
@@ -396,3 +400,123 @@ print('{"type": "result"}')
     assert not output.success, "Expected success=false with time limit"
     assert output.agent.timed_out, "Expected agent.timed_out=True"
     assert output.agent.exit_code == 124, "Expected exit code 124 (timeout)"
+
+
+@pytest.mark.local_docker
+def test_docker_cp_extracts_artifacts_when_dest_exists(tmp_path: Path) -> None:
+    """Verify docker cp with '/.' copies contents even when destination pre-exists.
+
+    This tests the fix for a bug where the modal runner's `docker cp` without
+    trailing '/.' would nest artifacts when the destination directory already
+    existed (e.g. because the agent ran `docker cp` during its own run).
+
+    Without the '/.' suffix:
+      docker cp container:/test_artifacts /tmp/test_artifacts
+      → /tmp/test_artifacts/test_artifacts/junit/results.xml  (NESTED, BAD)
+
+    With the '/.' suffix:
+      docker cp container:/test_artifacts/. /tmp/test_artifacts
+      → /tmp/test_artifacts/junit/results.xml  (FLAT, GOOD)
+
+    The glob 'test_artifacts_dir/junit/*.xml' must find files in both cases.
+    """
+    container_name = "keystone-test-docker-cp-artifacts"
+    junit_xml = '<?xml version="1.0" ?><testsuites><testsuite name="s" tests="1"><testcase name="t1" classname="c"/></testsuite></testsuites>'
+
+    # Create a container with /test_artifacts/junit/results.xml
+    subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
+    subprocess.run(
+        [
+            "docker",
+            "run",
+            "--name",
+            container_name,
+            "alpine:3.18",
+            "mkdir",
+            "-p",
+            "/test_artifacts/junit",
+        ],
+        capture_output=True,
+        check=True,
+    )
+
+    try:
+        # Inject the test artifacts via tar
+        tar_buffer = io.BytesIO()
+        with tarfile.open(fileobj=tar_buffer, mode="w") as tar:
+            info = tarfile.TarInfo(name="junit/results.xml")
+            data = junit_xml.encode()
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
+
+            info2 = tarfile.TarInfo(name="final_result.json")
+            data2 = b'{"success": true}'
+            info2.size = len(data2)
+            tar.addfile(info2, io.BytesIO(data2))
+
+        tar_buffer.seek(0)
+        proc = subprocess.run(
+            ["docker", "cp", "-", f"{container_name}:/test_artifacts"],
+            input=tar_buffer.read(),
+            capture_output=True,
+        )
+        assert proc.returncode == 0, f"Failed to inject artifacts: {proc.stderr}"
+
+        # Case 1: destination does NOT exist — both styles work
+        dest_fresh = tmp_path / "fresh_dest"
+        subprocess.run(
+            ["docker", "cp", f"{container_name}:/test_artifacts/.", str(dest_fresh)],
+            capture_output=True,
+            check=True,
+        )
+        found = list(dest_fresh.glob("junit/*.xml"))
+        assert len(found) == 1, (
+            f"Expected 1 xml in fresh dest, found: {list(dest_fresh.rglob('*'))}"
+        )
+
+        # Case 2: destination ALREADY EXISTS (simulates agent's docker cp)
+        # This is the scenario that triggered the bug.
+        dest_preexisting = tmp_path / "preexisting_dest"
+        dest_preexisting.mkdir()
+        (dest_preexisting / "stale_file.txt").write_text("stale")
+
+        subprocess.run(
+            ["docker", "cp", f"{container_name}:/test_artifacts/.", str(dest_preexisting)],
+            capture_output=True,
+            check=True,
+        )
+        found = list(dest_preexisting.glob("junit/*.xml"))
+        assert len(found) == 1, (
+            f"Expected 1 xml in pre-existing dest with '/.' suffix, "
+            f"found: {list(dest_preexisting.rglob('*'))}"
+        )
+
+        # Verify parsing works on the extracted file
+        results = parse_junit_xml(found[0])
+        assert len(results) == 1
+        assert results[0].passed
+        assert "t1" in results[0].name
+
+        # Case 3: WITHOUT '/.' suffix and dest exists — shows the bug
+        # docker cp nests the directory when dest exists and no '/.' used
+        dest_buggy = tmp_path / "buggy_dest"
+        dest_buggy.mkdir()
+        subprocess.run(
+            ["docker", "cp", f"{container_name}:/test_artifacts", str(dest_buggy)],
+            capture_output=True,
+            check=True,
+        )
+        # Without '/.' the files end up nested under test_artifacts/
+        found_buggy = list(dest_buggy.glob("junit/*.xml"))
+        assert len(found_buggy) == 0, (
+            "BUG demonstration: without '/.' suffix and pre-existing dest, "
+            f"junit/*.xml should NOT be found at top level, but was: {found_buggy}"
+        )
+        # The files are nested one level deeper
+        found_nested = list(dest_buggy.glob("test_artifacts/junit/*.xml"))
+        assert len(found_nested) == 1, (
+            f"Without '/.' suffix, files should be nested: {list(dest_buggy.rglob('*'))}"
+        )
+
+    finally:
+        subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)

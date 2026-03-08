@@ -503,7 +503,12 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
         test_execution_seconds = time.time() - test_start
 
         # 3. Extract test artifacts
+        # Clean up any pre-existing /tmp/test_artifacts (the agent may have
+        # created it during its run, e.g. by running `docker cp` itself).
+        # Without this, `docker cp` would nest the directory inside the
+        # existing one even with the trailing "/." fix.
         logger.info("Extracting test artifacts...")
+        run_modal_command(sb, "rm", "-rf", "/tmp/test_artifacts", name="cleanup_artifacts").wait()
         run_modal_command(
             sb,
             "docker",

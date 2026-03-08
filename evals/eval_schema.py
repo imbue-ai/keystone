@@ -120,6 +120,11 @@ class EvalRunConfig(BaseModel):
         description="Global S3 prefix for cached repo tarballs (shared across all configs).",
     )
 
+    max_concurrent: int = Field(
+        default=50,
+        description="Max number of keystone tasks running concurrently.",
+    )
+
     # Docker Hub mirror for pull-through caching.
     docker_registry_mirror: str = Field(
         default_factory=lambda: os.environ.get("DOCKER_REGISTRY_MIRROR", ""),

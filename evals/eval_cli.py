@@ -3,10 +3,11 @@
 import logging
 from pathlib import Path
 
+import fsspec
 import json5
 import typer
 from eval_schema import EvalConfig, EvalResult, EvalRunConfig
-from flow import DEFAULT_MAX_CONCURRENT_KEYSTONE, eval_flow
+from flow import eval_flow
 from prefect.task_runners import ThreadPoolTaskRunner
 from rich.console import Console
 
@@ -57,11 +58,6 @@ def run(
     # no_evaluator: bool = typer.Option(False, "--no_evaluator", help="Skip LLM evaluator"),
     # no_guardrail: bool = typer.Option(False, "--no_guardrail", help="Disable guardrail checks"),
     # limit: int | None = typer.Option(None, "--limit", help="Limit to first N repos"),
-    max_concurrent: int = typer.Option(
-        DEFAULT_MAX_CONCURRENT_KEYSTONE,
-        "--max_concurrent",
-        help="Max number of keystone tasks running concurrently.",
-    ),
 ) -> None:
     """Run the eval harness on a list of repos.
 
@@ -71,8 +67,6 @@ def run(
     """
     config_path = str(config_file)
     if config_path.startswith("s3://"):
-        import fsspec
-
         with fsspec.open(config_path, "r") as f:
             raw: dict = json5.loads(f.read())  # type: ignore[assignment]
     else:
@@ -114,14 +108,14 @@ def run(
         )
 
     configured_flow = eval_flow.with_options(
-        task_runner=ThreadPoolTaskRunner(max_workers=max_concurrent),  # type: ignore[reportArgumentType]
+        task_runner=ThreadPoolTaskRunner(max_workers=run_config.max_concurrent),  # type: ignore[reportArgumentType]
     )
     outputs = configured_flow(  # type: ignore[reportCallIssue]
         repo_list_path=run_config.repo_list_path,
         eval_configs=resolved_configs,
         s3_repo_cache_prefix=run_config.s3_repo_cache_prefix,
         limit_to_first_n_repos=run_config.limit_to_first_n_repos,
-        max_concurrent=max_concurrent,
+        max_concurrent=run_config.max_concurrent,
         docker_registry_mirror=run_config.docker_registry_mirror,
     )
 

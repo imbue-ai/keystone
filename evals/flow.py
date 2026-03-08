@@ -511,10 +511,6 @@ def _archive_repos(
     return archives
 
 
-DEFAULT_MAX_CONCURRENT_KEYSTONE: int = 50
-"""Maximum number of process_repo tasks running concurrently (across all configs)."""
-
-
 def _collect_eval_results(
     eval_config: EvalConfig,
     process_futures: list[tuple[RepoEntry, int, PrefectFuture[KeystoneRepoResult]]],

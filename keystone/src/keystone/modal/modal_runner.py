@@ -191,6 +191,9 @@ class ModalAgentRunner(AgentRunner):
         # Configure Docker Hub mirror BEFORE starting the daemon.  The mirror is a
         # pull-through cache — Docker checks it first for all images, so cached
         # pulls never touch Docker Hub (metadata or layers).  Default: mirror.gcr.io.
+        assert self._docker_registry_mirror is not None, (
+            "Docker registry mirror must be set when running in modal because otherwise we'll hit Docker Hub rate limits."
+        )
         if self._docker_registry_mirror:
             logger.info("Configuring Docker Hub mirror: %s", self._docker_registry_mirror)
             mirror_config = f'{{"registry-mirrors": ["{self._docker_registry_mirror}"]}}'

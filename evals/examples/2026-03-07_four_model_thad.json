@@ -1,0 +1,70 @@
+{
+  "description": "Trying to get things working again!",
+  "repo_list_path": "evals/examples/repos.jsonl",
+  "s3_output_prefix": "s3://int8-datasets/keystone/evals/2026-03-08_four_model_thad_v1/",
+  "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs/",
+  "limit_to_first_n_repos": 1,
+  "configs": [
+    {
+      "name": "claude-opus",
+      "keystone_config": {
+        "agent_config": {
+          "evaluator": false,
+          "guardrail": true, 
+          "use_agents_md": true,
+          "agent_in_modal": true,
+          "provider": "claude",
+          "model": "claude-opus-4-6",
+          "max_budget_usd": 10.0,
+          "agent_time_limit_seconds": 3600
+        }
+      },
+      "trials_per_repo": 1
+    },
+    // {
+    //   "name": "claude-haiku",
+    //   "keystone_config": {
+    //     "agent_config": {
+    //       "provider": "claude",
+    //       "evaluator": false,
+    //       "guardrail": false, "use_agents_md": true,
+    //       "agent_in_modal": true,
+    //       "model": "claude-haiku-4-5-20251001",
+    //       "max_budget_usd": 10.0,
+    //       "agent_time_limit_seconds": 3600
+    //     }
+    //   },
+    //   "trials_per_repo": 1
+    // },
+    // {
+    //   "name": "codex-gpt-5.3",
+    //   "keystone_config": {
+    //     "agent_config": {
+    //       "provider": "codex",
+    //       "evaluator": false,
+    //       "guardrail": false, "use_agents_md": true,
+    //       "agent_in_modal": true,
+    //       "model": "gpt-5.3-codex",
+    //       "max_budget_usd": 10.0,
+    //       "agent_time_limit_seconds": 3600
+    //     }
+    //   },
+    //   "trials_per_repo": 1
+    // },
+    // {
+    //   "name": "codex-mini-gpt-5.1",
+    //   "keystone_config": {
+    //     "agent_config": {
+    //       "provider": "codex",
+    //       "evaluator": false,
+    //       "guardrail": false, "use_agents_md": true,
+    //       "agent_in_modal": true,
+    //       "model": "gpt-5.1-codex-mini",
+    //       "max_budget_usd": 10.0,
+    //       "agent_time_limit_seconds": 3600
+    //     }
+    //   },
+    //   "trials_per_repo": 1
+    // }
+  ]
+}

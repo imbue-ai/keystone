@@ -508,7 +508,7 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
             sb,
             "docker",
             "cp",
-            f"{container_name}:/test_artifacts",
+            f"{container_name}:/test_artifacts/.",
             "/tmp/test_artifacts",
             name="cp_test_artifacts",
         ).wait()

@@ -252,3 +252,9 @@ def test_eval_flow_claude_on_modal(sample_repos: tuple[Path, list[str]], tmp_pat
     print("\n" + "=" * 60)
     print(f"TOTAL: {success_count}/{len(output.results)} succeeded")
     print("=" * 60)
+
+    # Assert all repos succeeded
+    failed = [r for r in output.results if not r.success]
+    assert not failed, f"{len(failed)}/{len(output.results)} repos failed: " + ", ".join(
+        f"{r.repo_entry.id}: {r.error_message or 'unknown error'}" for r in failed
+    )

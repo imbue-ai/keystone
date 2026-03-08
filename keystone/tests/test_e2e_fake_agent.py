@@ -75,7 +75,11 @@ def test_e2e_fake_agent(
         "--no_evaluator",
     ]
     if use_modal:
-        cmd += ["--agent_in_modal", "--docker_registry_mirror", os.environ["DOCKER_REGISTRY_MIRROR"]]
+        cmd += [
+            "--agent_in_modal",
+            "--docker_registry_mirror",
+            os.environ["DOCKER_REGISTRY_MIRROR"],
+        ]
     else:
         cmd += ["--run_agent_locally_with_dangerously_skip_permissions"]
 
@@ -171,9 +175,14 @@ def test_e2e_fake_agent(
         shlex.quote(agent_cmd_str),
         "--log_db",
         str(cache_file),
+        "--no_evaluator",
     ]
     if use_modal:
-        cmd2 += ["--agent_in_modal", "--docker_registry_mirror", os.environ["DOCKER_REGISTRY_MIRROR"]]
+        cmd2 += [
+            "--agent_in_modal",
+            "--docker_registry_mirror",
+            os.environ["DOCKER_REGISTRY_MIRROR"],
+        ]
     else:
         cmd2 += ["--run_agent_locally_with_dangerously_skip_permissions"]
 

@@ -24,7 +24,7 @@ def _find_failed_dirs(fs: fsspec.AbstractFileSystem, root: str) -> list[str]:
     failed: list[str] = []
     # glob for all eval_result.json files under root
     pattern = root.rstrip("/") + "/**/eval_result.json"
-    for result_path in fs.glob(pattern):  # type: ignore[union-attr]
+    for result_path in fs.glob(pattern):
         assert isinstance(result_path, str)
         try:
             with fs.open(result_path, "r") as f:

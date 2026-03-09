@@ -358,7 +358,7 @@ def process_repo_task(
 
             # Hard timeout: agent_time_limit + 5 min buffer for setup/upload.
             # Prevents a hung keystone process from blocking the pipeline forever.
-            hard_timeout = agent.agent_time_limit_seconds + 300
+            hard_timeout = 2 * agent.agent_time_limit_seconds + 300
 
             proc = run_process(
                 cmd,

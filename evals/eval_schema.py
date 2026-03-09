@@ -161,10 +161,24 @@ class KeystoneRepoResult(BaseModel):
     """
 
     repo_entry: RepoEntry
-    keystone_config: KeystoneConfig | None = None
+
+    eval_config: "EvalConfig | None" = Field(
+        default=None,
+        description="Snapshot of the EvalConfig used for this trial.",
+    )
+
+    # Deprecated: use eval_config.keystone_config instead.
+    keystone_config: KeystoneConfig | None = Field(
+        default=None,
+        deprecated="Use eval_config.keystone_config instead.",
+    )
+
     trial_index: int | None = None
 
+    # Whether the keystone CLI process succeeded.
     success: bool
+
+    # Error from the keystone CLI process.
     error_message: str | None = None
 
     bootstrap_result: BootstrapResult | None = None
@@ -174,6 +188,9 @@ class KeystoneRepoResult(BaseModel):
         br = data.get("bootstrap_result")
         if isinstance(br, dict):
             data["bootstrap_result"] = BootstrapResult(**br)
+        ec = data.get("eval_config")
+        if isinstance(ec, dict):
+            data["eval_config"] = EvalConfig(**ec)
         super().__init__(**data)
 
 

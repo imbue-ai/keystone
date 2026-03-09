@@ -191,6 +191,7 @@ def extract_summary(result: dict) -> dict:
         "tests_passed": verification.get("tests_passed"),
         "tests_failed": verification.get("tests_failed"),
         "build_seconds": round(verification.get("image_build_seconds") or 0),
+        "test_seconds": round(verification.get("test_execution_seconds") or 0),
         "summary": summary_msg,
         "error": clean_error,
         "status_messages": status_messages,
@@ -762,6 +763,7 @@ function renderDetailPanel(repo, models, runData) {
       ? `${r.tests_passed}✓ ${r.tests_failed || 0}✗`
       : "—";
     const build = r.build_seconds ? `${r.build_seconds}s build` : "";
+    const testTime = r.test_seconds ? `${r.test_seconds}s` : "";
 
     const summaryHtml = r.summary
       ? `<div class="summary-text">${escHtml(r.summary)}</div>`
@@ -800,6 +802,7 @@ function renderDetailPanel(repo, models, runData) {
         <span><b>cost:</b> ${cost}</span>
         <span><b>tests:</b> ${tests}</span>
         ${build ? `<span><b>build:</b> ${build}</span>` : ""}
+        ${testTime ? `<span><b>test time:</b> ${testTime}</span>` : ""}
       </div>
       ${errorHtml}${stepsHtml}${summaryHtml}${agentErrHtml}
     </div>`;

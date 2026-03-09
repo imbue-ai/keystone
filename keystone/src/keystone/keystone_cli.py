@@ -231,7 +231,10 @@ def bootstrap(
             )
             raise typer.Exit(code=1)
 
-        inner_runner = ModalAgentRunner(docker_registry_mirror=docker_registry_mirror or None)
+        inner_runner = ModalAgentRunner(
+            agent_time_limit_seconds=agent_time_limit_seconds,
+            docker_registry_mirror=docker_registry_mirror or None,
+        )
     else:
         if docker_registry_mirror:
             console.print(

@@ -22,6 +22,7 @@ from prefect.futures import PrefectFuture, wait
 
 from keystone.agent_log import create_devcontainer_tarball
 from keystone.process_runner import run_process
+from keystone.timeouts import sandbox_timeout_seconds
 from keystone.version import get_version_info
 
 logger = logging.getLogger(__name__)
@@ -356,9 +357,12 @@ def process_repo_task(
             def _log_stderr(line: str) -> None:
                 pass  # drop — avoid flooding Prefect Cloud with agent stderr
 
-            # Hard timeout: agent_time_limit + 5 min buffer for setup/upload.
-            # Prevents a hung keystone process from blocking the pipeline forever.
-            hard_timeout = 2 * agent.agent_time_limit_seconds + 300
+            # Harness process timeout: must outlive the Modal sandbox so the
+            # keystone CLI can collect results and upload artifacts.  Derived
+            # from sandbox_timeout_seconds (which is 2x agent timeout) plus a
+            # 30 s buffer for cleanup/upload.
+            # See keystone/src/keystone/timeouts.py for the full timeout hierarchy.
+            hard_timeout = sandbox_timeout_seconds(agent.agent_time_limit_seconds) + 30
 
             proc = run_process(
                 cmd,

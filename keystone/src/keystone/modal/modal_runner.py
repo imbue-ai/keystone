@@ -33,6 +33,7 @@ from keystone.schema import (
     TokenSpending,
     VerificationResult,
 )
+from keystone.timeouts import sandbox_timeout_seconds
 
 logger = logging.getLogger(__name__)
 
@@ -151,10 +152,10 @@ class ModalAgentRunner(AgentRunner):
 
     def __init__(
         self,
-        timeout_seconds: int = 3600,
+        agent_time_limit_seconds: int,
         docker_registry_mirror: str | None = None,
     ) -> None:
-        self._timeout_seconds = timeout_seconds
+        self._agent_time_limit_seconds = agent_time_limit_seconds
         self._docker_registry_mirror = docker_registry_mirror
         self._exit_code: int = 1
         self._devcontainer_tarball: bytes = b""
@@ -175,7 +176,7 @@ class ModalAgentRunner(AgentRunner):
         self._sandbox = modal.Sandbox.create(
             app=app,
             image=image,
-            timeout=self._timeout_seconds * 2,
+            timeout=sandbox_timeout_seconds(self._agent_time_limit_seconds),
             region="us-west-2",
             experimental_options={"enable_docker": True},
         )

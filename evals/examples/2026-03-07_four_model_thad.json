@@ -7,57 +7,57 @@
   "max_concurrent": 200,
   "configs": [
     // --------------------------------------------------
-    // {
-    //   "name": "claude-opus",
-    //   "keystone_config": {
-    //     "agent_config": {
-    //       "evaluator": false,
-    //       "guardrail": true, 
-    //       "use_agents_md": true,
-    //       "agent_in_modal": true,
-    //       "provider": "claude",
-    //       "model": "claude-opus-4-6",
-    //       "max_budget_usd": 10.0,
-    //       "agent_time_limit_seconds": 3600
-    //     }
-    //   },
-    //   "trials_per_repo": 1
-    // },
-    // {
-    //   "name": "codex-gpt-5.3",
-    //   "keystone_config": {
-    //     "agent_config": {
-    //       "evaluator": false,
-    //       "guardrail": true, 
-    //       "use_agents_md": true,
-    //       "agent_in_modal": true,
-    //       "provider": "codex",
-    //       "model": "gpt-5.3-codex",
-    //       "max_budget_usd": 10.0,
-    //       "agent_time_limit_seconds": 3600
-    //     }
-    //   },
-    //   "trials_per_repo": 1
-    // },
+    {
+      "name": "claude-opus",
+      "keystone_config": {
+        "agent_config": {
+          "evaluator": false,
+          "guardrail": true, 
+          "use_agents_md": true,
+          "agent_in_modal": true,
+          "provider": "claude",
+          "model": "claude-opus-4-6",
+          "max_budget_usd": 10.0,
+          "agent_time_limit_seconds": 3600
+        }
+      },
+      "trials_per_repo": 1
+    },
+    {
+      "name": "codex-gpt-5.3",
+      "keystone_config": {
+        "agent_config": {
+          "evaluator": false,
+          "guardrail": true, 
+          "use_agents_md": true,
+          "agent_in_modal": true,
+          "provider": "codex",
+          "model": "gpt-5.3-codex",
+          "max_budget_usd": 10.0,
+          "agent_time_limit_seconds": 3600
+        }
+      },
+      "trials_per_repo": 1
+    },
     // --------------------------------------------------
 
 
-    // {
-    //   "name": "claude-opus_no_agents_md",
-    //   "keystone_config": {
-    //     "agent_config": {
-    //       "evaluator": false,
-    //       "guardrail": true, 
-    //       "use_agents_md": false,
-    //       "agent_in_modal": true,
-    //       "provider": "claude",
-    //       "model": "claude-opus-4-6",
-    //       "max_budget_usd": 10.0,
-    //       "agent_time_limit_seconds": 3600
-    //     }
-    //   },
-    //   "trials_per_repo": 1
-    // },
+    {
+      "name": "claude-opus_no_agents_md",
+      "keystone_config": {
+        "agent_config": {
+          "evaluator": false,
+          "guardrail": true, 
+          "use_agents_md": false,
+          "agent_in_modal": true,
+          "provider": "claude",
+          "model": "claude-opus-4-6",
+          "max_budget_usd": 10.0,
+          "agent_time_limit_seconds": 3600
+        }
+      },
+      "trials_per_repo": 1
+    },
     {
       "name": "codex-gpt-5.3_no_agents_md",
       "keystone_config": {

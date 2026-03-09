@@ -358,7 +358,7 @@ def process_repo_task(
 
             # Hard timeout: agent_time_limit + 5 min buffer for setup/upload.
             # Prevents a hung keystone process from blocking the pipeline forever.
-            hard_timeout = agent.agent_time_limit_seconds + 300
+            hard_timeout = 2 * agent.agent_time_limit_seconds + 300
 
             proc = run_process(
                 cmd,
@@ -377,7 +377,11 @@ def process_repo_task(
                     log.warning(f"[{repo_id}] Failed to parse keystone_result.json")
 
             success = proc.returncode == 0
-            error_message = proc.stderr[:1000] if not success else None
+            if not success:
+                last_lines = proc.stderr.splitlines()[-100:]
+                error_message = "\n".join(last_lines)
+            else:
+                error_message = None
 
             if not success:
                 log.error(f"[{repo_id}] keystone failed (exit code {proc.returncode})")

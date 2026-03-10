@@ -145,6 +145,24 @@ if [ -n "$BUILT_IMAGE" ]; then
 
     if ls "$ARTIFACTS_DIR/junit/"*.xml >/dev/null 2>&1; then
         pass "JUnit XML found in /test_artifacts/junit/"
+
+        # Count total tests across all JUnit XML files using xmlstarlet
+        TOTAL_TESTS=0
+        for xml_file in "$ARTIFACTS_DIR/junit/"*.xml; do
+            # Sum tests= attribute from the root element (testsuites or testsuite)
+            FILE_TESTS=$(xmlstarlet sel -t -v '/*/@tests' "$xml_file" 2>/dev/null || echo "0")
+            if [ -n "$FILE_TESTS" ] && [ "$FILE_TESTS" -gt 0 ] 2>/dev/null; then
+                TOTAL_TESTS=$((TOTAL_TESTS + FILE_TESTS))
+            fi
+        done
+
+        if [ "$TOTAL_TESTS" -eq 0 ]; then
+            warn "JUnit XML reports 0 tests. Did the test runner produce valid results?"
+        elif [ "$TOTAL_TESTS" -eq 1 ]; then
+            warn "JUnit XML reports only 1 test. Are you sure there is only one test in this project? Or did you create a fake JUnit entry?"
+        else
+            pass "JUnit XML reports $TOTAL_TESTS tests"
+        fi
     else
         fail "No JUnit XML found in /test_artifacts/junit/*.xml"
     fi

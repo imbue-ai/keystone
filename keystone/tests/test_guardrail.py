@@ -194,3 +194,103 @@ def test_guardrail_checks_executable_permission(workspace: Path) -> None:
     result = _run_guardrail(workspace)
     assert result.returncode != 0
     assert "NOT executable" in result.stdout
+
+
+def test_guardrail_warns_single_test(workspace: Path) -> None:
+    """Guardrail should warn when JUnit XML reports only 1 test."""
+    # Set up .devcontainer with valid files
+    devcontainer_dir = workspace / ".devcontainer"
+    devcontainer_dir.mkdir()
+    (devcontainer_dir / "devcontainer.json").write_text('{"build": {}}')
+    (devcontainer_dir / "Dockerfile").write_text("FROM python:3.12\n")
+    run_script = devcontainer_dir / "run_all_tests.sh"
+    run_script.write_text("#!/bin/bash\necho done\n")
+    run_script.chmod(0o755)
+
+    # Create a .project_clean dir so the build step proceeds
+    clean_dir = workspace / ".project_clean"
+    clean_dir.mkdir()
+
+    # Pre-create fake artifacts to test the JUnit check in isolation
+    # We can't easily run the full Docker flow in tests, so we test the
+    # grep/xmlstarlet logic by invoking a trimmed version of the check.
+    junit_dir = workspace / "fake_artifacts" / "junit"
+    junit_dir.mkdir(parents=True)
+    (junit_dir / "results.xml").write_text(
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<testsuite name="fake" tests="1" failures="0">\n'
+        '  <testcase name="only_test" classname="fake"/>\n'
+        "</testsuite>\n"
+    )
+
+    # Run the JUnit test-count check directly via bash
+    check_script = (
+        "TOTAL_TESTS=0\n"
+        "for xml_file in fake_artifacts/junit/*.xml; do\n"
+        '  FILE_TESTS=$(xmlstarlet sel -t -v "/*/@tests" "$xml_file" 2>/dev/null || echo "0")\n'
+        '  if [ -n "$FILE_TESTS" ] && [ "$FILE_TESTS" -gt 0 ] 2>/dev/null; then\n'
+        "    TOTAL_TESTS=$((TOTAL_TESTS + FILE_TESTS))\n"
+        "  fi\n"
+        "done\n"
+        'if [ "$TOTAL_TESTS" -eq 1 ]; then\n'
+        '  echo "WARN: only 1 test"\n'
+        'elif [ "$TOTAL_TESTS" -eq 0 ]; then\n'
+        '  echo "WARN: 0 tests"\n'
+        "else\n"
+        '  echo "PASS: $TOTAL_TESTS tests"\n'
+        "fi\n"
+    )
+    result = subprocess.run(
+        ["bash", "-c", check_script],
+        cwd=workspace,
+        capture_output=True,
+        text=True,
+    )
+    # xmlstarlet may not be installed in the test environment; skip gracefully
+    if not shutil.which("xmlstarlet"):
+        pytest.skip("xmlstarlet not installed in test environment")
+    assert "WARN: only 1 test" in result.stdout
+
+
+def test_guardrail_passes_multiple_tests(workspace: Path) -> None:
+    """Guardrail should pass test count check when JUnit XML reports multiple tests."""
+    junit_dir = workspace / "fake_artifacts" / "junit"
+    junit_dir.mkdir(parents=True)
+    (junit_dir / "results.xml").write_text(
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<testsuites tests="5">\n'
+        '  <testsuite name="suite" tests="5" failures="0">\n'
+        '    <testcase name="t1" classname="s"/>\n'
+        '    <testcase name="t2" classname="s"/>\n'
+        '    <testcase name="t3" classname="s"/>\n'
+        '    <testcase name="t4" classname="s"/>\n'
+        '    <testcase name="t5" classname="s"/>\n'
+        "  </testsuite>\n"
+        "</testsuites>\n"
+    )
+
+    check_script = (
+        "TOTAL_TESTS=0\n"
+        "for xml_file in fake_artifacts/junit/*.xml; do\n"
+        '  FILE_TESTS=$(xmlstarlet sel -t -v "/*/@tests" "$xml_file" 2>/dev/null || echo "0")\n'
+        '  if [ -n "$FILE_TESTS" ] && [ "$FILE_TESTS" -gt 0 ] 2>/dev/null; then\n'
+        "    TOTAL_TESTS=$((TOTAL_TESTS + FILE_TESTS))\n"
+        "  fi\n"
+        "done\n"
+        'if [ "$TOTAL_TESTS" -eq 1 ]; then\n'
+        '  echo "WARN: only 1 test"\n'
+        'elif [ "$TOTAL_TESTS" -eq 0 ]; then\n'
+        '  echo "WARN: 0 tests"\n'
+        "else\n"
+        '  echo "PASS: $TOTAL_TESTS tests"\n'
+        "fi\n"
+    )
+    result = subprocess.run(
+        ["bash", "-c", check_script],
+        cwd=workspace,
+        capture_output=True,
+        text=True,
+    )
+    if not shutil.which("xmlstarlet"):
+        pytest.skip("xmlstarlet not installed in test environment")
+    assert "PASS: 5 tests" in result.stdout

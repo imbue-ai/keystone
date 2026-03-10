@@ -209,7 +209,9 @@ class LocalAgentRunner(AgentRunner):
         devcontainer_dir = self._work_dir / ".devcontainer"
         devcontainer_dir.mkdir(parents=True, exist_ok=True)
         (devcontainer_dir / "devcontainer.json").write_text(generate_devcontainer_json())
-        dest_pl = self._work_dir / "timestamp_process_output.pl"
+        # Place timestamp helper in .devcontainer/ (not project root) so agents
+        # don't accidentally COPY it into their Dockerfile from the wrong path.
+        dest_pl = devcontainer_dir / "timestamp_process_output.pl"
         dest_pl.write_bytes(TIMESTAMP_SCRIPT_PATH.read_bytes())
         dest_pl.chmod(0o755)
 

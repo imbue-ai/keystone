@@ -283,7 +283,7 @@ class ModalAgentRunner(AgentRunner):
             sb,
             "cp",
             "/timestamp_process_output.pl",
-            "/project/timestamp_process_output.pl",
+            "/project/.devcontainer/timestamp_process_output.pl",
             name="upload",
         ).wait()
 

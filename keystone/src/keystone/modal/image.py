@@ -16,7 +16,7 @@ FAKE_CLAUDE_AGENT_SCRIPT_PATH = _REPO_ROOT / "keystone" / "tests" / "fake_claude
 FAKE_CODEX_AGENT_SCRIPT_PATH = _REPO_ROOT / "keystone" / "tests" / "fake_codex_agent.py"
 
 
-IMAGE_CACHE_BUST = "2026-03-10T22:00:00-fix-perms"  # bump to force Modal image rebuild
+IMAGE_CACHE_BUST = "2026-03-10T23:00:00-fix-tmp-perms"  # bump to force Modal image rebuild
 
 # --- Pinned dependency versions (update these to upgrade) ---
 RUNC_VERSION = "v1.4.0"
@@ -120,6 +120,7 @@ def create_modal_image() -> modal.Image:
             "cp /tmp/_fake_codex_agent.py /usr/local/bin/fake_codex_agent.py && chmod 755 /usr/local/bin/fake_codex_agent.py",
         )
         .run_commands(
+            "chmod 1777 /tmp",  # Ensure /tmp is world-writable for agent user (mktemp, devcontainer CLI)
             "useradd -m -s /bin/bash agent",
             "usermod -aG docker agent",
         )

@@ -15,12 +15,13 @@ DEFAULT_S3_PREFIX = "s3://int8-datasets/keystone/evals/"
 
 # Which runs to include and in what order
 RUN_NAMES = [
-    "2026-03-02_cat_v1",
-    "2026-03-02_cat_v1_opencode",
-    "2026-03-03_cat_v1_agents_md",
-    "2026-03-02_thad_v2",
-    "2026-03-05_cat_v1",
-    "2026-03-05_cat_v2",
+    # "2026-03-02_cat_v1",
+    # "2026-03-02_cat_v1_opencode",
+    # "2026-03-03_cat_v1_agents_md",
+    # "2026-03-02_thad_v2",
+    # "2026-03-05_cat_v1",
+    # "2026-03-05_cat_v2",
+    "2026-03-08_four_model_thad_v2",
 ]
 
 RUN_LABELS = {
@@ -30,6 +31,7 @@ RUN_LABELS = {
     "2026-03-02_thad_v2": "Five-model 2026-03-05",
     "2026-03-05_cat_v1": "Four-model 2026-03-05 (v1)",
     "2026-03-05_cat_v2": "Four-model 2026-03-05 (v2)",
+    "2026-03-08_four_model_thad_v2": "Four-model 2026-03-08 (v2)",
 }
 
 # Canonical model display order & colors per run

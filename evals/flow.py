@@ -392,6 +392,7 @@ def process_repo_task(
 
             result = KeystoneRepoResult(
                 repo_entry=repo_entry,
+                eval_config=eval_config,
                 success=success,
                 error_message=error_message,
                 bootstrap_result=bootstrap_result,
@@ -457,6 +458,7 @@ def process_repo_task(
         error_msg = f"{e}\n{traceback.format_exc()}"
         result = KeystoneRepoResult(
             repo_entry=repo_entry,
+            eval_config=eval_config,
             success=False,
             error_message=error_msg,
             keystone_config=eval_config.keystone_config,
@@ -554,6 +556,7 @@ def _collect_eval_results(
             results.append(
                 KeystoneRepoResult(
                     repo_entry=repo_entry,
+                    eval_config=eval_config,
                     success=False,
                     error_message=str(e),
                     keystone_config=eval_config.keystone_config,

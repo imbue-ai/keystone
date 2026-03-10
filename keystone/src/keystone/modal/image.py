@@ -58,6 +58,7 @@ def create_modal_image() -> modal.Image:
             "htop",
             "tree",
             "jq",
+            "xmlstarlet",
             "file",
             "ripgrep",
             "fd-find",

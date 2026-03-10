@@ -207,7 +207,11 @@ class LocalAgentRunner(AgentRunner):
         # Modal places these at /devcontainer.json and /timestamp_process_output.pl;
         # locally we put them in the work dir and the prompt addendum points there.
         (self._work_dir / "devcontainer.json").write_text(generate_devcontainer_json())
-        dest_pl = self._work_dir / "timestamp_process_output.pl"
+        # Place timestamp helper in .devcontainer/ (not project root) so agents
+        # don't accidentally COPY it into their Dockerfile from the wrong path.
+        devcontainer_dir = self._work_dir / ".devcontainer"
+        devcontainer_dir.mkdir(exist_ok=True)
+        dest_pl = devcontainer_dir / "timestamp_process_output.pl"
         dest_pl.write_bytes(TIMESTAMP_SCRIPT_PATH.read_bytes())
         dest_pl.chmod(0o755)
 

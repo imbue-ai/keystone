@@ -278,11 +278,14 @@ class ModalAgentRunner(AgentRunner):
         run_modal_command(
             sb, "cp", "/devcontainer.json", "/project/devcontainer.json", name="upload"
         ).wait()
+        # Place timestamp helper in .devcontainer/ (not project root) so agents
+        # don't accidentally COPY it into their Dockerfile from the wrong path.
+        run_modal_command(sb, "mkdir", "-p", "/project/.devcontainer", name="upload").wait()
         run_modal_command(
             sb,
             "cp",
             "/timestamp_process_output.pl",
-            "/project/timestamp_process_output.pl",
+            "/project/.devcontainer/timestamp_process_output.pl",
             name="upload",
         ).wait()
 

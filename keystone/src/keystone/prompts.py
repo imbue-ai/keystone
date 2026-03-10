@@ -70,11 +70,8 @@ Any changes you make outside the .devcontainer/ directory (e.g., fixing source f
 
 ## Instructions
 
-1. Copy the pre-generated devcontainer.json into the .devcontainer/ directory:
-   ```bash
-   cp ./devcontainer.json .devcontainer/devcontainer.json
-   ```
-   This file is already configured with the correct build context, Dockerfile path,
+1. The `.devcontainer/devcontainer.json` file is already pre-populated for you.
+   It is configured with the correct build context, Dockerfile path,
    network settings, and build cache options. Do NOT modify it.
 
 2. Create a .devcontainer/Dockerfile alongside it that is capable of building and running the project's test suite.
@@ -367,9 +364,7 @@ You are setting up a reproducible dev container so this project's test suite pas
 
 All files go inside `.devcontainer/` — nothing outside that directory is preserved.
 
-1. **`.devcontainer/devcontainer.json`** — already pre-generated at `./devcontainer.json`.
-   Just copy it: `cp ./devcontainer.json .devcontainer/devcontainer.json`
-   Do NOT modify it.
+1. **`.devcontainer/devcontainer.json`** — already pre-populated for you. Do NOT modify it.
 
 2. **`.devcontainer/Dockerfile`** — must contain, near the top:
    ```dockerfile

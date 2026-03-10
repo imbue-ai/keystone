@@ -8,7 +8,6 @@ Usage: fake_claude_agent.py --dangerously-skip-permissions -p PROMPT --output-fo
 
 import argparse
 import json
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -84,16 +83,11 @@ def main() -> None:
     devcontainer_dir = Path(".devcontainer")
     devcontainer_dir.mkdir(exist_ok=True)
 
-    # Copy the pre-generated devcontainer.json (provided by keystone at the project
-    # root) into .devcontainer/.  This mirrors what a real agent should do — the
-    # pre-generated file contains --network=host and cache settings that are
-    # required for Docker builds on Modal.
-    pregenerated = Path("devcontainer.json")
-    assert pregenerated.exists(), (
-        f"Pre-generated devcontainer.json not found in {Path.cwd()}. "
-        "Keystone should place this file in the project root before running the agent."
+    # devcontainer.json is already pre-populated by keystone in .devcontainer/.
+    assert (devcontainer_dir / "devcontainer.json").exists(), (
+        f"Pre-generated .devcontainer/devcontainer.json not found in {Path.cwd()}. "
+        "Keystone should place this file in .devcontainer/ before running the agent."
     )
-    shutil.copy2(pregenerated, devcontainer_dir / "devcontainer.json")
     (devcontainer_dir / "Dockerfile").write_text(
         DOCKERFILE_TEMPLATE.format(model_label=model_label)
     )

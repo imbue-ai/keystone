@@ -1,7 +1,8 @@
 {
   "description": "Full four-model comparison across the standard repo set.",
   "repo_list_path": "evals/examples/repos.jsonl",
-  "s3_output_prefix": "s3://int8-datasets/keystone/evals/2026-03-05_cat_v3/",
+  "s3_output_prefix": "s3://int8-datasets/keystone/evals/2026-03-10_cat_v5/",
+  "max_concurrent": 200,
   "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs/",
   "configs": [
     {

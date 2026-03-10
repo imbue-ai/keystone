@@ -10,9 +10,7 @@
       
       All files go inside `.devcontainer/` — nothing outside that directory is preserved.
       
-      1. **`.devcontainer/devcontainer.json`** — already pre-generated at `./devcontainer.json`.
-         Just copy it: `cp ./devcontainer.json .devcontainer/devcontainer.json`
-         Do NOT modify it.
+      1. **`.devcontainer/devcontainer.json`** — already pre-populated for you. Do NOT modify it.
       
       2. **`.devcontainer/Dockerfile`** — must contain, near the top:
          ```dockerfile
@@ -101,9 +99,7 @@
       
       All files go inside `.devcontainer/` — nothing outside that directory is preserved.
       
-      1. **`.devcontainer/devcontainer.json`** — already pre-generated at `./devcontainer.json`.
-         Just copy it: `cp ./devcontainer.json .devcontainer/devcontainer.json`
-         Do NOT modify it.
+      1. **`.devcontainer/devcontainer.json`** — already pre-populated for you. Do NOT modify it.
       
       2. **`.devcontainer/Dockerfile`** — must contain, near the top:
          ```dockerfile
@@ -195,11 +191,8 @@
   
   Instructions:
   
-  1. Copy the pre-generated devcontainer.json into the .devcontainer/ directory:
-     ```bash
-     cp ./devcontainer.json .devcontainer/devcontainer.json
-     ```
-     This file is already configured with the correct build context, Dockerfile path,
+  1. The `.devcontainer/devcontainer.json` file is already pre-populated for you.
+     It is configured with the correct build context, Dockerfile path,
      network settings, and build cache options. Do NOT modify it.
   
   2. Create a .devcontainer/Dockerfile alongside it that is capable of building and running the project's test suite.
@@ -411,7 +404,7 @@
   
   
   To aid you in verifying your work, we have provided a guardrail script that will check some basic properties of the
-  devcontainer and test runner script.  This script simplifies the execution of the dockercommands above.
+  devcontainer and test runner script.  This script simplifies the execution of the docker commands above.
   
   **IMPORTANT: You MUST have a successful guardrail run with 0 exit code BEFORE ending your turn!!**
   ```bash
@@ -459,11 +452,8 @@
   
   Instructions:
   
-  1. Copy the pre-generated devcontainer.json into the .devcontainer/ directory:
-     ```bash
-     cp ./devcontainer.json .devcontainer/devcontainer.json
-     ```
-     This file is already configured with the correct build context, Dockerfile path,
+  1. The `.devcontainer/devcontainer.json` file is already pre-populated for you.
+     It is configured with the correct build context, Dockerfile path,
      network settings, and build cache options. Do NOT modify it.
   
   2. Create a .devcontainer/Dockerfile alongside it that is capable of building and running the project's test suite.

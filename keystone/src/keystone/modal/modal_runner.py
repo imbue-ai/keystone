@@ -267,22 +267,23 @@ class ModalAgentRunner(AgentRunner):
             sb, "tar", "-xzf", "/tmp/project.tar.gz", "-C", "/project_clean", name="upload"
         ).wait()
 
-        # Write pre-generated devcontainer.json for the agent to copy into .devcontainer/.
+        # Write devcontainer.json directly into .devcontainer/ so the agent
+        # doesn't have to copy it there manually.
         devcontainer_json = generate_devcontainer_json()
-        with sb.open("/devcontainer.json", "w") as f:
+        run_modal_command(sb, "mkdir", "-p", "/project/.devcontainer", name="upload").wait()
+        with sb.open("/project/.devcontainer/devcontainer.json", "w") as f:
             f.write(devcontainer_json)
-        logger.info("Wrote /devcontainer.json to sandbox")
-
-        # Also place helpers inside /project/ so agents that restrict CWD access
-        # (e.g. opencode) can reach them via relative paths.
-        run_modal_command(
-            sb, "cp", "/devcontainer.json", "/project/devcontainer.json", name="upload"
-        ).wait()
+        logger.info("Wrote /project/.devcontainer/devcontainer.json to sandbox")
+        # Also write to /project_clean/.devcontainer/ for the clean copy.
+        run_modal_command(sb, "mkdir", "-p", "/project_clean/.devcontainer", name="upload").wait()
+        with sb.open("/project_clean/.devcontainer/devcontainer.json", "w") as f:
+            f.write(devcontainer_json)
+        logger.info("Wrote /project_clean/.devcontainer/devcontainer.json to sandbox")
         run_modal_command(
             sb,
             "cp",
             "/timestamp_process_output.pl",
-            "/project/timestamp_process_output.pl",
+            "/project/.devcontainer/timestamp_process_output.pl",
             name="upload",
         ).wait()
 

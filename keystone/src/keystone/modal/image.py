@@ -16,7 +16,7 @@ FAKE_CLAUDE_AGENT_SCRIPT_PATH = _REPO_ROOT / "keystone" / "tests" / "fake_claude
 FAKE_CODEX_AGENT_SCRIPT_PATH = _REPO_ROOT / "keystone" / "tests" / "fake_codex_agent.py"
 
 
-IMAGE_CACHE_BUST = "2026-03-10T23:00:00-fix-tmp-perms"  # bump to force Modal image rebuild
+IMAGE_CACHE_BUST = "2026-03-10T23:30:00-fix-junit-xpath"  # bump to force Modal image rebuild
 
 # --- Pinned dependency versions (update these to upgrade) ---
 RUNC_VERSION = "v1.4.0"

@@ -28,6 +28,7 @@ def test_repos_jsonl_not_empty() -> None:
     assert len(entries) > 0, "repos.jsonl is empty"
 
 
+# FIXME: Use a loop inside the test, don't create ~200 tests.
 @pytest.mark.parametrize(
     "entry",
     _load_lines() if REPOS_JSONL.exists() else [],

@@ -21,7 +21,7 @@ RUN_NAMES = [
     # "2026-03-02_thad_v2",
     # "2026-03-05_cat_v1",
     # "2026-03-05_cat_v2",
-    "2026-03-08_four_model_thad_v2",
+    "2026-03-10_four_model_thad",
 ]
 
 RUN_LABELS = {
@@ -32,6 +32,7 @@ RUN_LABELS = {
     "2026-03-05_cat_v1": "Four-model 2026-03-05 (v1)",
     "2026-03-05_cat_v2": "Four-model 2026-03-05 (v2)",
     "2026-03-08_four_model_thad_v2": "Four-model 2026-03-08 (v2)",
+    "2026-03-10_four_model_thad": "Four-model 2026-03-10",
 }
 
 # Canonical model display order & colors per run

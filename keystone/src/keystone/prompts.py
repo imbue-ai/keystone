@@ -107,8 +107,11 @@ This will be copied to /run_all_tests.sh in the image by the final COPY command.
           The JUnit XML MUST be produced directly by the project's native test framework
           (e.g., pytest --junitxml, mix test with JUnitFormatter, go-junit-report,
           jest-junit, rspec_junit_formatter, ctest --output-junit, cargo-nextest).
-          Hand-written or script-generated XML loses real test names and is considered
-          cheating — it will cause incorrect pass/fail reporting and test attribution.
+          Each <testcase> in the XML must have real, canonical test names — the actual
+          names the test framework assigns to each test (e.g., fully-qualified class and
+          method names). Hand-written or script-generated XML loses real test names and
+          is considered cheating — it will cause incorrect pass/fail reporting and test
+          attribution.
       ii. A file called /test_artifacts/final_result.json stating success/failure.
    d. run_all_tests.sh should forward enough information to stdout/stderr to enable debugging failing tests.
    e. run_all_tests.sh is allowed to fail early (before running all tests) if that helps complete the task faster.

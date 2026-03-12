@@ -67,7 +67,7 @@ def _(df, json, mo, pl):
         )
 
     tests_df = pl.DataFrame(rows)
-    mo.ui.table(tests_df, show_column_summaries=False, selection=None)
+    mo.ui.table(tests_df, selection=None)
     return (tests_df,)
 
 
@@ -124,7 +124,7 @@ def _(mo, result_df):
         .sort("test_discovered_fraction")
         .head(20)
     )
-    mo.ui.table(_low, show_column_summaries=False, selection=None)
+    mo.ui.table(_low, selection=None)
     return
 
 
@@ -182,7 +182,7 @@ def _(mo, pl, result_df):
         )
         .sort("mean", descending=True)
     )
-    mo.ui.table(_stats, show_column_summaries=False, selection=None)
+    mo.ui.table(_stats, selection=None)
     return
 
 

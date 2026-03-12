@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
 from pydantic import ValidationError
 
 from evals.eval_schema import RepoEntry
@@ -28,18 +27,16 @@ def test_repos_jsonl_not_empty() -> None:
     assert len(entries) > 0, "repos.jsonl is empty"
 
 
-# FIXME: Use a loop inside the test, don't create ~200 tests.
-@pytest.mark.parametrize(
-    "entry",
-    _load_lines() if REPOS_JSONL.exists() else [],
-    ids=lambda e: e.get("id", e.get("repo", "unknown")),
-)
-def test_repo_entry_validates(entry: dict) -> None:
-    """Each line in repos.jsonl must validate as a RepoEntry."""
-    try:
-        RepoEntry(**entry)
-    except ValidationError as exc:
-        pytest.fail(f"Validation failed for {entry.get('repo', 'unknown')}:\n{exc}")
+def test_all_repo_entries_validate() -> None:
+    """Every line in repos.jsonl must validate as a RepoEntry."""
+    errors: list[str] = []
+    for entry in _load_lines():
+        try:
+            RepoEntry(**entry)
+        except ValidationError as exc:
+            repo = entry.get("repo", "unknown")
+            errors.append(f"{repo}:\n{exc}")
+    assert not errors, f"Validation failed for {len(errors)} entries:\n" + "\n".join(errors)
 
 
 def test_no_duplicate_ids() -> None:

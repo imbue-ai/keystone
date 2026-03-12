@@ -65,3 +65,7 @@ To install pre-commit hooks after cloning:
 uv sync
 uv run pre-commit install
 ```
+
+## Skills
+
+- **eval-parquet** (`.agents/skills/eval-parquet/SKILL.md`) — Schema reference and example queries for the eval results Parquet files produced by `evals/eda/eval_to_parquet_cli.py`. Use when analyzing or querying Keystone eval results.

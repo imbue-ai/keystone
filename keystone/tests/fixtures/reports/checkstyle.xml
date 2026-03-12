@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<checkstyle version="8.0">
+  <file name="src/main.py">
+    <error line="1" column="1" severity="warning" message="Missing docstring" source="pylint"/>
+  </file>
+</checkstyle>

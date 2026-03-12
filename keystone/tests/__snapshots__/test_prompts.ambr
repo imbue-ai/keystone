@@ -24,6 +24,8 @@
          - Copy source files explicitly — do NOT use `COPY . .`. You work inside `.devcontainer/`,
            so `COPY . .` would include your own files and invalidate the layer cache on every change.
            Instead: `COPY src/ ./src/`, `COPY pyproject.toml uv.lock ./`, etc.
+         - Do NOT COPY `AGENTS.md`, `guardrail.sh`, or other non-repo files into the image —
+           they exist during your session but are not part of the project source.
          - Do NOT create `.dockerignore` files.
          - For compiled languages (Rust, Go, C++), run the build inside a Dockerfile layer so
            artifacts are cached and tests don't need to recompile from scratch each run.
@@ -36,6 +38,9 @@
          - Writes JUnit XML to `/test_artifacts/junit/*.xml` using the test framework's native output.
            Do NOT hand-write or generate JUnit XML manually — it must come from the framework itself.
            Examples: `pytest --junitxml=...`, `cargo nextest run -P ci --config 'profile.ci.junit.path=...'`
+           IMPORTANT: Only valid JUnit XML belongs in `/test_artifacts/junit/`. Do NOT put non-JUnit
+           XML (checkstyle, lint, coverage) there — it will fail to parse. Ensure the directory contains
+           only files (not subdirectories) with `<testsuites>` or `<testsuite>` root elements.
          - Writes `/test_artifacts/final_result.json` with `{"success": true/false}`
          - For polyglot projects (e.g. Python backend + JS frontend), run ALL test suites and produce separate JUnit XML reports for each test suite.
       
@@ -128,6 +133,8 @@
          - Copy source files explicitly — do NOT use `COPY . .`. You work inside `.devcontainer/`,
            so `COPY . .` would include your own files and invalidate the layer cache on every change.
            Instead: `COPY src/ ./src/`, `COPY pyproject.toml uv.lock ./`, etc.
+         - Do NOT COPY `AGENTS.md`, `guardrail.sh`, or other non-repo files into the image —
+           they exist during your session but are not part of the project source.
          - Do NOT create `.dockerignore` files.
          - For compiled languages (Rust, Go, C++), run the build inside a Dockerfile layer so
            artifacts are cached and tests don't need to recompile from scratch each run.
@@ -140,6 +147,9 @@
          - Writes JUnit XML to `/test_artifacts/junit/*.xml` using the test framework's native output.
            Do NOT hand-write or generate JUnit XML manually — it must come from the framework itself.
            Examples: `pytest --junitxml=...`, `cargo nextest run -P ci --config 'profile.ci.junit.path=...'`
+           IMPORTANT: Only valid JUnit XML belongs in `/test_artifacts/junit/`. Do NOT put non-JUnit
+           XML (checkstyle, lint, coverage) there — it will fail to parse. Ensure the directory contains
+           only files (not subdirectories) with `<testsuites>` or `<testsuite>` root elements.
          - Writes `/test_artifacts/final_result.json` with `{"success": true/false}`
          - For polyglot projects (e.g. Python backend + JS frontend), run ALL test suites and produce separate JUnit XML reports for each test suite.
       
@@ -254,9 +264,21 @@
             All test reports should be JUnit XML format and placed in /test_artifacts/junit/*.xml.
             Create the directory first: `mkdir -p /test_artifacts/junit`
             IMPORTANT: Do NOT hand-write or manually generate the JUnit XML.
-            To the extent possible it must be produced by the project's native test framework itself.
-            Hand-written XML that doesn't reflect actual test results
-            is considered cheating and will cause incorrect pass/fail reporting.
+            Do NOT write a custom script/program that parses test output and produces XML.
+            The JUnit XML MUST be produced directly by the project's native test framework
+            (e.g., pytest --junitxml, mix test with JUnitFormatter, go-junit-report,
+            jest-junit, rspec_junit_formatter, ctest --output-junit, cargo-nextest).
+            Each <testcase> in the XML must have real, canonical test names — the actual
+            names the test framework assigns to each test (e.g., fully-qualified class and
+            method names). Hand-written or script-generated XML loses real test names and
+            is considered cheating — it will cause incorrect pass/fail reporting and test
+            attribution.
+            IMPORTANT: Only valid JUnit XML files may be placed in /test_artifacts/junit/.
+            Do NOT put non-JUnit XML files (e.g. checkstyle, lint reports, code coverage XML)
+            in that directory — they will fail to parse. If the test framework also produces
+            other XML formats, write them to a different directory (e.g. /test_artifacts/other/).
+            Verify that /test_artifacts/junit/ contains only files (not directories) with
+            a <testsuites> or <testsuite> root element.
         ii. A file called /test_artifacts/final_result.json stating success/failure.
      d. run_all_tests.sh should forward enough information to stdout/stderr to enable debugging failing tests.
      e. run_all_tests.sh is allowed to fail early (before running all tests) if that helps complete the task faster.
@@ -323,6 +345,9 @@
     COPY tests/ ./tests/
     COPY pyproject.toml uv.lock ./
   ```
+  
+  * Do NOT COPY `AGENTS.md`, `guardrail.sh`, or other non-repo files into the image —
+    they exist during your session but are not part of the project source.
   
   * For Python projects with simple dependencies, using uv for package management speeds up builds significantly.
     Remember to set PYTHONPATH in run_all_tests.sh if your tests import from the project root without an installed package,
@@ -509,9 +534,21 @@
             All test reports should be JUnit XML format and placed in /test_artifacts/junit/*.xml.
             Create the directory first: `mkdir -p /test_artifacts/junit`
             IMPORTANT: Do NOT hand-write or manually generate the JUnit XML.
-            To the extent possible it must be produced by the project's native test framework itself.
-            Hand-written XML that doesn't reflect actual test results
-            is considered cheating and will cause incorrect pass/fail reporting.
+            Do NOT write a custom script/program that parses test output and produces XML.
+            The JUnit XML MUST be produced directly by the project's native test framework
+            (e.g., pytest --junitxml, mix test with JUnitFormatter, go-junit-report,
+            jest-junit, rspec_junit_formatter, ctest --output-junit, cargo-nextest).
+            Each <testcase> in the XML must have real, canonical test names — the actual
+            names the test framework assigns to each test (e.g., fully-qualified class and
+            method names). Hand-written or script-generated XML loses real test names and
+            is considered cheating — it will cause incorrect pass/fail reporting and test
+            attribution.
+            IMPORTANT: Only valid JUnit XML files may be placed in /test_artifacts/junit/.
+            Do NOT put non-JUnit XML files (e.g. checkstyle, lint reports, code coverage XML)
+            in that directory — they will fail to parse. If the test framework also produces
+            other XML formats, write them to a different directory (e.g. /test_artifacts/other/).
+            Verify that /test_artifacts/junit/ contains only files (not directories) with
+            a <testsuites> or <testsuite> root element.
         ii. A file called /test_artifacts/final_result.json stating success/failure.
      d. run_all_tests.sh should forward enough information to stdout/stderr to enable debugging failing tests.
      e. run_all_tests.sh is allowed to fail early (before running all tests) if that helps complete the task faster.
@@ -578,6 +615,9 @@
     COPY tests/ ./tests/
     COPY pyproject.toml uv.lock ./
   ```
+  
+  * Do NOT COPY `AGENTS.md`, `guardrail.sh`, or other non-repo files into the image —
+    they exist during your session but are not part of the project source.
   
   * For Python projects with simple dependencies, using uv for package management speeds up builds significantly.
     Remember to set PYTHONPATH in run_all_tests.sh if your tests import from the project root without an installed package,

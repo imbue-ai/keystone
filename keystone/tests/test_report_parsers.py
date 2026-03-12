@@ -5,8 +5,10 @@ To regenerate fixtures, run: ./fixtures/reports/generate_fixtures.sh
 """
 
 from pathlib import Path
+from xml.etree.ElementTree import ParseError
 
 import pytest
+from junitparser import JUnitXmlError
 
 from keystone.junit_report_parser import parse_junit_xml
 
@@ -88,3 +90,21 @@ class TestJUnitXMLParser:
         """Parsing a nonexistent file returns empty list."""
         results = parse_junit_xml(Path("/nonexistent/file.xml"))
         assert results == []
+
+    def test_parse_non_junit_xml_raises(self) -> None:
+        """Non-JUnit XML (e.g. checkstyle) raises JUnitXmlError."""
+        fixture = FIXTURES_DIR / "checkstyle.xml"
+        with pytest.raises(JUnitXmlError):
+            parse_junit_xml(fixture)
+
+    def test_parse_malformed_xml_raises(self) -> None:
+        """Malformed/non-XML content raises ParseError."""
+        fixture = FIXTURES_DIR / "malformed.xml"
+        with pytest.raises(ParseError):
+            parse_junit_xml(fixture)
+
+    def test_parse_empty_file_raises(self) -> None:
+        """Empty file raises ParseError."""
+        fixture = FIXTURES_DIR / "empty.xml"
+        with pytest.raises(ParseError):
+            parse_junit_xml(fixture)

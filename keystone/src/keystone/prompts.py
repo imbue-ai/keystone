@@ -112,6 +112,12 @@ This will be copied to /run_all_tests.sh in the image by the final COPY command.
           method names). Hand-written or script-generated XML loses real test names and
           is considered cheating — it will cause incorrect pass/fail reporting and test
           attribution.
+          IMPORTANT: Only valid JUnit XML files may be placed in /test_artifacts/junit/.
+          Do NOT put non-JUnit XML files (e.g. checkstyle, lint reports, code coverage XML)
+          in that directory — they will fail to parse. If the test framework also produces
+          other XML formats, write them to a different directory (e.g. /test_artifacts/other/).
+          Verify that /test_artifacts/junit/ contains only files (not directories) with
+          a <testsuites> or <testsuite> root element.
       ii. A file called /test_artifacts/final_result.json stating success/failure.
    d. run_all_tests.sh should forward enough information to stdout/stderr to enable debugging failing tests.
    e. run_all_tests.sh is allowed to fail early (before running all tests) if that helps complete the task faster.
@@ -401,6 +407,9 @@ All files go inside `.devcontainer/` — nothing outside that directory is prese
    - Writes JUnit XML to `/test_artifacts/junit/*.xml` using the test framework's native output.
      Do NOT hand-write or generate JUnit XML manually — it must come from the framework itself.
      Examples: `pytest --junitxml=...`, `cargo nextest run -P ci --config 'profile.ci.junit.path=...'`
+     IMPORTANT: Only valid JUnit XML belongs in `/test_artifacts/junit/`. Do NOT put non-JUnit
+     XML (checkstyle, lint, coverage) there — it will fail to parse. Ensure the directory contains
+     only files (not subdirectories) with `<testsuites>` or `<testsuite>` root elements.
    - Writes `/test_artifacts/final_result.json` with `{{"success": true/false}}`
    - For polyglot projects (e.g. Python backend + JS frontend), run ALL test suites and produce separate JUnit XML reports for each test suite.
 

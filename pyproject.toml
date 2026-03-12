@@ -6,10 +6,19 @@ dependencies = [
     "ipykernel>=7.1.0",
     "nbformat>=4.2.0",
     "plotly>=6.5.2",
+    "keystone",
+    "evals",
+    "modal_registry",
 ]
 
 [tool.uv.workspace]
 members = ["keystone", "evals", "modal_registry"]
+
+[tool.uv.sources]
+keystone = { workspace = true }
+evals = { workspace = true }
+modal_registry = { workspace = true }
+
 
 [dependency-groups]
 dev = [

@@ -86,7 +86,7 @@ def main(
 ) -> None:
     """Scan INPUT_PATH for eval_result.json files and write OUTPUT_PATH as Parquet."""
     # --- discover files ---
-    in_fs, _, [in_prefix] = fsspec.core.url_to_fs(input_path)
+    in_fs, in_prefix = fsspec.core.url_to_fs(input_path)
     in_prefix = in_prefix.rstrip("/")
     json_paths: list[str] = in_fs.glob(f"{in_prefix}/**/eval_result.json")
 
@@ -123,13 +123,11 @@ def main(
 
     # --- write parquet ---
     df = pd.DataFrame(records)
-    out_fs, _, [out_prefix] = fsspec.core.url_to_fs(output_path)
+    out_fs, out_prefix = fsspec.core.url_to_fs(output_path)
     with out_fs.open(out_prefix, "wb") as f:
         df.to_parquet(f, index=False)
 
-    console.print(
-        f"Wrote [bold]{len(df)}[/bold] rows ({len(df.columns)} columns) to {output_path}"
-    )
+    console.print(f"Wrote [bold]{len(df)}[/bold] rows ({len(df.columns)} columns) to {output_path}")
 
 
 if __name__ == "__main__":

@@ -39,7 +39,7 @@ def _(mo):
 
 
 @app.cell
-def _(df, json, pl):
+def _(df, json, mo, pl):
     # Extract test names from raw_json for every row
     def _extract_test_names(raw_json: str) -> list[str]:
         data = json.loads(raw_json)
@@ -67,7 +67,7 @@ def _(df, json, pl):
         )
 
     tests_df = pl.DataFrame(rows)
-    tests_df
+    mo.ui.table(tests_df, show_column_summaries=False, selection=None)
     return (tests_df,)
 
 
@@ -117,13 +117,14 @@ def _(mo):
 
 
 @app.cell
-def _(result_df):
+def _(mo, result_df):
     # Show rows with lowest discovery fraction (excluding repos with no tests at all)
-    (
+    _low = (
         result_df.filter(result_df["test_discovered_fraction"].is_not_null())
         .sort("test_discovered_fraction")
         .head(20)
     )
+    mo.ui.table(_low, show_column_summaries=False, selection=None)
     return
 
 
@@ -168,8 +169,8 @@ def _(mo):
 
 
 @app.cell
-def _(pl, result_df):
-    (
+def _(mo, pl, result_df):
+    _stats = (
         result_df.filter(pl.col("test_discovered_fraction").is_not_null())
         .group_by("config_name")
         .agg(
@@ -181,6 +182,7 @@ def _(pl, result_df):
         )
         .sort("mean", descending=True)
     )
+    mo.ui.table(_stats, show_column_summaries=False, selection=None)
     return
 
 

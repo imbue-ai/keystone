@@ -9,6 +9,10 @@ dependencies = [
     "keystone",
     "evals",
     "modal_registry",
+    "polars>=1.39.0",
+    "marimo>=0.20.4",
+    "pandas>=3.0.0",
+    "pyarrow>=23.0.1",
 ]
 
 [tool.uv.workspace]
@@ -35,6 +39,10 @@ target-version = "py312"
 line-length = 100
 exclude = ["github_datasets", "samples", "prototypes"]
 extend-exclude = ["*.ipynb"]
+
+[tool.ruff.lint.per-file-ignores]
+# marimo notebooks use inline imports, bare expressions for display, and unused args for reactive deps
+"evals/eda/test_discovery_analysis.py" = ["PLC0415", "B018", "ARG001", "I001"]
 
 [tool.ruff.lint]
 select = [

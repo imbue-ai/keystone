@@ -41,6 +41,7 @@ from keystone.llm_provider import (
     AgentToolResultEvent,
     get_provider,
 )
+from keystone.llm_provider.pricing import estimate_cost_usd
 from keystone.logging_utils import ISOFormatter
 from keystone.modal.modal_runner import ModalAgentRunner
 from keystone.prompts import build_prompt
@@ -438,8 +439,6 @@ def bootstrap(
             if _total_cost_usd_from_events > 0:
                 final_cost = _total_cost_usd_from_events
             else:
-                from keystone.llm_provider.pricing import estimate_cost_usd
-
                 model_str = model.value if model else None
                 if model_str and "/" in model_str:
                     model_str = model_str.split("/", 1)[1]

@@ -17,7 +17,7 @@ from flow import eval_flow
 from prefect.task_runners import ThreadPoolTaskRunner
 
 from keystone.constants import DEFAULT_TESTING_LOG_PATH
-from keystone.schema import AgentConfig, KeystoneConfig
+from keystone.schema import AgentConfig, KeystoneConfig, LLMModel
 
 SAMPLES_DIR = Path(__file__).parent.parent / "samples"
 # On Modal, fake_claude_agent.py is pre-installed at this path (see keystone/modal/image.py)
@@ -110,6 +110,8 @@ def test_eval_flow_fake_agent(sample_repos: tuple[Path, list[str]], tmp_path: Pa
             agent_time_limit_seconds=5 * 60,
             agent_in_modal=True,
             agent_cmd=f"python {FAKE_CLAUDE_AGENT_MODAL}",
+            model=LLMModel.HAIKU,
+            claude_reasoning_level="medium",
             guardrail=True,
             use_agents_md=True,
         ),
@@ -200,6 +202,8 @@ def test_eval_flow_claude_on_modal(sample_repos: tuple[Path, list[str]], tmp_pat
             agent_time_limit_seconds=10 * 60,
             agent_in_modal=True,
             agent_cmd="claude",
+            model=LLMModel.HAIKU,
+            claude_reasoning_level="medium",
             guardrail=True,
             use_agents_md=True,
         ),

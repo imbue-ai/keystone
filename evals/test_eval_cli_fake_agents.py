@@ -90,11 +90,12 @@ def sample_repo(tmp_path: Path) -> tuple[Path, list[str]]:
 
 
 # The 4 agent/model/provider combinations to test
+# (name, agent_cmd, provider, model, claude_reasoning_level, codex_reasoning_level)
 FAKE_AGENT_CONFIGS = [
-    ("claude-haiku", FAKE_CLAUDE_AGENT_CMD, "claude", LLMModel.HAIKU),
-    ("claude-opus", FAKE_CLAUDE_AGENT_CMD, "claude", LLMModel.OPUS),
-    ("codex-mini", FAKE_CODEX_AGENT_CMD, "codex", LLMModel.CODEX_MINI),
-    ("codex", FAKE_CODEX_AGENT_CMD, "codex", LLMModel.CODEX),
+    ("claude-haiku", FAKE_CLAUDE_AGENT_CMD, "claude", LLMModel.HAIKU, "medium", None),
+    ("claude-opus", FAKE_CLAUDE_AGENT_CMD, "claude", LLMModel.OPUS, "medium", None),
+    ("codex-mini", FAKE_CODEX_AGENT_CMD, "codex", LLMModel.CODEX_MINI, None, "high"),
+    ("codex", FAKE_CODEX_AGENT_CMD, "codex", LLMModel.CODEX, None, "high"),
 ]
 
 
@@ -120,7 +121,7 @@ def test_eval_cli_fake_agents_config_file(
 
     # Build 4 EvalConfig entries (s3 prefixes resolved from globals)
     configs: list[EvalConfig] = []
-    for name, agent_cmd, provider, model in FAKE_AGENT_CONFIGS:
+    for name, agent_cmd, provider, model, claude_rl, codex_rl in FAKE_AGENT_CONFIGS:
         configs.append(
             EvalConfig(
                 name=name,
@@ -132,6 +133,8 @@ def test_eval_cli_fake_agents_config_file(
                         agent_cmd=agent_cmd,
                         model=model,
                         provider=provider,
+                        claude_reasoning_level=claude_rl,
+                        codex_reasoning_level=codex_rl,
                         guardrail=False,
                         use_agents_md=True,
                     ),
@@ -163,13 +166,13 @@ def test_eval_cli_fake_agents_config_file(
     assert result.exit_code == 0, f"CLI exited with code {result.exit_code}:\n{result.output}"
 
     # Verify we got 4 distinct output subdirectories (one per config name)
-    config_output_dirs = [s3_output_dir / name for name, _, _, _ in FAKE_AGENT_CONFIGS]
+    config_output_dirs = [s3_output_dir / name for name, _, _, _, _, _ in FAKE_AGENT_CONFIGS]
     assert len(set(config_output_dirs)) == len(FAKE_AGENT_CONFIGS), (
         "Output directories should all be distinct"
     )
 
     # Verify each configuration produced results with the correct model embedded
-    for name, _agent_cmd, _provider, model in FAKE_AGENT_CONFIGS:
+    for name, _agent_cmd, _provider, model, _claude_rl, _codex_rl in FAKE_AGENT_CONFIGS:
         config_dir = s3_output_dir / name
 
         # Check eval_summary.json was written

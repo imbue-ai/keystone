@@ -22,7 +22,7 @@ from eval_cli import app
 from eval_schema import EvalConfig, EvalRunConfig
 from typer.testing import CliRunner
 
-from keystone.schema import AgentConfig, KeystoneConfig
+from keystone.schema import AgentConfig, KeystoneConfig, LLMModel
 
 REPOS_JSONL = Path(__file__).parent / "test_data" / "tiny_codex" / "repos.jsonl"
 
@@ -51,6 +51,8 @@ def test_tiny_codex_eval(tmp_path: Path) -> None:
                         agent_time_limit_seconds=3 * 60,
                         agent_in_modal=True,
                         provider="codex",
+                        model=LLMModel.CODEX_MINI,
+                        codex_reasoning_level="high",
                         guardrail=False,
                         use_agents_md=True,
                     ),

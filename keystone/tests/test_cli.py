@@ -101,6 +101,10 @@ def test_cli_does_not_crash_in_empty_git_repo(
             str(test_artifacts_dir),
             "--max_budget_usd",
             "0",
+            "--model",
+            "claude-opus-4-6",
+            "--claude_reasoning_level",
+            "low",
             "--run_agent_locally_with_dangerously_skip_permissions",
         ]
         result = CliRunner().invoke(app, cmd)
@@ -172,6 +176,10 @@ def test_max_budget_zero_fails(tmp_path: Path, project_root: Path) -> None:
         str(test_artifacts_dir),
         "--max_budget_usd",
         "0",
+        "--model",
+        "claude-opus-4-6",
+        "--claude_reasoning_level",
+        "low",
         "--run_agent_locally_with_dangerously_skip_permissions",
     ]
 

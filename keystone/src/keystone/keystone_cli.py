@@ -203,42 +203,48 @@ def bootstrap(
         test_artifacts_dir = test_artifacts_dir.resolve()
         test_artifacts_dir.mkdir(parents=True, exist_ok=True)
 
-    # Validate --model is always set.
-    if model is None:
-        console.print("[bold red]Error:[/bold red] --model is required.")
-        raise typer.Exit(code=1)
+    # Validate --model and reasoning flags only when using a built-in provider
+    # (i.e. no custom --agent_cmd).  Custom agent commands don't use these.
+    if agent_cmd is None:
+        if model is None:
+            console.print("[bold red]Error:[/bold red] --model is required.")
+            raise typer.Exit(code=1)
 
-    # Validate reasoning level flags match the active provider.
-    # The appropriate flag must be set, and the *other* provider's flag must NOT be set.
-    _reasoning_errors: list[str] = []
-    if provider_name == "claude":
-        if claude_reasoning_level is None:
-            _reasoning_errors.append("--claude_reasoning_level is required when provider is 'claude'.")
-        if codex_reasoning_level is not None:
-            _reasoning_errors.append(
-                "--codex_reasoning_level must not be set when provider is 'claude'."
-            )
-    elif provider_name == "codex":
-        if codex_reasoning_level is None:
-            _reasoning_errors.append("--codex_reasoning_level is required when provider is 'codex'.")
-        if claude_reasoning_level is not None:
-            _reasoning_errors.append(
-                "--claude_reasoning_level must not be set when provider is 'codex'."
-            )
-    else:
-        # Other providers (e.g. opencode) don't support reasoning level flags.
-        if claude_reasoning_level is not None:
-            _reasoning_errors.append(
-                f"--claude_reasoning_level must not be set when provider is '{provider_name}'."
-            )
-        if codex_reasoning_level is not None:
-            _reasoning_errors.append(
-                f"--codex_reasoning_level must not be set when provider is '{provider_name}'."
-            )
-    if _reasoning_errors:
-        for err in _reasoning_errors:
-            console.print(f"[bold red]Error:[/bold red] {err}")
-        raise typer.Exit(code=1)
+        # Validate reasoning level flags match the active provider.
+        # The appropriate flag must be set, and the *other* provider's flag must NOT be set.
+        _reasoning_errors: list[str] = []
+        if provider_name == "claude":
+            if claude_reasoning_level is None:
+                _reasoning_errors.append(
+                    "--claude_reasoning_level is required when provider is 'claude'."
+                )
+            if codex_reasoning_level is not None:
+                _reasoning_errors.append(
+                    "--codex_reasoning_level must not be set when provider is 'claude'."
+                )
+        elif provider_name == "codex":
+            if codex_reasoning_level is None:
+                _reasoning_errors.append(
+                    "--codex_reasoning_level is required when provider is 'codex'."
+                )
+            if claude_reasoning_level is not None:
+                _reasoning_errors.append(
+                    "--claude_reasoning_level must not be set when provider is 'codex'."
+                )
+        else:
+            # Other providers (e.g. opencode) don't support reasoning level flags.
+            if claude_reasoning_level is not None:
+                _reasoning_errors.append(
+                    f"--claude_reasoning_level must not be set when provider is '{provider_name}'."
+                )
+            if codex_reasoning_level is not None:
+                _reasoning_errors.append(
+                    f"--codex_reasoning_level must not be set when provider is '{provider_name}'."
+                )
+        if _reasoning_errors:
+            for err in _reasoning_errors:
+                console.print(f"[bold red]Error:[/bold red] {err}")
+            raise typer.Exit(code=1)
 
     # Build agent config early — needed for prompt generation and cache key.
     assert max_budget_usd is not None

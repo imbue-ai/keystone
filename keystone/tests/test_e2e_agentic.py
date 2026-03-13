@@ -183,6 +183,13 @@ def test_e2e_claude_on_modal_sample_projects(
         str(test_artifacts_dir),
         "--log_db",
         str(cache_file),
+        "--model",
+        "claude-opus-4-6",
+        "--claude_reasoning_level",
+        "low",
+        "--agent_in_modal",
+        "--docker_registry_mirror",
+        os.environ["DOCKER_REGISTRY_MIRROR"],
     ]
 
     logger.info("Running: keystone %s", " ".join(cmd))

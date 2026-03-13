@@ -55,7 +55,6 @@ def run(
     ),
     no_cache_replay: bool = typer.Option(False, "--no_cache_replay", help="Force fresh execution"),
     # require_cache_hit: bool = typer.Option(False, "--require_cache_hit", help="Fail if cache miss"),
-    # no_evaluator: bool = typer.Option(False, "--no_evaluator", help="Skip LLM evaluator"),
     # no_guardrail: bool = typer.Option(False, "--no_guardrail", help="Disable guardrail checks"),
     # limit: int | None = typer.Option(None, "--limit", help="Limit to first N repos"),
 ) -> None:
@@ -86,10 +85,6 @@ def run(
     # if require_cache_hit:
     #     for cfg in resolved_configs:
     #         cfg.keystone_config = cfg.keystone_config.model_copy(update={"require_cache_hit": True})
-    # if no_evaluator:
-    #     for cfg in resolved_configs:
-    #         ac = cfg.keystone_config.agent_config.model_copy(update={"evaluator": False})
-    #         cfg.keystone_config = cfg.keystone_config.model_copy(update={"agent_config": ac})
     # if no_guardrail:
     #     for cfg in resolved_configs:
     #         ac = cfg.keystone_config.agent_config.model_copy(update={"guardrail": False})

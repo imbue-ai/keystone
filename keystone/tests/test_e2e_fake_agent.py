@@ -76,7 +76,6 @@ def test_e2e_fake_agent(
         shlex.quote(agent_cmd_str),
         "--log_db",
         str(cache_file),
-        "--no_evaluator",
     ]
     if use_modal:
         cmd += [
@@ -179,7 +178,6 @@ def test_e2e_fake_agent(
         shlex.quote(agent_cmd_str),
         "--log_db",
         str(cache_file),
-        "--no_evaluator",
     ]
     if use_modal:
         cmd2 += [
@@ -223,7 +221,6 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path, project_root: Path
         "--agent_cmd",
         shlex.quote(str(fake_agent)),
         "--run_agent_locally_with_dangerously_skip_permissions",
-        "--no_evaluator",
     ]
 
     logger.info("Running: keystone %s", " ".join(cmd))
@@ -295,7 +292,6 @@ def test_e2e_agent_error_propagation(tmp_path: Path, project_root: Path) -> None
         "--docker_registry_mirror",
         os.environ["DOCKER_REGISTRY_MIRROR"],
         "--no_cache_replay",
-        "--no_evaluator",
     ]
 
     logger.info("Running: %s", " ".join(cmd))

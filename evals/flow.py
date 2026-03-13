@@ -326,8 +326,6 @@ def process_repo_task(
                     ]
                 )
 
-            if not agent.evaluator:
-                cmd.append("--no_evaluator")
             if agent.agent_cmd is not None:
                 cmd.extend(["--agent_cmd", agent.agent_cmd])
             if agent.model is not None:

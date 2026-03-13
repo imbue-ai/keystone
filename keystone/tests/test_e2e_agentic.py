@@ -50,8 +50,6 @@ class BootstrapSnapshotExtension(SoftAmberExtension):
             "generated_files",
             # Environment-specific
             "cli_args",
-            # LLM evaluator output
-            "evaluator",
             # Verification timing
             "verification.image_build_seconds",
             "verification.test_execution_seconds",

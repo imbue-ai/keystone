@@ -450,6 +450,7 @@ All files go inside `.devcontainer/` — nothing outside that directory is prese
 AGENTS_MD_SHORT_PROMPT = (
     "Set up a .devcontainer with Dockerfile and test runner for this project. "
     "Read the AGENTS.md file first for detailed instructions, then explore the repo and create the files."
+    "Complete the task fully in this turn. Do not stop after planning."
 )
 
 

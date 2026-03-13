@@ -12,7 +12,6 @@
       "name": "claude-opus",
       "keystone_config": {
         "agent_config": {
-          "evaluator": false,
           "guardrail": true, 
           "use_agents_md": true,
           "agent_in_modal": true,
@@ -28,7 +27,6 @@
       "name": "codex-gpt-5.3",
       "keystone_config": {
         "agent_config": {
-          "evaluator": false,
           "guardrail": true, 
           "use_agents_md": true,
           "agent_in_modal": true,
@@ -48,7 +46,6 @@
       "name": "claude-opus_no_agents_md",
       "keystone_config": {
         "agent_config": {
-          "evaluator": false,
           "guardrail": true, 
           "use_agents_md": false,
           "agent_in_modal": true,
@@ -64,7 +61,6 @@
       "name": "codex-gpt-5.3_no_agents_md",
       "keystone_config": {
         "agent_config": {
-          "evaluator": false,
           "guardrail": true, 
           "use_agents_md": false,
           "agent_in_modal": true,
@@ -85,7 +81,6 @@
       "name": "claude-opus_no_agents_md_no_guardrail",
       "keystone_config": {
         "agent_config": {
-          "evaluator": false,
           "guardrail": false, 
           "use_agents_md": false,
           "agent_in_modal": true,
@@ -101,7 +96,6 @@
       "name": "codex-gpt-5.3_no_agents_md_no_guardrail",
       "keystone_config": {
         "agent_config": {
-          "evaluator": false,
           "guardrail": false, 
           "use_agents_md": false,
           "agent_in_modal": true,
@@ -119,7 +113,6 @@
     //   "keystone_config": {
     //     "agent_config": {
     //       "provider": "claude",
-    //       "evaluator": false,
     //       "guardrail": false, "use_agents_md": true,
     //       "agent_in_modal": true,
     //       "model": "claude-haiku-4-5-20251001",
@@ -134,7 +127,6 @@
     //   "keystone_config": {
     //     "agent_config": {
     //       "provider": "codex",
-    //       "evaluator": false,
     //       "guardrail": false, "use_agents_md": true,
     //       "agent_in_modal": true,
     //       "model": "gpt-5.3-codex",
@@ -149,7 +141,6 @@
     //   "keystone_config": {
     //     "agent_config": {
     //       "provider": "codex",
-    //       "evaluator": false,
     //       "guardrail": false, "use_agents_md": true,
     //       "agent_in_modal": true,
     //       "model": "gpt-5.1-codex-mini",

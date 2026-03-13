@@ -12,7 +12,7 @@
       "keystone_config": {
         "agent_config": {
           "provider": "codex",
-          "evaluator": true, "guardrail": true, "use_agents_md": true,
+          "guardrail": true, "use_agents_md": true,
           "agent_in_modal": true,
           "max_budget_usd": 5.0,
           "agent_time_limit_seconds": 1200

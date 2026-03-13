@@ -330,6 +330,10 @@ def process_repo_task(
                 cmd.extend(["--agent_cmd", agent.agent_cmd])
             if agent.model is not None:
                 cmd.extend(["--model", agent.model.value])
+            if agent.claude_reasoning_level is not None:
+                cmd.extend(["--claude_reasoning_level", agent.claude_reasoning_level])
+            if agent.codex_reasoning_level is not None:
+                cmd.extend(["--codex_reasoning_level", agent.codex_reasoning_level])
             if keystone_config.log_db:
                 cmd.extend(["--log_db", str(resolve_path(keystone_config.log_db))])
             if keystone_config.require_cache_hit:

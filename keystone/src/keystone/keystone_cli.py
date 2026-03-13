@@ -14,7 +14,6 @@ from keystone.agent_log import (
     AgentLog,
     CLIRunRecord,
     compute_cache_key,
-    create_devcontainer_tarball,
 )
 from keystone.agent_runner import LocalAgentRunner
 from keystone.cached_runner import CachedAgentRunner, CacheMissError
@@ -25,7 +24,6 @@ from keystone.constants import (
     STATUS_MARKER,
     SUMMARY_MARKER,
 )
-from keystone.evaluator import evaluate_agent_work, evaluate_and_fix, run_guardrail
 from keystone.git_utils import (
     create_git_archive_bytes,
     get_git_tree_hash,
@@ -50,7 +48,6 @@ from keystone.schema import (
     AgentExecution,
     AgentStatusMessage,
     BootstrapResult,
-    EvaluatorResult,
     GeneratedFiles,
     InferenceCost,
     LLMModel,
@@ -153,11 +150,6 @@ def bootstrap(
             "Pass --docker_registry_mirror='' to disable."
         ),
     ),
-    evaluator: bool = typer.Option(
-        True,
-        "--evaluator/--no_evaluator",
-        help="Enable or disable the LLM evaluator (fix-up and passive check).",
-    ),
     guardrail: bool = typer.Option(
         True,
         "--guardrail/--no_guardrail",
@@ -181,7 +173,7 @@ def bootstrap(
 ) -> None:
     """Bootstrap a devcontainer for a project."""
     logging.info(
-        f"Starting keystone CLI, version: {Path.cwd()=}, {project_root=}, {test_artifacts_dir=}, {agent_cmd=}, {provider_name=}, {model=}, {max_budget_usd=}, {log_db=}, {require_cache_hit=}, {no_cache_replay=}, {cache_version=}, {output_file=}, {agent_in_modal=}, {agent_time_limit_seconds=}, {image_build_timeout_seconds=}, {test_timeout_seconds=}, {docker_registry_mirror=}, {evaluator=}, {guardrail=}, {get_version_info()=}"
+        f"Starting keystone CLI, version: {Path.cwd()=}, {project_root=}, {test_artifacts_dir=}, {agent_cmd=}, {provider_name=}, {model=}, {max_budget_usd=}, {log_db=}, {require_cache_hit=}, {no_cache_replay=}, {cache_version=}, {output_file=}, {agent_in_modal=}, {agent_time_limit_seconds=}, {image_build_timeout_seconds=}, {test_timeout_seconds=}, {docker_registry_mirror=}, {guardrail=}, {get_version_info()=}"
     )
     assert project_root is not None, "--project_root is required"
     project_root = project_root.resolve()
@@ -259,7 +251,6 @@ def bootstrap(
         agent_cmd=agent_cmd,  # None means infer from provider.default_cmd at run time
         claude_reasoning_level=claude_reasoning_level,
         codex_reasoning_level=codex_reasoning_level,
-        evaluator=evaluator,
         guardrail=guardrail,
         use_agents_md=use_agents_md,
     )
@@ -298,7 +289,6 @@ def bootstrap(
 
     exit_code = 1
     verification_success = False
-    evaluator_result: EvaluatorResult | None = None
     agent_summary: AgentStatusMessage | None = None
     status_messages: list[AgentStatusMessage] = []
     agent_errors: list[str] = []
@@ -491,7 +481,7 @@ def bootstrap(
 
         agent_work_seconds = time.monotonic() - start_time
 
-        # Verification step (with evaluator fix-up loop on failure)
+        # Verification step
         logging.info(f"{ANSI_BLUE}Verifying agent's work...{ANSI_RESET}")
 
         dockerfile_path = project_root / ".devcontainer" / "Dockerfile"
@@ -539,79 +529,6 @@ def bootstrap(
                 print("=" * 60, file=sys.stderr)
                 print(verification_error, file=sys.stderr)
                 print("=" * 60, file=sys.stderr)
-
-            # ---- Evaluator fix-up: attempt to repair on failure ----
-            if not verification_success and verification_error and evaluator:
-                devcontainer_dir = project_root / ".devcontainer"
-
-                # Run guardrail and display output before evaluator LLM call
-                if guardrail:
-                    console.print("[yellow]Guardrail:[/yellow] Running structural checks...")
-                    guardrail_output = run_guardrail(project_root)
-                    console.print(guardrail_output)
-
-                console.print(
-                    "[yellow]Evaluator:[/yellow] Verification failed — "
-                    "attempting LLM fix-up pass..."
-                )
-
-                evaluator_model = model.value if model else "claude-haiku-4-5-20251001"
-
-                devcontainer_json_path = project_root / ".devcontainer" / "devcontainer.json"
-                fix_files = {
-                    "devcontainer_json": devcontainer_json_path.read_text()
-                    if devcontainer_json_path.exists()
-                    else None,
-                    "dockerfile": dockerfile_path.read_text() if dockerfile_path.exists() else None,
-                    "run_all_tests_sh": test_script_path.read_text()
-                    if test_script_path.exists()
-                    else None,
-                }
-
-                evaluator_result = evaluate_and_fix(
-                    verification_error=verification_error,
-                    generated_files=fix_files,
-                    status_messages=[m.message for m in status_messages],
-                    agent_summary=agent_summary.message if agent_summary else None,
-                    devcontainer_dir=devcontainer_dir,
-                    project_root=project_root,
-                    model=evaluator_model,
-                    guardrail=guardrail,
-                )
-
-                if evaluator_result.passed:
-                    console.print(
-                        f"[yellow]Evaluator:[/yellow] Wrote fixes — {evaluator_result.reasoning}"
-                    )
-                    _print_devcontainer_files()
-
-                    # Rebuild tarball from fixed files and re-verify
-                    fixed_tarball = create_devcontainer_tarball(project_root)
-                    devcontainer_tarball = fixed_tarball
-
-                    console.print(
-                        "[yellow]Evaluator:[/yellow] Re-running verification with fixed files..."
-                    )
-                    verify_result_2 = _run_verification(fixed_tarball)
-                    verification_success = verify_result_2.success
-                    verification_error = verify_result_2.error_message
-                    image_build_seconds = verify_result_2.image_build_seconds
-                    test_execution_seconds = verify_result_2.test_execution_seconds
-
-                    if verification_success:
-                        console.print(
-                            "[green]Evaluator:[/green] Fix-up succeeded! Verification now passes."
-                        )
-                    else:
-                        console.print(
-                            f"[red]Evaluator:[/red] Fix-up did not resolve "
-                            f"the issue: {verification_error}"
-                        )
-                else:
-                    console.print(
-                        f"[red]Evaluator:[/red] Could not produce fixes — "
-                        f"{evaluator_result.reasoning}"
-                    )
 
         except Exception as e:
             print(f"Verification error: {e}", file=sys.stderr)
@@ -700,41 +617,6 @@ def bootstrap(
         run_all_tests_sh=test_script_path.read_text() if test_script_path.exists() else None,
     )
 
-    # Run passive LLM evaluator (only if the fix-up loop didn't already set it)
-    if evaluator_result is None and evaluator:
-        try:
-            evaluator_model = model.value if model else "claude-haiku-4-5-20251001"
-
-            # Run guardrail and display output before evaluator LLM call
-            if guardrail:
-                console.print("[yellow]Guardrail:[/yellow] Running structural checks...")
-                guardrail_output = run_guardrail(project_root)
-                console.print(guardrail_output)
-
-            logging.info("Running LLM evaluator to check agent completeness...")
-            evaluator_result = evaluate_agent_work(
-                generated_files={
-                    "devcontainer_json": generated_files.devcontainer_json,
-                    "dockerfile": generated_files.dockerfile,
-                    "run_all_tests_sh": generated_files.run_all_tests_sh,
-                },
-                agent_summary=agent_summary.message if agent_summary else None,
-                status_messages=[m.message for m in status_messages],
-                verification_success=verification_success,
-                verification_error=verification_error,
-                project_root=project_root,
-                model=evaluator_model,
-                guardrail=guardrail,
-            )
-            if evaluator_result.passed:
-                console.print(f"[green]Evaluator:[/green] PASSED - {evaluator_result.reasoning}")
-            else:
-                console.print(f"[red]Evaluator:[/red] FAILED - {evaluator_result.reasoning}")
-                for issue in evaluator_result.issues:
-                    console.print(f"  - {issue}")
-        except Exception as e:
-            logging.warning(f"Evaluator failed (non-blocking): {e}")
-
     output = BootstrapResult(
         success=overall_success,
         error_message=error_message,
@@ -751,7 +633,6 @@ def bootstrap(
             cost=inference_cost,
         ),
         verification=verification,
-        evaluator=evaluator_result,
         generated_files=generated_files,
     )
 

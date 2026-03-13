@@ -51,7 +51,6 @@ def test_tiny_codex_eval(tmp_path: Path) -> None:
                         agent_time_limit_seconds=3 * 60,
                         agent_in_modal=True,
                         provider="codex",
-                        evaluator=False,
                         guardrail=False,
                         use_agents_md=True,
                     ),

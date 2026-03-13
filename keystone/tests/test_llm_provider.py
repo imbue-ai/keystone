@@ -25,7 +25,6 @@ def _make_config(**overrides: object) -> AgentConfig:
         "agent_time_limit_seconds": 300,
         "agent_in_modal": False,
         "provider": "claude",
-        "evaluator": False,
         "guardrail": False,
         "use_agents_md": False,
     }

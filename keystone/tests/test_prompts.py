@@ -22,7 +22,6 @@ def _make_config(
         agent_time_limit_seconds=3600,
         agent_in_modal=agent_in_modal,
         provider="claude",
-        evaluator=True,
         guardrail=guardrail,
         use_agents_md=use_agents_md,
     )

@@ -132,7 +132,6 @@ def test_eval_cli_fake_agents_config_file(
                         agent_cmd=agent_cmd,
                         model=model,
                         provider=provider,
-                        evaluator=True,
                         guardrail=False,
                         use_agents_md=True,
                     ),

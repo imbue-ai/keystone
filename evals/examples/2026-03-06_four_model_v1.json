@@ -9,7 +9,6 @@
       "keystone_config": {
         "agent_config": {
           "provider": "claude",
-          "evaluator": false,
           "guardrail": false, "use_agents_md": true,
           "agent_in_modal": true,
           "model": "claude-opus-4-6",
@@ -24,7 +23,6 @@
       "keystone_config": {
         "agent_config": {
           "provider": "claude",
-          "evaluator": false,
           "guardrail": false, "use_agents_md": true,
           "agent_in_modal": true,
           "model": "claude-haiku-4-5-20251001",
@@ -39,7 +37,6 @@
       "keystone_config": {
         "agent_config": {
           "provider": "codex",
-          "evaluator": false,
           "guardrail": false, "use_agents_md": true,
           "agent_in_modal": true,
           "model": "gpt-5.3-codex",
@@ -54,7 +51,6 @@
       "keystone_config": {
         "agent_config": {
           "provider": "codex",
-          "evaluator": false,
           "guardrail": false, "use_agents_md": true,
           "agent_in_modal": true,
           "model": "gpt-5.1-codex-mini",

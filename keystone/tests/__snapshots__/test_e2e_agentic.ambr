@@ -304,14 +304,6 @@
       '-v',
     ]),
     'error_message': None,
-    'evaluator': dict({
-      'cost_usd': 0.0,
-      'issues': list([
-      ]),
-      'model': '',
-      'passed': True,
-      'reasoning': 'Skipped: ANTHROPIC_API_KEY not available',
-    }),
     'generated_files': dict({
       'devcontainer_json': '''
         {
@@ -326,7 +318,7 @@
             "--network=host"
           ]
         }
-  
+
       ''',
       'dockerfile': '''
         FROM python:3.11-slim
@@ -464,19 +456,6 @@
       '--rootdir=/Users/thad/Imbue Dropbox/Thad Hughes/src/bootstrap_devcontainer',
     ]),
     'error_message': None,
-    'evaluator': dict({
-      'cost_usd': 0.002588,
-      'issues': list([
-        'Guardrail check failed: No clean project copy found (expected /project_clean or .project_clean) — Docker build isolation could not be verified',
-        'Guardrail check failed: Docker image was not built — tests could not be run',
-        "Agent's summary claims success ('Everything worked') despite guardrail check reporting 2 errors",
-        "Verification status is marked 'Success: True' but guardrail check shows FAILED state with unfixed errors",
-        'The Dockerfile and run_all_tests.sh appear well-constructed, but their functionality could not be validated due to build/test execution failures',
-      ]),
-      'model': 'claude-haiku-4-5-20251001',
-      'passed': False,
-      'reasoning': "While the agent created all three required files and made genuine attempts at working implementations, the guardrail check failed on critical validation steps. The Docker build could not be verified due to missing a clean project copy, and consequently tests could not be run. The agent's summary claims 'Everything worked' when the verification actually reports failures.",
-    }),
     'generated_files': dict({
       'devcontainer_json': '''
         {

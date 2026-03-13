@@ -595,6 +595,7 @@ def _collect_eval_results(
 
 @flow(name="eval_keystone")
 def eval_flow(
+    # FIXME: Pass the whole config object in here, not all these parameters.
     repo_list_path: str,
     eval_configs: list[EvalConfig],
     s3_repo_cache_prefix: str,

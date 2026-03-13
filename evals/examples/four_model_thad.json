@@ -1,9 +1,9 @@
 {
   "description": "Trying to get things working again!",
   "repo_list_path": "evals/examples/repos.jsonl",
-  "s3_output_prefix": "s3://int8-datasets/keystone/evals/2026-03-10_four_model_thad/",
+  "s3_output_prefix": "s3://int8-datasets/keystone/evals/2026-03-13_four_model_thad/",
   "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs/",
-  "limit_to_first_n_repos": 50,
+  "limit_to_first_n_repos": 2,
   "max_concurrent": 200,
   "configs": [
     // --------------------------------------------------

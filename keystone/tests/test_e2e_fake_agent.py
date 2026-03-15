@@ -118,16 +118,16 @@ def test_e2e_fake_agent(
     assert output.agent.summary is not None, "Expected agent.summary to be set"
     assert (
         output.agent.summary.message
-        == "[fake_claude_agent/unknown-model] Created Python devcontainer with pytest support."
+        == "[fake_claude_agent/claude-opus-4-6] Created Python devcontainer with pytest support."
     ), f"Expected agent.summary to be captured, got: {output.agent.summary}"
 
     # Verify status_messages were captured in order
     assert [m.message for m in output.agent.status_messages] == [
-        "[fake_claude_agent/unknown-model] Exploring repository structure.",
-        "[fake_claude_agent/unknown-model] Creating devcontainer.json and Dockerfile.",
-        "[fake_claude_agent/unknown-model] Completed setup of devcontainer files.",
-        "[fake_claude_agent/unknown-model] Running guardrail.sh self-check.",
-        "[fake_claude_agent/unknown-model] Guardrail self-check passed.",
+        "[fake_claude_agent/claude-opus-4-6] Exploring repository structure.",
+        "[fake_claude_agent/claude-opus-4-6] Creating devcontainer.json and Dockerfile.",
+        "[fake_claude_agent/claude-opus-4-6] Completed setup of devcontainer files.",
+        "[fake_claude_agent/claude-opus-4-6] Running guardrail.sh self-check.",
+        "[fake_claude_agent/claude-opus-4-6] Guardrail self-check passed.",
     ], f"Expected status_messages to be captured, got: {output.agent.status_messages}"
 
     # Verify test_results contents (now nested in verification)

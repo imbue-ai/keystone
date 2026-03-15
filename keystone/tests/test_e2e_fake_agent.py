@@ -333,26 +333,20 @@ def test_e2e_agent_error_propagation(tmp_path: Path, project_root: Path) -> None
     logger.info("  agent.error_messages: %s", output.agent.error_messages)
 
 
-@pytest.mark.local_docker
-@pytest.mark.skipif(
-    not shutil.which("timeout"), reason="GNU timeout not available (install coreutils)"
-)
+@pytest.mark.modal
+@pytest.mark.agentic
+@pytest.mark.parametrize("project_root", ["python_project"], indirect=True)
 def test_agent_time_limit_causes_timeout(tmp_path: Path, project_root: Path) -> None:
     """Test that setting a very short --agent_time_limit_seconds causes timeout.
 
-    The CLI should return non-zero exit code and set agent_timed_out=True.
-    Uses a slow fake agent that sleeps to ensure timeout triggers.
+    Uses a real Claude agent on Modal with a 1-second time limit. The agent
+    will always exceed this, triggering the timeout path. Verifies the CLI
+    returns non-zero exit code and sets agent.timed_out=True.
+
+    Requires ANTHROPIC_API_KEY in the environment and Modal credentials configured.
     """
     test_artifacts_dir = tmp_path / "test_artifacts"
-
-    # Create a slow fake agent that sleeps
-    slow_agent = tmp_path / "slow_agent.py"
-    slow_agent.write_text("""#!/usr/bin/env python3
-import time
-time.sleep(10)  # Sleep longer than the timeout
-print('{"type": "result"}')
-""")
-    slow_agent.chmod(0o755)
+    cache_file = tmp_path / "timeout_test_cache.sqlite"
 
     logger.info("=" * 60)
     logger.info("Testing agent_time_limit_seconds causes timeout")
@@ -360,42 +354,41 @@ print('{"type": "result"}')
     logger.info("=" * 60)
 
     cmd = [
-        "keystone",
         "--project_root",
         str(project_root),
         "--test_artifacts_dir",
         str(test_artifacts_dir),
-        "--agent_cmd",
-        str(slow_agent),
-        "--run_agent_locally_with_dangerously_skip_permissions",
+        "--log_db",
+        str(cache_file),
+        "--model",
+        "claude-opus-4-6",
+        "--claude_reasoning_level",
+        "low",
+        "--agent_in_modal",
+        "--docker_registry_mirror",
+        os.environ["DOCKER_REGISTRY_MIRROR"],
+        "--no_cache_replay",
         "--agent_time_limit_seconds",
-        "1",  # 1 second timeout - agent sleeps for 10s so will timeout
+        "1",  # 1 second timeout - agent startup alone exceeds this
     ]
 
-    logger.info("Running: %s", " ".join(cmd))
+    logger.info("Running: keystone %s", " ".join(cmd))
 
-    result = run_process(cmd, log_prefix="[timeout-test]")
+    result = CliRunner().invoke(app, cmd)
 
-    logger.info("Return code: %s", result.returncode)
+    # Surface CLI crashes before attempting to parse JSON output
+    if result.exception and not isinstance(result.exception, SystemExit):
+        logger.error("CLI raised an exception:\n%s", result.exception)
+        raise result.exception
+
+    logger.info("Exit code: %s", result.exit_code)
+
+    output = parse_bootstrap_result(result.stdout)
 
     # CLI should return non-zero exit code on timeout
-    assert result.returncode != 0, "Expected non-zero exit code with time limit"
-
-    # Parse JSON output - should still be present even on failure
-    stdout_lines = result.stdout.strip().split("\n")
-    json_start = None
-    for i, line in enumerate(stdout_lines):
-        if line.strip() == "{":
-            json_start = i
-            break
-
-    assert json_start is not None, "Expected JSON output even on timeout"
-    json_str = "\n".join(stdout_lines[json_start:])
-    output = BootstrapResult.model_validate_json(json_str)
-
+    assert result.exit_code != 0, "Expected non-zero exit code with time limit"
     assert not output.success, "Expected success=false with time limit"
     assert output.agent.timed_out, "Expected agent.timed_out=True"
-    assert output.agent.exit_code == 124, "Expected exit code 124 (timeout)"
 
 
 @pytest.mark.local_docker

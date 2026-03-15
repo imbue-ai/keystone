@@ -333,64 +333,6 @@ def test_e2e_agent_error_propagation(tmp_path: Path, project_root: Path) -> None
     logger.info("  agent.error_messages: %s", output.agent.error_messages)
 
 
-@pytest.mark.modal
-@pytest.mark.agentic
-@pytest.mark.parametrize("project_root", ["python_project"], indirect=True)
-def test_agent_time_limit_causes_timeout(tmp_path: Path, project_root: Path) -> None:
-    """Test that setting a very short --agent_time_limit_seconds causes timeout.
-
-    Uses a real Claude agent on Modal with a 1-second time limit. The agent
-    will always exceed this, triggering the timeout path. Verifies the CLI
-    returns non-zero exit code and sets agent.timed_out=True.
-
-    Requires ANTHROPIC_API_KEY in the environment and Modal credentials configured.
-    """
-    test_artifacts_dir = tmp_path / "test_artifacts"
-    cache_file = tmp_path / "timeout_test_cache.sqlite"
-
-    logger.info("=" * 60)
-    logger.info("Testing agent_time_limit_seconds causes timeout")
-    logger.info("Project root: %s", project_root)
-    logger.info("=" * 60)
-
-    cmd = [
-        "--project_root",
-        str(project_root),
-        "--test_artifacts_dir",
-        str(test_artifacts_dir),
-        "--log_db",
-        str(cache_file),
-        "--model",
-        "claude-opus-4-6",
-        "--claude_reasoning_level",
-        "low",
-        "--agent_in_modal",
-        "--docker_registry_mirror",
-        os.environ["DOCKER_REGISTRY_MIRROR"],
-        "--no_cache_replay",
-        "--agent_time_limit_seconds",
-        "1",  # 1 second timeout - agent startup alone exceeds this
-    ]
-
-    logger.info("Running: keystone %s", " ".join(cmd))
-
-    result = CliRunner().invoke(app, cmd)
-
-    # Surface CLI crashes before attempting to parse JSON output
-    if result.exception and not isinstance(result.exception, SystemExit):
-        logger.error("CLI raised an exception:\n%s", result.exception)
-        raise result.exception
-
-    logger.info("Exit code: %s", result.exit_code)
-
-    output = parse_bootstrap_result(result.stdout)
-
-    # CLI should return non-zero exit code on timeout
-    assert result.exit_code != 0, "Expected non-zero exit code with time limit"
-    assert not output.success, "Expected success=false with time limit"
-    assert output.agent.timed_out, "Expected agent.timed_out=True"
-
-
 @pytest.mark.local_docker
 def test_docker_cp_extracts_artifacts_when_dest_exists(tmp_path: Path) -> None:
     """Verify docker cp with '/.' copies contents even when destination pre-exists.

@@ -105,7 +105,7 @@
       IMPORTANT: You are in a Modal sandbox. Use `--network=host` for all docker run commands.
   
     ''',
-    'short_prompt': 'Set up a .devcontainer with Dockerfile and test runner for this project. Read the AGENTS.md file first for detailed instructions, then explore the repo and create the files.',
+    'short_prompt': 'Set up a .devcontainer with Dockerfile and test runner for this project. Read the AGENTS.md file first for detailed instructions, then explore the repo and create the files.Complete the task fully in this turn. Do not stop after planning.',
   })
 # ---
 # name: test_agents_md_prompt[no_guardrail-modal]
@@ -212,7 +212,7 @@
       IMPORTANT: You are in a Modal sandbox. Use `--network=host` for all docker run commands.
   
     ''',
-    'short_prompt': 'Set up a .devcontainer with Dockerfile and test runner for this project. Read the AGENTS.md file first for detailed instructions, then explore the repo and create the files.',
+    'short_prompt': 'Set up a .devcontainer with Dockerfile and test runner for this project. Read the AGENTS.md file first for detailed instructions, then explore the repo and create the files.Complete the task fully in this turn. Do not stop after planning.',
   })
 # ---
 # name: test_inline_prompt[guardrail-modal]

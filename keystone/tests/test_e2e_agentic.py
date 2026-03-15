@@ -274,7 +274,7 @@ def test_agent_time_limit_causes_timeout(tmp_path: Path, project_root: Path) -> 
         os.environ["DOCKER_REGISTRY_MIRROR"],
         "--no_cache_replay",
         "--agent_time_limit_seconds",
-        "1",  # 1 second timeout - agent startup alone exceeds this
+        "10",  # 10 second timeout - agent will exceed this easily
     ]
 
     logger.info("Running: keystone %s", " ".join(cmd))

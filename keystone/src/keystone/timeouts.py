@@ -15,11 +15,19 @@ By deriving the sandbox timeout from the agent timeout, we guarantee they
 never go out of sync.
 """
 
+_MINIMUM_SANDBOX_TIMEOUT_SECONDS = 30
+"""Modal enforces a minimum sandbox timeout of 10 s, but we need extra
+headroom so that ccusage can collect cost data after the agent is killed.
+30 s is a safe floor."""
+
 
 def sandbox_timeout_seconds(agent_time_limit_seconds: int) -> int:
-    """Modal sandbox lifetime -- 2x the agent working timeout.
+    """Modal sandbox lifetime -- 2x the agent working timeout, min 30 s.
 
     The sandbox must stay alive for the full agent run *plus* Docker image
     build and test execution, which can each take up to 30 min.
+    The 30 s floor ensures Modal accepts the timeout (minimum 10 s) and
+    gives enough time for ccusage to report token costs after the agent
+    is terminated.
     """
-    return agent_time_limit_seconds * 2
+    return max(agent_time_limit_seconds * 2, _MINIMUM_SANDBOX_TIMEOUT_SECONDS)

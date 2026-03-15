@@ -25,7 +25,6 @@ from typer.testing import CliRunner
 
 from keystone.junit_report_parser import parse_junit_xml
 from keystone.keystone_cli import app
-from keystone.process_runner import run_process
 from keystone.schema import BootstrapResult
 
 logger = logging.getLogger(__name__)
@@ -285,7 +284,6 @@ def test_e2e_agent_error_propagation(tmp_path: Path, project_root: Path) -> None
     logger.info("=" * 60)
 
     cmd = [
-        "keystone",
         "--project_root",
         str(project_root),
         "--test_artifacts_dir",
@@ -306,13 +304,18 @@ def test_e2e_agent_error_propagation(tmp_path: Path, project_root: Path) -> None
         "--no_cache_replay",
     ]
 
-    logger.info("Running: %s", " ".join(cmd))
-    result = run_process(cmd, log_prefix="[agent-error-propagation]")
+    logger.info("Running: keystone %s", " ".join(cmd))
+    result = CliRunner().invoke(app, cmd)
+
+    # Surface CLI crashes before attempting to parse JSON output
+    if result.exception and not isinstance(result.exception, SystemExit):
+        logger.error("CLI raised an exception:\n%s", result.exception)
+        raise result.exception
 
     output = parse_bootstrap_result(result.stdout)
 
     # The CLI should exit with non-zero code
-    assert result.returncode != 0, f"Expected non-zero exit code, got {result.returncode}"
+    assert result.exit_code != 0, f"Expected non-zero exit code, got {result.exit_code}"
 
     # The result should indicate failure
     assert not output.success, "Expected success=False"
@@ -339,7 +342,7 @@ def test_e2e_agent_error_propagation(tmp_path: Path, project_root: Path) -> None
     )
 
     logger.info("Agent error propagation test passed:")
-    logger.info("  exit code: %d", result.returncode)
+    logger.info("  exit code: %d", result.exit_code)
     logger.info("  agent exit code: %d", output.agent.exit_code)
     logger.info("  error_message: %s", output.error_message)
     logger.info("  agent.error_messages: %s", output.agent.error_messages)

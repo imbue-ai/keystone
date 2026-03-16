@@ -1,3 +1,14 @@
+"""Test Discovery Analysis — marimo notebook.
+
+Run interactively::
+
+    uv run marimo edit evals/eda/test_discovery_analysis.py
+
+Render to static HTML::
+
+    uv run marimo export html evals/eda/test_discovery_analysis.py -o test_discovery_analysis.html
+"""
+
 import marimo
 
 __generated_with = "0.20.4"
@@ -37,7 +48,7 @@ def _(mo):
     import json
     from pathlib import Path
 
-    PARQUET_PATH = Path.home() / "keystone_eval" / "2026-03-11_cat_v8.parquet"
+    PARQUET_PATH = Path.home() / "keystone_eval" / "2026-03-14.parquet"
     df = pl.read_parquet(PARQUET_PATH)
     mo.md(f"Loaded **{len(df)}** rows from `{PARQUET_PATH.name}`")
     return df, json, pl

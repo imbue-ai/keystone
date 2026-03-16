@@ -186,5 +186,42 @@
       "trials_per_repo": 1
     },
 
+    // --------------------------------------------------
+    // Medium effort/reasoning
+    {
+      "name": "claude-opus-effort_medium",
+      "keystone_config": {
+        "agent_config": {
+          "guardrail": true, 
+          "use_agents_md": true,
+          "agent_in_modal": true,
+          "provider": "claude",
+          "model": "claude-opus-4-6",
+          "claude_reasoning_level": "medium",
+          "max_budget_usd": 10.0,
+          "agent_time_limit_seconds": 3600
+        }
+      },
+      "trials_per_repo": 1
+    },
+    {
+      "name": "codex-gpt-5.3-reasoning_medium",
+      "keystone_config": {
+        "agent_config": {
+          "guardrail": true, 
+          "use_agents_md": true,
+          "agent_in_modal": true,
+          "provider": "codex",
+          "model": "gpt-5.3-codex",
+          "codex_reasoning_level": "medium",
+          "max_budget_usd": 10.0,
+          "agent_time_limit_seconds": 3600
+        }
+      },
+      "trials_per_repo": 1
+    },
+
+
+
   ]
 }

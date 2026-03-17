@@ -10,6 +10,8 @@ import argparse
 import json
 from pathlib import Path
 
+import s3fs
+
 EVALS_DIR = Path.home() / "keystone_evals"
 DEFAULT_S3_PREFIX = "s3://int8-datasets/keystone/evals/"
 
@@ -101,21 +103,31 @@ def categorize_error(error: str) -> str:
     return "Other"
 
 
+def _extract_model_repo(result: dict) -> tuple[str | None, str | None]:
+    """Extract (config_name, repo_id) from an eval_result dict."""
+    config_name = None
+    repo_id = None
+    eval_config = result.get("eval_config")
+    if eval_config:
+        config_name = eval_config.get("name")
+    repo_entry = result.get("repo_entry")
+    if repo_entry:
+        repo_id = repo_entry.get("id")
+    return config_name, repo_id
+
+
 def load_run_local(run_dir: Path) -> dict:
     """Load all results from a local run directory, return {model: {repo: result}}."""
     models: dict[str, dict] = {}
-    for model_dir in sorted(run_dir.iterdir()):
-        if not model_dir.is_dir():
+    for result_file in sorted(run_dir.rglob("eval_result.json")):
+        with result_file.open() as f:
+            result = json.load(f)
+        model_name, repo_id = _extract_model_repo(result)
+        if not model_name or not repo_id:
             continue
-        model_name = model_dir.name
-        models[model_name] = {}
-        for repo_dir in sorted(model_dir.iterdir()):
-            if not repo_dir.is_dir():
-                continue
-            result_file = repo_dir / "trial_0" / "eval_result.json"
-            if result_file.exists():
-                with result_file.open() as f:
-                    models[model_name][repo_dir.name] = json.load(f)
+        if model_name not in models:
+            models[model_name] = {}
+        models[model_name][repo_id] = result
     return models
 
 
@@ -124,8 +136,6 @@ def load_run_s3(run_name: str, s3_prefix: str) -> tuple[dict, dict]:
 
     Returns ({model: {repo: result}}, {model: rerun_meta}).
     """
-    import s3fs
-
     fs = s3fs.S3FileSystem(anon=False)
     # Normalize prefix — strip trailing slash then re-add
     prefix = s3_prefix.rstrip("/")
@@ -136,38 +146,36 @@ def load_run_s3(run_name: str, s3_prefix: str) -> tuple[dict, dict]:
 
     models: dict[str, dict] = {}
     rerun_meta: dict[str, dict] = {}
-    try:
-        model_dirs = fs.ls(run_prefix, detail=False)
-    except FileNotFoundError:
-        return models, rerun_meta
 
-    for model_path in sorted(model_dirs):
-        model_name = model_path.rstrip("/").split("/")[-1]
-        models[model_name] = {}
-        try:
-            repo_dirs = fs.ls(model_path, detail=False)
-        except FileNotFoundError:
+    # Glob for all eval_result.json files under this run
+    json_paths = list(fs.glob(f"{run_prefix}/**/eval_result.json"))
+    for jp in sorted(json_paths):
+        path = str(jp)
+        with fs.open(path) as f:
+            result = json.load(f)
+        model_name, repo_id = _extract_model_repo(result)
+        if not model_name or not repo_id:
             continue
-        for repo_path in sorted(repo_dirs):
-            repo_name = repo_path.rstrip("/").split("/")[-1]
-            result_path = f"{repo_path}/trial_0/eval_result.json"
-            if fs.exists(result_path):
-                with fs.open(result_path) as f:
-                    models[model_name][repo_name] = json.load(f)
+        if model_name not in models:
+            models[model_name] = {}
+        models[model_name][repo_id] = result
 
-        # Try to load rerun manifest for this model
-        rerun_path = f"{model_path}/rerun.json"
-        if fs.exists(rerun_path):
-            try:
-                with fs.open(rerun_path) as f:
-                    data = json.load(f)
-                rerun_meta[model_name] = {
-                    "s3_uri": f"s3://{rerun_path}",
-                    "git_commit": data.get("git_commit", "unknown"),
-                    "git_is_dirty": data.get("git_is_dirty", False),
-                }
-            except Exception:
-                pass
+    # Load rerun manifests (one per model directory)
+    rerun_paths = list(fs.glob(f"{run_prefix}/*/rerun.json"))
+    for rp in rerun_paths:
+        rerun_path = str(rp)
+        try:
+            with fs.open(rerun_path) as f:
+                data = json.load(f)
+            # The rerun manifest's config name identifies the model
+            rerun_config_name = data.get("name") or rerun_path.rstrip("/").split("/")[-2]
+            rerun_meta[rerun_config_name] = {
+                "s3_uri": f"s3://{rerun_path}",
+                "git_commit": data.get("git_commit", "unknown"),
+                "git_is_dirty": data.get("git_is_dirty", False),
+            }
+        except Exception:
+            pass
 
     return models, rerun_meta
 

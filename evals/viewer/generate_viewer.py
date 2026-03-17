@@ -8,9 +8,18 @@ Usage:
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import s3fs
+from tqdm import tqdm
+
+# Ensure the project root is importable.
+_project_root = str(Path(__file__).resolve().parents[2])
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
+from eval_schema import KeystoneRepoResult  # noqa: E402
 
 EVALS_DIR = Path.home() / "keystone_evals"
 DEFAULT_S3_PREFIX = "s3://int8-datasets/keystone/evals/"
@@ -103,31 +112,27 @@ def categorize_error(error: str) -> str:
     return "Other"
 
 
-def _extract_model_repo(result: dict) -> tuple[str | None, str | None]:
-    """Extract (config_name, repo_id) from an eval_result dict."""
-    config_name = None
-    repo_id = None
-    eval_config = result.get("eval_config")
-    if eval_config:
-        config_name = eval_config.get("name")
-    repo_entry = result.get("repo_entry")
-    if repo_entry:
-        repo_id = repo_entry.get("id")
+def _extract_model_repo(result: KeystoneRepoResult) -> tuple[str | None, str]:
+    """Extract (config_name, repo_id) from a validated KeystoneRepoResult."""
+    config_name = result.eval_config.name if result.eval_config else None
+    repo_id = result.repo_entry.id
     return config_name, repo_id
 
 
 def load_run_local(run_dir: Path) -> dict:
     """Load all results from a local run directory, return {model: {repo: result}}."""
     models: dict[str, dict] = {}
-    for result_file in sorted(run_dir.rglob("eval_result.json")):
+    result_files = sorted(run_dir.rglob("eval_result.json"))
+    for result_file in tqdm(result_files, desc=f"  {run_dir.name}", unit="file"):
         with result_file.open() as f:
-            result = json.load(f)
+            raw = json.load(f)
+        result = KeystoneRepoResult(**raw)
         model_name, repo_id = _extract_model_repo(result)
-        if not model_name or not repo_id:
+        if not model_name:
             continue
         if model_name not in models:
             models[model_name] = {}
-        models[model_name][repo_id] = result
+        models[model_name][repo_id] = raw
     return models
 
 
@@ -148,17 +153,17 @@ def load_run_s3(run_name: str, s3_prefix: str) -> tuple[dict, dict]:
     rerun_meta: dict[str, dict] = {}
 
     # Glob for all eval_result.json files under this run
-    json_paths = list(fs.glob(f"{run_prefix}/**/eval_result.json"))
-    for jp in sorted(json_paths):
-        path = str(jp)
+    json_paths = sorted(str(p) for p in fs.glob(f"{run_prefix}/**/eval_result.json"))
+    for path in tqdm(json_paths, desc=f"  {run_name}", unit="file"):
         with fs.open(path) as f:
-            result = json.load(f)
+            raw = json.load(f)
+        result = KeystoneRepoResult(**raw)
         model_name, repo_id = _extract_model_repo(result)
-        if not model_name or not repo_id:
+        if not model_name:
             continue
         if model_name not in models:
             models[model_name] = {}
-        models[model_name][repo_id] = result
+        models[model_name][repo_id] = raw
 
     # Load rerun manifests (one per model directory)
     rerun_paths = list(fs.glob(f"{run_prefix}/*/rerun.json"))

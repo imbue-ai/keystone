@@ -11,7 +11,7 @@ import json
 import sys
 from pathlib import Path
 
-import s3fs
+import fsspec
 from tqdm import tqdm
 
 # Ensure the project root is importable.
@@ -112,68 +112,39 @@ def categorize_error(error: str) -> str:
     return "Other"
 
 
-def _extract_model_repo(result: KeystoneRepoResult) -> tuple[str | None, str]:
-    """Extract (config_name, repo_id) from a validated KeystoneRepoResult."""
-    config_name = result.eval_config.name if result.eval_config else None
-    repo_id = result.repo_entry.id
-    return config_name, repo_id
+def load_run(
+    run_uri: str, run_label: str
+) -> tuple[dict[str, dict[str, KeystoneRepoResult]], dict[str, dict]]:
+    """Load all results from a run directory (local path or fsspec URI).
 
-
-def load_run_local(run_dir: Path) -> dict:
-    """Load all results from a local run directory, return {model: {repo: result}}."""
-    models: dict[str, dict] = {}
-    result_files = sorted(run_dir.rglob("eval_result.json"))
-    for result_file in tqdm(result_files, desc=f"  {run_dir.name}", unit="file"):
-        with result_file.open() as f:
-            raw = json.load(f)
-        result = KeystoneRepoResult(**raw)
-        model_name, repo_id = _extract_model_repo(result)
-        if not model_name:
-            continue
-        if model_name not in models:
-            models[model_name] = {}
-        models[model_name][repo_id] = raw
-    return models
-
-
-def load_run_s3(run_name: str, s3_prefix: str) -> tuple[dict, dict]:
-    """Load all results from S3 for a given run.
-
-    Returns ({model: {repo: result}}, {model: rerun_meta}).
+    Returns ({model: {repo: KeystoneRepoResult}}, {model: rerun_meta}).
     """
-    fs = s3fs.S3FileSystem(anon=False)
-    # Normalize prefix — strip trailing slash then re-add
-    prefix = s3_prefix.rstrip("/")
-    # Strip s3:// for s3fs path operations
-    fs_prefix = prefix[len("s3://") :] if prefix.startswith("s3://") else prefix
+    fs, base_prefix = fsspec.core.url_to_fs(run_uri)
+    base_prefix = base_prefix.rstrip("/")
 
-    run_prefix = f"{fs_prefix}/{run_name}"
-
-    models: dict[str, dict] = {}
+    models: dict[str, dict[str, KeystoneRepoResult]] = {}
     rerun_meta: dict[str, dict] = {}
 
     # Glob for all eval_result.json files under this run
-    json_paths = sorted(str(p) for p in fs.glob(f"{run_prefix}/**/eval_result.json"))
-    for path in tqdm(json_paths, desc=f"  {run_name}", unit="file"):
+    json_paths = sorted(str(p) for p in fs.glob(f"{base_prefix}/**/eval_result.json"))
+    for path in tqdm(json_paths, desc=f"  {run_label}", unit="file"):
         with fs.open(path) as f:
             raw = json.load(f)
         result = KeystoneRepoResult(**raw)
-        model_name, repo_id = _extract_model_repo(result)
-        if not model_name:
+        config_name = result.eval_config.name if result.eval_config else None
+        if not config_name:
             continue
-        if model_name not in models:
-            models[model_name] = {}
-        models[model_name][repo_id] = raw
+        if config_name not in models:
+            models[config_name] = {}
+        models[config_name][result.repo_entry.id] = result
 
     # Load rerun manifests (one per model directory)
-    rerun_paths = list(fs.glob(f"{run_prefix}/*/rerun.json"))
-    for rp in rerun_paths:
+    for rp in fs.glob(f"{base_prefix}/*/rerun.json"):
         rerun_path = str(rp)
         try:
             with fs.open(rerun_path) as f:
                 data = json.load(f)
-            # The rerun manifest's config name identifies the model
-            rerun_config_name = data.get("name") or rerun_path.rstrip("/").split("/")[-2]
+            rerun_config_name: str = data.get("name") or rerun_path.rstrip("/").split("/")[-2]
             rerun_meta[rerun_config_name] = {
                 "s3_uri": f"s3://{rerun_path}",
                 "git_commit": data.get("git_commit", "unknown"),
@@ -185,42 +156,35 @@ def load_run_s3(run_name: str, s3_prefix: str) -> tuple[dict, dict]:
     return models, rerun_meta
 
 
-def extract_summary(result: dict) -> dict:
-    """Extract a flat summary dict from an eval_result."""
-    br = result.get("bootstrap_result") or {}
-    agent = br.get("agent") or {}
-    cost_info = agent.get("cost") or {}
-    verification = br.get("verification") or {}
-    repo_entry = result.get("repo_entry") or {}
+def extract_summary(result: KeystoneRepoResult) -> dict:
+    """Extract a flat summary dict from a KeystoneRepoResult."""
+    br = result.bootstrap_result
+    agent = br.agent if br else None
+    cost_info = agent.cost if agent else None
+    verification = br.verification if br else None
 
     summary_msg = ""
-    if agent.get("summary"):
-        summary_msg = agent["summary"].get("message", "")
+    if agent and agent.summary:
+        summary_msg = agent.summary.message or ""
 
     # Use the clean bootstrap error, NOT the giant top-level CLI log dump
-    clean_error = br.get("error_message") or ""
+    clean_error = (br.error_message if br else None) or ""
 
     # Agent status messages: short progress strings the agent emitted
-    status_messages = [
-        (m.get("message") or m) if isinstance(m, dict) else str(m)
-        for m in (agent.get("status_messages") or [])
-    ]
+    status_messages = [m.message or "" for m in (agent.status_messages if agent else [])]
 
     # Agent error messages (may be empty even on failure)
-    agent_error_msgs = [
-        (m.get("message") or m) if isinstance(m, dict) else str(m)
-        for m in (agent.get("error_messages") or [])
-    ]
+    agent_error_msgs = list(agent.error_messages) if agent else []
 
     return {
-        "success": result.get("success", False),
-        "language": repo_entry.get("language", ""),
-        "duration_s": round(agent.get("duration_seconds") or 0),
-        "cost_usd": round(cost_info.get("cost_usd") or 0, 3),
-        "tests_passed": verification.get("tests_passed"),
-        "tests_failed": verification.get("tests_failed"),
-        "build_seconds": round(verification.get("image_build_seconds") or 0),
-        "test_seconds": round(verification.get("test_execution_seconds") or 0),
+        "success": result.success,
+        "language": result.repo_entry.language or "",
+        "duration_s": round(agent.duration_seconds if agent else 0),
+        "cost_usd": round(cost_info.cost_usd if cost_info else 0, 3),
+        "tests_passed": verification.tests_passed if verification else None,
+        "tests_failed": verification.tests_failed if verification else None,
+        "build_seconds": round(verification.image_build_seconds or 0 if verification else 0),
+        "test_seconds": round(verification.test_execution_seconds or 0 if verification else 0),
         "summary": summary_msg,
         "error": clean_error,
         "status_messages": status_messages,
@@ -237,21 +201,14 @@ def build_data(
     all_repos: set[str] = set()
 
     for run_name in run_names:
-        if use_s3:
-            print(f"  Loading {run_name} from S3...")
-            models, run_rerun = load_run_s3(run_name, s3_prefix)
-            if not models:
-                print(f"  [skip] {run_name} not found on S3")
-                continue
-            rerun_meta[run_name] = run_rerun
-        else:
-            run_dir = EVALS_DIR / run_name
-            if not run_dir.exists():
-                print(f"  [skip] {run_name} not found locally")
-                continue
-            print(f"  Loading {run_name} from local disk...")
-            models = load_run_local(run_dir)
-            rerun_meta[run_name] = {}
+        run_uri = f"{s3_prefix.rstrip('/')}/{run_name}" if use_s3 else str(EVALS_DIR / run_name)
+
+        print(f"  Loading {run_name} from {run_uri}...")
+        models, run_rerun = load_run(run_uri, run_label=run_name)
+        if not models:
+            print(f"  [skip] {run_name} — no results found")
+            continue
+        rerun_meta[run_name] = run_rerun
 
         # Collect repo names
         for repos in models.values():

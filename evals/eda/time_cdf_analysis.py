@@ -161,54 +161,58 @@ def _(CODEX_CONFIGS, df, mo, pl):
         legend=dict(font=dict(size=11)),
     )
 
+    _plot_html = mo.as_html(fig).text
+
     mo.Html(f"""
-    <div id="time-cdf-plot">{mo.as_html(fig).text}</div>
+    <div id="time-cdf-plot">{_plot_html}</div>
     <script>
-    // Cross-highlight: hovering a point highlights same repo_id across all traces
+    // Cross-highlight: hovering a point highlights the same repo across all traces.
+    // Use a MutationObserver to wait for Plotly to render before attaching handlers.
     (function() {{
-        const el = document.querySelector('#time-cdf-plot .js-plotly-plot');
-        if (!el) return;
-        el.on('plotly_hover', function(data) {{
-            const pt = data.points[0];
-            if (!pt.customdata) return;
-            const repo = pt.customdata[0];
-            // Find all points with same repo across traces
-            const updates = [];
-            for (let i = 0; i < el.data.length; i++) {{
-                const cd = el.data[i].customdata;
-                if (!cd) continue;
-                const sizes = cd.map(r => r[0] === repo ? 14 : (el.data[i].marker.size || 6));
-                updates.push({{ 'marker.size': [sizes] }});
+        function attachHandlers(el) {{
+            el.on('plotly_hover', function(data) {{
+                const pt = data.points[0];
+                if (!pt.customdata) return;
+                const repo = pt.customdata[0];
+                const traceIndices = [];
+                const sizeArrays = [];
+                for (let i = 0; i < el.data.length; i++) {{
+                    const cd = el.data[i].customdata;
+                    if (!cd) continue;
+                    const baseSize = el.data[i].marker.symbol === 'x' ? 10 : 6;
+                    traceIndices.push(i);
+                    sizeArrays.push(cd.map(r => r[0] === repo ? baseSize + 8 : baseSize));
+                }}
+                if (traceIndices.length > 0) {{
+                    Plotly.restyle(el, {{ 'marker.size': sizeArrays }}, traceIndices);
+                }}
+            }});
+            el.on('plotly_unhover', function() {{
+                const traceIndices = [];
+                const sizeArrays = [];
+                for (let i = 0; i < el.data.length; i++) {{
+                    const cd = el.data[i].customdata;
+                    if (!cd) continue;
+                    const baseSize = el.data[i].marker.symbol === 'x' ? 10 : 6;
+                    traceIndices.push(i);
+                    sizeArrays.push(cd.map(() => baseSize));
+                }}
+                if (traceIndices.length > 0) {{
+                    Plotly.restyle(el, {{ 'marker.size': sizeArrays }}, traceIndices);
+                }}
+            }});
+        }}
+
+        // Poll until the Plotly plot is ready (has .data property set by Plotly.newPlot)
+        let attempts = 0;
+        const timer = setInterval(function() {{
+            const el = document.querySelector('#time-cdf-plot .js-plotly-plot');
+            if (el && el.data && el.data.length > 0) {{
+                clearInterval(timer);
+                attachHandlers(el);
             }}
-            // Batch restyle
-            const traceIndices = [];
-            const sizeArrays = [];
-            for (let i = 0; i < el.data.length; i++) {{
-                const cd = el.data[i].customdata;
-                if (!cd) continue;
-                const baseSize = el.data[i].marker.symbol === 'x' ? 10 : 6;
-                const sizes = cd.map(r => r[0] === repo ? baseSize + 8 : baseSize);
-                traceIndices.push(i);
-                sizeArrays.push(sizes);
-            }}
-            if (traceIndices.length > 0) {{
-                Plotly.restyle(el, {{ 'marker.size': sizeArrays }}, traceIndices);
-            }}
-        }});
-        el.on('plotly_unhover', function() {{
-            const traceIndices = [];
-            const sizeArrays = [];
-            for (let i = 0; i < el.data.length; i++) {{
-                const cd = el.data[i].customdata;
-                if (!cd) continue;
-                const baseSize = el.data[i].marker.symbol === 'x' ? 10 : 6;
-                traceIndices.push(i);
-                sizeArrays.push(cd.map(() => baseSize));
-            }}
-            if (traceIndices.length > 0) {{
-                Plotly.restyle(el, {{ 'marker.size': sizeArrays }}, traceIndices);
-            }}
-        }});
+            if (++attempts > 100) clearInterval(timer);  // give up after ~10s
+        }}, 100);
     }})();
     </script>
     """)

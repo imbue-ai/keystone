@@ -24,7 +24,7 @@ import pytest
 from playwright.sync_api import Page
 from syrupy.extensions.single_file import SingleFileSnapshotExtension
 
-from evals.eda.time_cdf_plot import (
+from evals.eda.cdf_plot import (
     DEFAULT_PARQUET,
     PLOT_DIV_ID,
     build_figure,

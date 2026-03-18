@@ -47,7 +47,7 @@ def _(mo):
     if _evals_root not in sys.path:
         sys.path.insert(0, _evals_root)
 
-    from eda.time_cdf_plot import (  # noqa: E402
+    from eda.cdf_plot import (  # noqa: E402
         DEFAULT_PARQUET,
         build_cost_figure,
         build_figure,

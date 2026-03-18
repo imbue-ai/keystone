@@ -7,9 +7,9 @@ a Plotly CDF with cross-trace repo highlighting and red ✕ markers for failures
 
 Usage (CLI, backwards-compatible)::
 
-    uv run python evals/eda/time_cdf_plot.py                        # writes time_cdf.html
-    uv run python evals/eda/time_cdf_plot.py -o /tmp/my_plot.html
-    uv run python evals/eda/time_cdf_plot.py --parquet /path/to.parquet
+    uv run python evals/eda/cdf_plot.py                        # writes time_cdf.html
+    uv run python evals/eda/cdf_plot.py -o /tmp/my_plot.html
+    uv run python evals/eda/cdf_plot.py --parquet /path/to.parquet
 """
 
 from __future__ import annotations

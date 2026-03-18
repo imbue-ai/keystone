@@ -18,6 +18,13 @@
     }, 100);
 
     function attach(el) {
+        // Freeze axis ranges so marker size changes don't trigger autorange jitter
+        var xRange = el.layout.xaxis.range.slice();
+        var yRange = el.layout.yaxis.range.slice();
+        Plotly.relayout(el, {
+            'xaxis.autorange': false, 'xaxis.range': xRange,
+            'yaxis.autorange': false, 'yaxis.range': yRange
+        });
         el.on('plotly_hover', function(evData) {
             var pt = evData.points[0];
             if (!pt.customdata) return;

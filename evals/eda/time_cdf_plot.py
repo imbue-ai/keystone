@@ -37,6 +37,7 @@ CONFIG_COLORS = {
 }
 
 DEFAULT_PARQUET = Path.home() / "keystone_eval" / "2026-03-14.parquet"
+PLOT_DIV_ID = "time-cdf-plot"
 
 # JS injected after the Plotly div to enable cross-trace repo highlighting on hover.
 CROSS_HIGHLIGHT_JS = """
@@ -54,6 +55,13 @@ CROSS_HIGHLIGHT_JS = """
     }, 100);
 
     function attach(el) {
+        // Freeze axis ranges so marker size changes don't trigger autorange jitter
+        var xRange = el.layout.xaxis.range.slice();
+        var yRange = el.layout.yaxis.range.slice();
+        Plotly.relayout(el, {
+            'xaxis.autorange': false, 'xaxis.range': xRange,
+            'yaxis.autorange': false, 'yaxis.range': yRange
+        });
         el.on('plotly_hover', function(evData) {
             var pt = evData.points[0];
             if (!pt.customdata) return;
@@ -182,7 +190,7 @@ def build_figure(pdf: "pd.DataFrame") -> go.Figure:  # noqa: F821
 
 def export_html(fig: go.Figure, output_path: Path) -> None:
     """Write a self-contained HTML file with the Plotly figure and cross-highlight JS."""
-    div_id = "time-cdf-plot"
+    div_id = PLOT_DIV_ID
     plot_html = fig.to_html(
         full_html=True,
         include_plotlyjs="cdn",

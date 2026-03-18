@@ -208,3 +208,4 @@ __marimo__/
 *_executed.ipynb
 evals/eda/repo_filter_out.html
 *.parquet
+.DS_Store

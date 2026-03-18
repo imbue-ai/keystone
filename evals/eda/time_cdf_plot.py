@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-"""Generate a self-contained HTML page with a CDF of agent walltime by codex config.
+"""Generate self-contained HTML pages with CDF plots of eval metrics.
 
-Usage::
+The core ``build_cdf_figure`` function is generic — pass any pandas DataFrame
+with a ``config_name`` column plus an x-axis metric column and it will produce
+a Plotly CDF with cross-trace repo highlighting and red ✕ markers for failures.
+
+Usage (CLI, backwards-compatible)::
 
     uv run python evals/eda/time_cdf_plot.py                        # writes time_cdf.html
-    uv run python evals/eda/time_cdf_plot.py -o /tmp/my_plot.html   # custom output
+    uv run python evals/eda/time_cdf_plot.py -o /tmp/my_plot.html
     uv run python evals/eda/time_cdf_plot.py --parquet /path/to.parquet
 """
 
@@ -13,12 +17,14 @@ from __future__ import annotations
 import argparse
 import re
 from pathlib import Path
+from typing import Sequence
 
 import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 import polars as pl
 
-CODEX_CONFIGS = [
+CODEX_CONFIGS: list[str] = [
     "codex-gpt-5.3-reasoning_xhigh",
     "codex-gpt-5.3",
     "codex-gpt-5.3-reasoning_medium",
@@ -27,7 +33,7 @@ CODEX_CONFIGS = [
     "codex-gpt-5.3-no_agents_md-no_guardrail",
 ]
 
-CONFIG_COLORS = {
+CONFIG_COLORS: dict[str, str] = {
     "codex-gpt-5.3-reasoning_xhigh": "#636EFA",
     "codex-gpt-5.3": "#00CC96",
     "codex-gpt-5.3-reasoning_medium": "#AB63FA",
@@ -36,11 +42,12 @@ CONFIG_COLORS = {
     "codex-gpt-5.3-no_agents_md-no_guardrail": "#FF6692",
 }
 
-DEFAULT_PARQUET = Path.home() / "keystone_eval" / "2026-03-14.parquet"
-PLOT_DIV_ID = "time-cdf-plot"
+DEFAULT_PARQUET: Path = Path.home() / "keystone_eval" / "2026-03-14.parquet"
+PLOT_DIV_ID: str = "time-cdf-plot"
+PLOTLY_CDN_VERSION: str = "3.3.1"
 
 # JS injected after the Plotly div to enable cross-trace repo highlighting on hover.
-CROSS_HIGHLIGHT_JS = """
+CROSS_HIGHLIGHT_JS: str = """
 <script>
 (function() {
     var el = document.getElementById('__PLOT_DIV_ID__');
@@ -93,8 +100,16 @@ CROSS_HIGHLIGHT_JS = """
 """
 
 
-def load_codex_data(parquet_path: Path) -> "pd.DataFrame":  # noqa: F821
-    """Load parquet and return a pandas DataFrame filtered to codex configs."""
+# ---------------------------------------------------------------------------
+# Data loading
+# ---------------------------------------------------------------------------
+def load_codex_data(parquet_path: Path) -> pd.DataFrame:
+    """Load parquet and return a pandas DataFrame filtered to codex configs.
+
+    The returned frame always contains: ``config_name``, ``repo_id``,
+    ``agent_walltime_seconds``, ``cost_usd``, ``success``, ``agent_timed_out``,
+    and a derived ``failed`` column.
+    """
     df = pl.read_parquet(parquet_path)
     df = df.filter(pl.col("config_name").is_in(CODEX_CONFIGS))
     pdf = df.select(
@@ -109,48 +124,108 @@ def load_codex_data(parquet_path: Path) -> "pd.DataFrame":  # noqa: F821
     return pdf
 
 
-def build_figure(pdf: "pd.DataFrame") -> go.Figure:  # noqa: F821
-    """Build the Plotly CDF figure from the filtered dataframe."""
+# ---------------------------------------------------------------------------
+# Generic CDF figure builder
+# ---------------------------------------------------------------------------
+def build_cdf_figure(
+    pdf: pd.DataFrame,
+    x_col: str,
+    *,
+    title: str,
+    x_label: str,
+    x_format: str = "",
+    hover_extra_cols: dict[str, str] | None = None,
+    config_order: Sequence[str] | None = None,
+    config_colors: dict[str, str] | None = None,
+    height: int = 600,
+) -> go.Figure:
+    """Build a Plotly CDF figure from *pdf* over *x_col*, grouped by ``config_name``.
+
+    Parameters
+    ----------
+    pdf:
+        DataFrame with at least ``config_name``, ``repo_id``, ``failed``, and *x_col*.
+    x_col:
+        Column to plot on the x-axis.
+    title:
+        Plot title.
+    x_label:
+        X-axis label.
+    x_format:
+        d3 tick format for the x-axis (e.g. ``"$,.2f"`` for dollars).
+    hover_extra_cols:
+        Mapping of ``{column_name: display_label}`` for extra columns to show in
+        the hover tooltip.  Each column must exist in *pdf*.
+    config_order:
+        Ordered list of ``config_name`` values to include.  Defaults to
+        :data:`CODEX_CONFIGS`.
+    config_colors:
+        Mapping of ``config_name`` → CSS color.  Defaults to :data:`CONFIG_COLORS`.
+    height:
+        Figure height in pixels.
+    """
+    if config_order is None:
+        config_order = CODEX_CONFIGS
+    if config_colors is None:
+        config_colors = CONFIG_COLORS
+    if hover_extra_cols is None:
+        hover_extra_cols = {}
+
     fig = go.Figure()
 
-    for config in CODEX_CONFIGS:
+    for config in config_order:
         sub = pdf[pdf["config_name"] == config].copy()
         if sub.empty:
             continue
-        sub = sub.sort_values("agent_walltime_seconds").reset_index(drop=True)
+        sub = sub.sort_values(x_col).reset_index(drop=True)
         n = len(sub)
         sub["cdf"] = (np.arange(n) + 1) / n
-        color = CONFIG_COLORS[config]
+        color = config_colors.get(config, "#888888")
 
         passing = sub[~sub["failed"]]
         failing = sub[sub["failed"]]
 
+        # Build customdata: [repo_id, extra1, extra2, ...]
+        extra_keys = list(hover_extra_cols.keys())
+        customdata_cols = [passing["repo_id"].values] + [
+            passing[c].fillna(0).values for c in extra_keys
+        ]
+        customdata_pass = np.column_stack(customdata_cols) if customdata_cols else None
+
+        # Build hover template
+        hover_lines = [f"<b>%{{customdata[0]}}</b><br>{x_label}: %{{x}}"]
+        for i, (_col, label) in enumerate(hover_extra_cols.items(), start=1):
+            hover_lines.append(f"{label}: %{{customdata[{i}]}}")
+        hover_lines.append("CDF: %{y:.0%}")
+        hover_template = "<br>".join(hover_lines) + f"<extra>{config}</extra>"
+
         fig.add_trace(
             go.Scatter(
-                x=passing["agent_walltime_seconds"],
+                x=passing[x_col],
                 y=passing["cdf"],
                 mode="lines+markers",
                 name=config,
                 legendgroup=config,
                 marker=dict(size=6, color=color, symbol="circle"),
                 line=dict(color=color, width=2),
-                customdata=np.column_stack(
-                    [passing["repo_id"].values, passing["cost_usd"].fillna(0).values]
-                ),
-                hovertemplate=(
-                    "<b>%{customdata[0]}</b><br>"
-                    "Time: %{x:.0f}s<br>"
-                    "Cost: $%{customdata[1]:.3f}<br>"
-                    "CDF: %{y:.0%}<br>"
-                    f"<extra>{config}</extra>"
-                ),
+                customdata=customdata_pass,
+                hovertemplate=hover_template,
             )
         )
 
         if not failing.empty:
+            customdata_fail_cols = [failing["repo_id"].values] + [
+                failing[c].fillna(0).values for c in extra_keys
+            ]
+            customdata_fail = np.column_stack(customdata_fail_cols)
+
+            hover_template_fail = (
+                hover_template.replace("<b>%{customdata[0]}</b>", "<b>%{customdata[0]}</b> ✕ FAIL")
+            )
+
             fig.add_trace(
                 go.Scatter(
-                    x=failing["agent_walltime_seconds"],
+                    x=failing[x_col],
                     y=failing["cdf"],
                     mode="markers",
                     name=f"{config} (fail)",
@@ -162,35 +237,62 @@ def build_figure(pdf: "pd.DataFrame") -> go.Figure:  # noqa: F821
                         symbol="x",
                         line=dict(width=2, color="#ef4444"),
                     ),
-                    customdata=np.column_stack(
-                        [failing["repo_id"].values, failing["cost_usd"].fillna(0).values]
-                    ),
-                    hovertemplate=(
-                        "<b>%{customdata[0]}</b> ✕ FAIL<br>"
-                        "Time: %{x:.0f}s<br>"
-                        "Cost: $%{customdata[1]:.3f}<br>"
-                        "CDF: %{y:.0%}<br>"
-                        f"<extra>{config}</extra>"
-                    ),
+                    customdata=customdata_fail,
+                    hovertemplate=hover_template_fail,
                 )
             )
 
     fig.update_layout(
-        title="CDF — Agent Wall-clock Time by Codex Config",
-        xaxis_title="Agent walltime (seconds)",
+        title=title,
+        xaxis_title=x_label,
         yaxis_title="CDF",
         yaxis_tickformat=".0%",
         template="plotly_dark",
-        height=600,
+        height=height,
         hovermode="closest",
         legend=dict(font=dict(size=11)),
     )
+    if x_format:
+        fig.update_layout(xaxis_tickformat=x_format)
     return fig
 
 
-def export_html(fig: go.Figure, output_path: Path) -> None:
+# ---------------------------------------------------------------------------
+# Convenience wrappers for specific plots
+# ---------------------------------------------------------------------------
+def build_figure(pdf: pd.DataFrame) -> go.Figure:
+    """Build the walltime CDF figure (backwards-compatible wrapper)."""
+    return build_cdf_figure(
+        pdf,
+        "agent_walltime_seconds",
+        title="CDF — Agent Wall-clock Time by Codex Config",
+        x_label="Agent walltime (seconds)",
+        hover_extra_cols={"cost_usd": "Cost: $"},
+    )
+
+
+def build_cost_figure(pdf: pd.DataFrame) -> go.Figure:
+    """Build the inference cost CDF figure."""
+    return build_cdf_figure(
+        pdf,
+        "cost_usd",
+        title="CDF — Inference Cost by Codex Config",
+        x_label="Inference cost (USD)",
+        x_format="$,.2f",
+        hover_extra_cols={"agent_walltime_seconds": "Time"},
+    )
+
+
+# ---------------------------------------------------------------------------
+# HTML export
+# ---------------------------------------------------------------------------
+def export_html(
+    fig: go.Figure,
+    output_path: Path,
+    *,
+    div_id: str = PLOT_DIV_ID,
+) -> None:
     """Write a self-contained HTML file with the Plotly figure and cross-highlight JS."""
-    div_id = PLOT_DIV_ID
     plot_html = fig.to_html(
         full_html=True,
         include_plotlyjs="cdn",
@@ -199,7 +301,7 @@ def export_html(fig: go.Figure, output_path: Path) -> None:
     # Pin the CDN version for reproducibility
     plot_html = re.sub(
         r"https://cdn\.plot\.ly/plotly-[^\"]+\.min\.js",
-        "https://cdn.plot.ly/plotly-3.3.1.min.js",
+        f"https://cdn.plot.ly/plotly-{PLOTLY_CDN_VERSION}.min.js",
         plot_html,
     )
     # Inject the cross-highlight script right before </body>

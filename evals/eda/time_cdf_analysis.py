@@ -1,4 +1,7 @@
-"""Time CDF Analysis — marimo notebook.
+"""Codex Eval CDF Analysis — marimo notebook.
+
+Generates CDF plots for agent walltime and inference cost, saves them as
+self-contained HTML files for embedding in blog posts.
 
 Run interactively::
 
@@ -21,12 +24,14 @@ def _():
 
     mo.md(
         """
-        # Time Spent per Repo — CDF by Codex Config
+        # Codex Eval — CDF Analysis
 
-        CDF of `agent_walltime_seconds` for each codex configuration.
-        Failing / timed-out runs are marked with a red **✕** marker.
+        CDF plots of agent walltime and inference cost for each codex
+        configuration.  Failing / timed-out runs are marked with a red **✕**.
 
         Hover over a point to highlight the same repo across all configs.
+
+        HTML files for blog embedding are saved alongside this notebook.
         """
     )
     return (mo,)
@@ -34,196 +39,80 @@ def _():
 
 @app.cell
 def _(mo):
+    import sys
     from pathlib import Path
 
-    import polars as pl
+    # Ensure the evals package root is importable when run standalone via marimo
+    _evals_root = str(Path(__file__).resolve().parents[1])
+    if _evals_root not in sys.path:
+        sys.path.insert(0, _evals_root)
 
-    PARQUET_PATH = Path.home() / "keystone_eval" / "2026-03-14.parquet"
-    df_all = pl.read_parquet(PARQUET_PATH)
+    from eda.time_cdf_plot import (  # noqa: E402
+        DEFAULT_PARQUET,
+        build_cost_figure,
+        build_figure,
+        export_html,
+        load_codex_data,
+    )
 
-    CODEX_CONFIGS = [
-        "codex-gpt-5.3-reasoning_xhigh",
-        "codex-gpt-5.3",
-        "codex-gpt-5.3-reasoning_medium",
-        "codex-mini-gpt-5.1",
-        "codex-gpt-5.3-no_agents_md",
-        "codex-gpt-5.3-no_agents_md-no_guardrail",
-    ]
-
-    df = df_all.filter(pl.col("config_name").is_in(CODEX_CONFIGS))
-    mo.md(f"Loaded **{len(df)}** codex rows from `{PARQUET_PATH.name}`")
-    return CODEX_CONFIGS, df, pl
+    pdf = load_codex_data(DEFAULT_PARQUET)
+    mo.md(f"Loaded **{len(pdf)}** codex rows from `{DEFAULT_PARQUET.name}`")
+    return Path, build_cost_figure, build_figure, export_html, pdf
 
 
 @app.cell
-def _(CODEX_CONFIGS, df, mo, pl):
-    import numpy as np
-    import plotly.graph_objects as go
-
-    # Preserve config order
-    config_order = {c: i for i, c in enumerate(CODEX_CONFIGS)}
-
-    # Colors for each config
-    COLORS = [
-        "#636EFA",  # reasoning_xhigh
-        "#00CC96",  # gpt-5.3
-        "#AB63FA",  # reasoning_medium
-        "#EF553B",  # mini
-        "#FFA15A",  # no_agents_md
-        "#FF6692",  # no_agents_md-no_guardrail
-    ]
-
-    pdf = df.select(
-        "config_name", "repo_id", "agent_walltime_seconds", "cost_usd", "success", "agent_timed_out"
-    ).to_pandas()
-
-    pdf["failed"] = ~pdf["success"] | pdf["agent_timed_out"].fillna(False)
-
-    fig = go.Figure()
-
-    for idx, config in enumerate(CODEX_CONFIGS):
-        sub = pdf[pdf["config_name"] == config].copy()
-        if sub.empty:
-            continue
-        sub = sub.sort_values("agent_walltime_seconds").reset_index(drop=True)
-        n = len(sub)
-        sub["cdf"] = (np.arange(n) + 1) / n
-
-        # Split pass vs fail
-        passing = sub[~sub["failed"]]
-        failing = sub[sub["failed"]]
-
-        color = COLORS[idx]
-
-        # Passing points — circles
-        fig.add_trace(
-            go.Scatter(
-                x=passing["agent_walltime_seconds"],
-                y=passing["cdf"],
-                mode="lines+markers",
-                name=config,
-                legendgroup=config,
-                marker=dict(size=6, color=color, symbol="circle"),
-                line=dict(color=color, width=2),
-                customdata=np.column_stack(
-                    [
-                        passing["repo_id"].values,
-                        passing["cost_usd"].fillna(0).values,
-                    ]
-                ),
-                hovertemplate=(
-                    "<b>%{customdata[0]}</b><br>"
-                    "Time: %{x:.0f}s<br>"
-                    "Cost: $%{customdata[1]:.3f}<br>"
-                    "CDF: %{y:.0%}<br>"
-                    "<extra>" + config + "</extra>"
-                ),
-            )
-        )
-
-        # Failing points — red X
-        if not failing.empty:
-            fig.add_trace(
-                go.Scatter(
-                    x=failing["agent_walltime_seconds"],
-                    y=failing["cdf"],
-                    mode="markers",
-                    name=f"{config} (fail)",
-                    legendgroup=config,
-                    showlegend=False,
-                    marker=dict(
-                        size=10, color="#ef4444", symbol="x", line=dict(width=2, color="#ef4444")
-                    ),
-                    customdata=np.column_stack(
-                        [
-                            failing["repo_id"].values,
-                            failing["cost_usd"].fillna(0).values,
-                        ]
-                    ),
-                    hovertemplate=(
-                        "<b>%{customdata[0]}</b> ✕ FAIL<br>"
-                        "Time: %{x:.0f}s<br>"
-                        "Cost: $%{customdata[1]:.3f}<br>"
-                        "CDF: %{y:.0%}<br>"
-                        "<extra>" + config + "</extra>"
-                    ),
-                )
-            )
-
-    fig.update_layout(
-        title="CDF — Agent Wall-clock Time by Codex Config",
-        xaxis_title="Agent walltime (seconds)",
-        yaxis_title="CDF",
-        yaxis_tickformat=".0%",
-        template="plotly_dark",
-        height=600,
-        hovermode="closest",
-        legend=dict(font=dict(size=11)),
-    )
-
-    _plot_html = mo.as_html(fig).text
-
-    mo.Html(f"""
-    <div id="time-cdf-plot">{_plot_html}</div>
-    <script>
-    // Cross-highlight: hovering a point highlights the same repo across all traces.
-    // Use a MutationObserver to wait for Plotly to render before attaching handlers.
-    (function() {{
-        function attachHandlers(el) {{
-            el.on('plotly_hover', function(data) {{
-                const pt = data.points[0];
-                if (!pt.customdata) return;
-                const repo = pt.customdata[0];
-                const traceIndices = [];
-                const sizeArrays = [];
-                for (let i = 0; i < el.data.length; i++) {{
-                    const cd = el.data[i].customdata;
-                    if (!cd) continue;
-                    const baseSize = el.data[i].marker.symbol === 'x' ? 10 : 6;
-                    traceIndices.push(i);
-                    sizeArrays.push(cd.map(r => r[0] === repo ? baseSize + 8 : baseSize));
-                }}
-                if (traceIndices.length > 0) {{
-                    Plotly.restyle(el, {{ 'marker.size': sizeArrays }}, traceIndices);
-                }}
-            }});
-            el.on('plotly_unhover', function() {{
-                const traceIndices = [];
-                const sizeArrays = [];
-                for (let i = 0; i < el.data.length; i++) {{
-                    const cd = el.data[i].customdata;
-                    if (!cd) continue;
-                    const baseSize = el.data[i].marker.symbol === 'x' ? 10 : 6;
-                    traceIndices.push(i);
-                    sizeArrays.push(cd.map(() => baseSize));
-                }}
-                if (traceIndices.length > 0) {{
-                    Plotly.restyle(el, {{ 'marker.size': sizeArrays }}, traceIndices);
-                }}
-            }});
-        }}
-
-        // Poll until the Plotly plot is ready (has .data property set by Plotly.newPlot)
-        let attempts = 0;
-        const timer = setInterval(function() {{
-            const el = document.querySelector('#time-cdf-plot .js-plotly-plot');
-            if (el && el.data && el.data.length > 0) {{
-                clearInterval(timer);
-                attachHandlers(el);
-            }}
-            if (++attempts > 100) clearInterval(timer);  // give up after ~10s
-        }}, 100);
-    }})();
-    </script>
-    """)
+def _(mo):
+    mo.md("## CDF — Agent Wall-clock Time")
     return
 
 
 @app.cell
-def _(df, mo, pl):
-    # Summary stats table
+def _(Path, build_figure, export_html, mo, pdf):
+    fig_time = build_figure(pdf)
+
+    _out = Path(__file__).parent / "output" / "codex_walltime_cdf.html"
+    _out.parent.mkdir(parents=True, exist_ok=True)
+    export_html(fig_time, _out, div_id="walltime-cdf")
+    mo.md(f"Saved → `{_out}`")
+    return (fig_time,)
+
+
+@app.cell
+def _(fig_time, mo):
+    mo.ui.plotly(fig_time)
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md("## CDF — Inference Cost")
+    return
+
+
+@app.cell
+def _(Path, build_cost_figure, export_html, mo, pdf):
+    fig_cost = build_cost_figure(pdf)
+
+    _out = Path(__file__).parent / "output" / "codex_cost_cdf.html"
+    _out.parent.mkdir(parents=True, exist_ok=True)
+    export_html(fig_cost, _out, div_id="cost-cdf")
+    mo.md(f"Saved → `{_out}`")
+    return (fig_cost,)
+
+
+@app.cell
+def _(fig_cost, mo):
+    mo.ui.plotly(fig_cost)
+    return
+
+
+@app.cell
+def _(mo, pdf):
+    import polars as pl
+
     _stats = (
-        df.group_by("config_name")
+        pl.from_pandas(pdf)
+        .group_by("config_name")
         .agg(
             pl.col("agent_walltime_seconds").mean().alias("mean_time_s"),
             pl.col("agent_walltime_seconds").median().alias("median_time_s"),

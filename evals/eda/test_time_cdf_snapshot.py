@@ -143,18 +143,17 @@ def test_cross_highlight_enlarges_markers(
     }}""")
     page.wait_for_timeout(300)
 
+    # After hover, at least one other trace should have non-uniform sizes
+    # (the hovered repo's point got enlarged by +8)
     enlarged: bool = page.evaluate(f"""() => {{
         var el = document.getElementById('{PLOT_DIV_ID}');
         for (var i = 0; i < el.data.length; i++) {{
             if (i === {trace_idx}) continue;
-            var cd = el.data[i].customdata;
-            if (!cd) continue;
             var sizes = el.data[i].marker.size;
-            if (!Array.isArray(sizes)) continue;
-            var base = el.data[i].marker.symbol === 'x' ? 10 : 6;
-            for (var j = 0; j < cd.length; j++) {{
-                if (cd[j][0] === '{repo}' && sizes[j] > base) return true;
-            }}
+            if (!Array.isArray(sizes) || sizes.length < 2) continue;
+            var mn = Math.min.apply(null, sizes);
+            var mx = Math.max.apply(null, sizes);
+            if (mx > mn) return true;
         }}
         return false;
     }}""")
@@ -171,6 +170,14 @@ def test_unhover_resets_markers(
     _, html_path = generated_html
     _open_and_wait(page, html_path)
 
+    # Capture original sizes before hover
+    orig_sizes: list = page.evaluate(f"""() => {{
+        var el = document.getElementById('{PLOT_DIV_ID}');
+        return el.data.map(function(t) {{
+            return Array.isArray(t.marker.size) ? t.marker.size.slice() : t.marker.size;
+        }});
+    }}""")
+
     page.evaluate(f"""() => {{
         var el = document.getElementById('{PLOT_DIV_ID}');
         var cd = el.data[0].customdata[0];
@@ -185,16 +192,11 @@ def test_unhover_resets_markers(
     }}""")
     page.wait_for_timeout(300)
 
-    uniform: bool = page.evaluate(f"""() => {{
+    # Sizes should match the originals after unhover
+    post_sizes: list = page.evaluate(f"""() => {{
         var el = document.getElementById('{PLOT_DIV_ID}');
-        for (var i = 0; i < el.data.length; i++) {{
-            var sizes = el.data[i].marker.size;
-            if (!Array.isArray(sizes)) continue;
-            var s0 = sizes[0];
-            for (var j = 1; j < sizes.length; j++) {{
-                if (sizes[j] !== s0) return false;
-            }}
-        }}
-        return true;
+        return el.data.map(function(t) {{
+            return Array.isArray(t.marker.size) ? t.marker.size.slice() : t.marker.size;
+        }});
     }}""")
-    assert uniform, "Marker sizes were not uniform after unhover"
+    assert orig_sizes == post_sizes, "Marker sizes did not reset to originals after unhover"

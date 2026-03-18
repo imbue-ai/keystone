@@ -69,6 +69,10 @@ CROSS_HIGHLIGHT_JS: str = """
             'xaxis.autorange': false, 'xaxis.range': xRange,
             'yaxis.autorange': false, 'yaxis.range': yRange
         });
+        // Cache original sizes per trace for reset
+        var origSizes = el.data.map(function(t) {
+            return Array.isArray(t.marker.size) ? t.marker.size.slice() : t.marker.size;
+        });
         el.on('plotly_hover', function(evData) {
             var pt = evData.points[0];
             if (!pt.customdata) return;
@@ -77,9 +81,17 @@ CROSS_HIGHLIGHT_JS: str = """
             for (var i = 0; i < el.data.length; i++) {
                 var cd = el.data[i].customdata;
                 if (!cd) continue;
-                var base = el.data[i].marker.symbol === 'x' ? 10 : 6;
+                var orig = origSizes[i];
                 indices.push(i);
-                sizes.push(cd.map(function(r) { return r[0] === repo ? base + 8 : base; }));
+                if (Array.isArray(orig)) {
+                    sizes.push(cd.map(function(r, j) {
+                        return r[0] === repo ? orig[j] + 8 : orig[j];
+                    }));
+                } else {
+                    sizes.push(cd.map(function(r) {
+                        return r[0] === repo ? orig + 8 : orig;
+                    }));
+                }
             }
             if (indices.length) Plotly.restyle(el, {'marker.size': sizes}, indices);
         });
@@ -88,9 +100,8 @@ CROSS_HIGHLIGHT_JS: str = """
             for (var i = 0; i < el.data.length; i++) {
                 var cd = el.data[i].customdata;
                 if (!cd) continue;
-                var base = el.data[i].marker.symbol === 'x' ? 10 : 6;
                 indices.push(i);
-                sizes.push(cd.map(function() { return base; }));
+                sizes.push(Array.isArray(origSizes[i]) ? origSizes[i].slice() : origSizes[i]);
             }
             if (indices.length) Plotly.restyle(el, {'marker.size': sizes}, indices);
         });
@@ -182,65 +193,66 @@ def build_cdf_figure(
         sub["cdf"] = (np.arange(n) + 1) / n
         color = config_colors.get(config, "#888888")
 
-        passing = sub[~sub["failed"]]
-        failing = sub[sub["failed"]]
+        # Per-point marker: red ✕ for failures, colored circle for passes
+        symbols = ["x" if f else "circle" for f in sub["failed"]]
+        colors = ["#ef4444" if f else color for f in sub["failed"]]
+        sizes = [10 if f else 6 for f in sub["failed"]]
 
-        # Build customdata: [repo_id, extra1, extra2, ...]
+        # Build customdata: [repo_id, failed_flag, extra1, extra2, ...]
         extra_keys = list(hover_extra_cols.keys())
-        customdata_cols = [passing["repo_id"].values] + [
-            passing[c].fillna(0).values for c in extra_keys
-        ]
-        customdata_pass = np.column_stack(customdata_cols) if customdata_cols else None
+        customdata_cols = [
+            sub["repo_id"].values,
+            sub["failed"].astype(str).values,
+        ] + [sub[c].fillna(0).values for c in extra_keys]
+        customdata = np.column_stack(customdata_cols)
 
-        # Build hover template
-        hover_lines = [f"<b>%{{customdata[0]}}</b><br>{x_label}: %{{x}}"]
-        for i, (_col, label) in enumerate(hover_extra_cols.items(), start=1):
+        # Build hover template — customdata[1] is the failed flag
+        hover_lines = [
+            "<b>%{customdata[0]}</b>"
+            "%{customdata[1]}"  # injected via text transform below
+            f"<br>{x_label}: %{{x}}"
+        ]
+        for i, (_col, label) in enumerate(hover_extra_cols.items(), start=2):
             hover_lines.append(f"{label}: %{{customdata[{i}]}}")
         hover_lines.append("CDF: %{y:.0%}")
         hover_template = "<br>".join(hover_lines) + f"<extra>{config}</extra>"
 
+        # Replace the failed flag placeholder with a visible label
+        # customdata[1] will be "True" or "False" — we map in the template
+        hover_template = hover_template.replace(
+            "%{customdata[1]}",
+            "",  # we'll use a simpler approach below
+        )
+        # Build per-point hover text to append fail marker
+        hover_texts = []
+        for _, row in sub.iterrows():
+            fail_label = " ✕ FAIL" if row["failed"] else ""
+            lines = [f"<b>{row['repo_id']}</b>{fail_label}", f"{x_label}: {row[x_col]}"]
+            for ci, (col_name, label) in enumerate(hover_extra_cols.items()):
+                val = row[col_name] if pd.notna(row[col_name]) else 0
+                lines.append(f"{label}: {val}")
+            lines.append(f"CDF: {row['cdf']:.0%}")
+            hover_texts.append("<br>".join(lines))
+
         fig.add_trace(
             go.Scatter(
-                x=passing[x_col],
-                y=passing["cdf"],
+                x=sub[x_col],
+                y=sub["cdf"],
                 mode="lines+markers",
                 name=config,
                 legendgroup=config,
-                marker=dict(size=6, color=color, symbol="circle"),
+                marker=dict(
+                    size=sizes,
+                    color=colors,
+                    symbol=symbols,
+                    line=dict(width=[2 if f else 0 for f in sub["failed"]]),
+                ),
                 line=dict(color=color, width=2),
-                customdata=customdata_pass,
-                hovertemplate=hover_template,
+                customdata=customdata,
+                text=hover_texts,
+                hovertemplate="%{text}<extra>" + config + "</extra>",
             )
         )
-
-        if not failing.empty:
-            customdata_fail_cols = [failing["repo_id"].values] + [
-                failing[c].fillna(0).values for c in extra_keys
-            ]
-            customdata_fail = np.column_stack(customdata_fail_cols)
-
-            hover_template_fail = (
-                hover_template.replace("<b>%{customdata[0]}</b>", "<b>%{customdata[0]}</b> ✕ FAIL")
-            )
-
-            fig.add_trace(
-                go.Scatter(
-                    x=failing[x_col],
-                    y=failing["cdf"],
-                    mode="markers",
-                    name=f"{config} (fail)",
-                    legendgroup=config,
-                    showlegend=False,
-                    marker=dict(
-                        size=10,
-                        color="#ef4444",
-                        symbol="x",
-                        line=dict(width=2, color="#ef4444"),
-                    ),
-                    customdata=customdata_fail,
-                    hovertemplate=hover_template_fail,
-                )
-            )
 
     fig.update_layout(
         title=title,

@@ -271,7 +271,7 @@ def build_cdf_figure(
             lines = [f"<b>{row['repo_id']}</b>{fail_label}", f"{x_label}: {x_val}"]
             for _ci, (col_name, label) in enumerate(hover_extra_cols.items()):
                 val = row[col_name] if pd.notna(row[col_name]) else 0
-                formatted = f"{val:.2f}" if "cost" in col_name else f"{val}"
+                formatted = f"${val:.2f}" if "cost" in col_name else f"{val}"
                 lines.append(f"{label}: {formatted}")
             lines.append(f"CDF: {row['cdf']:.0%}")
             hover_texts.append("<br>".join(lines))
@@ -328,7 +328,7 @@ def build_figure(pdf: pd.DataFrame) -> go.Figure:
         title="CDF — Agent Wall-clock Time by Codex Config",
         x_label="Agent walltime (seconds)",
         logx=True,
-        hover_extra_cols={"cost_usd": "Cost: $"},
+        hover_extra_cols={"cost_usd": "Cost"},
     )
 
 
@@ -353,7 +353,7 @@ def build_claude_figure(pdf: pd.DataFrame) -> go.Figure:
         title="CDF — Agent Wall-clock Time by Claude Config",
         x_label="Agent walltime (seconds)",
         logx=True,
-        hover_extra_cols={"cost_usd": "Cost: $"},
+        hover_extra_cols={"cost_usd": "Cost"},
         config_order=CLAUDE_CONFIGS,
         config_colors=CLAUDE_CONFIG_COLORS,
     )

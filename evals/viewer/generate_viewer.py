@@ -24,8 +24,6 @@ from eval_schema import KeystoneRepoResult  # noqa: E402
 EVALS_DIR = Path.home() / "keystone_evals"
 DEFAULT_S3_PREFIX = "s3://int8-datasets/keystone/evals/"
 
-DEFAULT_S3_PREFIX = "file:///Users/thad/keystone_eval/z/"
-
 # Which runs to include and in what order
 RUN_NAMES = [
     # "2026-03-02_cat_v1",
@@ -40,10 +38,11 @@ RUN_NAMES = [
     # "2026-03-11_opencode_vs_claude_v2",
     # "2026-03-12_opencode_vs_claude_cost_v2",
     # "2026-03-12_opencode_vs_claude_cost_v3",
-    # "2026-03-13_four_model_thad",
-    # "2026-03-13_five_model_full_v3",
-    # "2026-03-14_thad_eval",
+    "2026-03-13_four_model_thad",
+    "2026-03-13_five_model_full_v3",
+    "2026-03-14_thad_eval",
     "main",
+    "2026-03-18-cat",
 ]
 
 RUN_LABELS = {
@@ -59,8 +58,11 @@ RUN_LABELS = {
     "2026-03-11_opencode_vs_claude_v2": "OpenCode vs Claude 2026-03-11",
     "2026-03-12_opencode_vs_claude_cost_v2": "OpenCode vs Claude (cost) 2026-03-12",
     "2026-03-12_opencode_vs_claude_cost_v3": "OpenCode vs Claude (cost v3) 2026-03-12",
+    "2026-03-13_four_model_thad": "Four-model 2026-03-13",
+    "2026-03-13_five_model_full_v3": "Five-model full 2026-03-13",
     "2026-03-14_thad_eval": "Thad eval 2026-03-14",
     "main": "Main",
+    "2026-03-18-cat": "Four-model 2026-03-18",
 }
 
 # Canonical model display order & colors per run
@@ -74,6 +76,13 @@ MODEL_META = {
     "opencode-haiku": {"label": "opencode-haiku", "color": "#EF553B"},
     "opencode-codex": {"label": "opencode-codex", "color": "#00CC96"},
     "opencode-codex-mini": {"label": "opencode-mini", "color": "#AB63FA"},
+    "opencode-claude": {"label": "opencode-claude", "color": "#19D3F3"},
+    "gpt-5.4": {"label": "gpt-5.4", "color": "#FF6692"},
+    "opus-4.6": {"label": "opus-4.6", "color": "#B6E880"},
+    "claude-opus-effort_max": {"label": "claude-opus (max)", "color": "#1F77B4"},
+    "claude-opus-effort_medium": {"label": "claude-opus (medium)", "color": "#8DA0CB"},
+    "codex-gpt-5.3-reasoning_xhigh": {"label": "codex-5.3 (xhigh)", "color": "#FF7F0E"},
+    "codex-gpt-5.3-reasoning_medium": {"label": "codex-5.3 (medium)", "color": "#FFBB78"},
 }
 
 INFRA_CATEGORIES = {
@@ -243,16 +252,21 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <title>Keystone Eval Viewer</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31/styles/ag-grid.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@31/styles/ag-theme-alpine.min.css">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-         background: #0f1117; color: #e2e8f0; font-size: 14px; }
+         background: #0f1117; color: #e2e8f0; font-size: 14px;
+         display: flex; flex-direction: column; }
 
   header { padding: 16px 24px; background: #1a1d27; border-bottom: 1px solid #2d3148;
-           display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 100; }
-  header h1 { font-size: 18px; font-weight: 600; color: #a78bfa; }
+           display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 100;
+           flex-wrap: wrap; }
+  header h1 { font-size: 18px; font-weight: 600; color: #a78bfa; white-space: nowrap; }
 
-  .run-tabs { display: flex; gap: 6px; }
+  .run-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
   .run-tab { padding: 6px 14px; border-radius: 6px; cursor: pointer; border: 1px solid #3d4163;
              background: #1e2235; color: #94a3b8; font-size: 13px; transition: all .15s; }
   .run-tab:hover { background: #272b42; color: #e2e8f0; }
@@ -304,8 +318,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   thead th.repo-col { text-align: left; min-width: 160px; }
   thead th.meta-col { color: #475569; }
 
-  tbody tr { border-bottom: 1px solid #1e2235; cursor: pointer; transition: background .1s; }
-  tbody tr:hover { background: #1e2235; }
+  tbody tr { border-bottom: 1px solid #1e2235; cursor: pointer; }
   tbody tr.expanded { background: #1a1d27; }
 
   td { padding: 7px 10px; vertical-align: middle; }
@@ -314,12 +327,28 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   td.result-cell { text-align: center; vertical-align: top; height: 52px; }
 
   .badge { display: inline-block; width: 28px; height: 28px; border-radius: 6px;
-           line-height: 28px; font-size: 13px; font-weight: 700; }
+           line-height: 28px; font-size: 13px; font-weight: 700; text-align: center; }
   .badge.pass { background: #14532d; color: #4ade80; }
   .badge.fail { background: #450a0a; color: #f87171; }
   .badge.timeout { background: #422006; color: #fbbf24; }
   .badge.infra { background: #7c3a10; color: #fed7aa; }
   .badge.missing { background: #1e2235; color: #475569; }
+
+  .rc { display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
+        height: 100%; padding: 2px 0; line-height: 1; }
+  .rc-meta { display: flex; align-items: baseline; gap: 4px; margin-top: 2px; padding-left: 2px; }
+  .rc-cost { font-size: 11px; color: #a78bfa; font-weight: 600; }
+  .rc-time { font-size: 10px; color: #475569; }
+
+  .rc-expanded { padding: 6px 4px; font-size: 12px; line-height: 1.4;
+                 max-height: 220px; overflow-y: auto; }
+  .rc-expanded-header { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; flex-wrap: wrap; }
+  .rc-tests { font-size: 11px; color: #64748b; }
+  .rc-err { color: #fca5a5; font-size: 11px; margin-top: 4px; word-break: break-word; }
+  .rc-summary { color: #94a3b8; font-size: 11px; margin-top: 4px; word-break: break-word; }
+  .rc-steps { margin-top: 4px; border-top: 1px solid #2d3148; padding-top: 4px; }
+  .rc-step { font-size: 11px; color: #64748b; line-height: 1.3; }
+  .rc-step:last-child { color: #94a3b8; }
 
   .cell-meta { display: block; font-size: 11px; color: #475569; margin-top: 1px;
                line-height: 1.2; white-space: nowrap; min-height: 13px; }
@@ -410,6 +439,43 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .btn:hover { background: #272b42; color: #e2e8f0; }
   .btn.primary { background: #312e81; border-color: #6366f1; color: #c7d2fe; }
   .btn.primary:hover { background: #3730a3; }
+
+  /* AG Grid */
+  #myGrid { width: 100%; }
+  #detailPanel { flex-shrink: 0; }
+  .ag-theme-alpine-dark {
+    --ag-background-color: #0f1117;
+    --ag-header-background-color: #1a1d27;
+    --ag-odd-row-background-color: #0f1117;
+    --ag-even-row-background-color: #0f1117;
+    --ag-row-hover-color: transparent;
+    --ag-selected-row-background-color: #1a1d27;
+    --ag-border-color: #2d3148;
+    --ag-header-foreground-color: #94a3b8;
+    --ag-foreground-color: #e2e8f0;
+    --ag-secondary-foreground-color: #64748b;
+    --ag-font-size: 13px;
+    --ag-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --ag-row-border-color: #1e2235;
+    --ag-input-focus-border-color: #6366f1;
+    --ag-checkbox-checked-color: #6366f1;
+    --ag-side-bar-panel-width: 0px;
+  }
+  .ag-theme-alpine-dark .ag-header { border-bottom: 2px solid #2d3148; }
+  .ag-theme-alpine-dark .ag-row { cursor: pointer; }
+  .ag-theme-alpine-dark .ag-cell { border-right-color: transparent; overflow: visible; white-space: normal !important; }
+  .ag-theme-alpine-dark .ag-header-cell-text { font-weight: 600; }
+  .ag-theme-alpine-dark .ag-paging-panel,
+  .ag-theme-alpine-dark .ag-status-bar,
+  .ag-theme-alpine-dark .ag-sticky-bottom { display: none !important; }
+
+  .detail-section { padding: 0 24px 24px; border-top: 1px solid #2d3148; background: #0f1117; }
+
+  .sort-mode-btn { display: inline-block; font-size: 10px; padding: 1px 5px;
+                   border: 1px solid #3d4163; border-radius: 3px; cursor: pointer;
+                   color: #6366f1; background: transparent; transition: all .15s;
+                   margin-left: 4px; vertical-align: middle; user-select: none; }
+  .sort-mode-btn:hover { border-color: #6366f1; background: #272b42; color: #a78bfa; }
 </style>
 </head>
 <body>
@@ -454,18 +520,18 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 </div>
 
 <div class="main">
-  <table id="resultsTable">
-    <thead id="tableHead"></thead>
-    <tbody id="tableBody"></tbody>
-  </table>
+  <div id="myGrid" class="ag-theme-alpine-dark"></div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/ag-grid-community@31/dist/ag-grid-community.min.js"></script>
 <script>
 const DATA = __DATA__;
 
 let currentRun = DATA.run_names[0];
 let expandedRepo = null;
 let breakdownOpen = false;
+let gridApi = null;
+const columnSortModes = {}; // field -> "status"|"cost"|"time"
 
 const CATEGORY_COLORS = {
   "No files created":           "#d62728",
@@ -667,97 +733,213 @@ function renderBreakdown() {
   `;
 }
 
-function renderTable() {
+function buildRowData() {
   const runData = DATA.runs[currentRun] || {};
   const models = modelOrder(currentRun);
-
-  // Header
-  const head = document.getElementById("tableHead");
-  head.innerHTML = `<tr>
-    <th class="repo-col">Repo</th>
-    <th class="meta-col">Lang</th>
-    ${models.map(m => {
-      const meta = getModelMeta(m);
-      return `<th style="color:${meta.color}">${meta.label}</th>`;
-    }).join("")}
-  </tr>`;
-
-  // Body
-  const tbody = document.getElementById("tableBody");
-  tbody.innerHTML = "";
-
+  const rows = [];
   DATA.repo_list.forEach(repo => {
-    // Main row
-    const tr = document.createElement("tr");
-    tr.id = "row-" + repo;
-    if (expandedRepo === repo) tr.classList.add("expanded");
-    tr.onclick = () => toggleDetail(repo);
-
-    // Get metadata from first model that has this repo
     let lang = "";
     for (const m of models) {
       const r = (runData[m] || {})[repo];
       if (r) { lang = r.language || ""; break; }
     }
-
-    const cells = models.map(m => {
-      const r = (runData[m] || {})[repo];
-      const hasData = !!r;
-      const cellBtns = `<span class="cell-actions">` +
-        `<button class="cell-btn" title="Copy S3 path" onclick="copyS3Path(event,'${currentRun}','${m}','${repo}')">&#128203;</button>` +
-        `<button class="cell-btn" title="Rerun this repo+model" onclick="rerunRepo(event,'${currentRun}','${m}','${repo}',${hasData})">&#x21ba;</button>` +
-        `</span>`;
-      if (!r) return `<td class="result-cell"><span class="badge missing">—</span>${cellBtns}<span class="cell-meta"></span></td>`;
-
-      // Compact time + cost beneath the badge
-      const durStr = r.duration_s ? fmtDuration(r.duration_s) : "";
-      const costStr = r.cost_usd ? "$" + r.cost_usd.toFixed(2) : "";
-      const metaHtml = (durStr || costStr)
-        ? `<span class="cell-meta"><span class="cm-cost">${costStr}</span>${costStr && durStr ? " · " : ""}<span class="cm-time">${durStr}</span></span>`
-        : `<span class="cell-meta"></span>`;
-
-      if (r.success) {
-        return `<td class="result-cell"><span class="badge pass">✓</span>${cellBtns}${metaHtml}</td>`;
-      }
-      const cat = categorizeError(r.error);
-      if (cat === "Agent timeout") {
-        return `<td class="result-cell"><span class="badge timeout" title="Agent timeout">⏱</span>${cellBtns}${metaHtml}</td>`;
-      }
-      const isInfra = INFRA_CATEGORIES.has(cat);
-      if (isInfra) {
-        return `<td class="result-cell"><span class="badge infra" title="${escHtml(cat)}">?</span>${cellBtns}${metaHtml}</td>`;
-      }
-      return `<td class="result-cell"><span class="badge fail">✗</span>${cellBtns}${metaHtml}</td>`;
-    }).join("");
-
-    tr.innerHTML = `
-      <td class="repo-name">${repo}<span class="chevron">></span></td>
-      <td class="meta">${lang}</td>
-      ${cells}
-    `;
-    tbody.appendChild(tr);
-
-    // Detail row (hidden unless expanded)
-    const dtr = document.createElement("tr");
-    dtr.id = "detail-" + repo;
-    dtr.classList.add("detail-row");
-    dtr.style.display = expandedRepo === repo ? "" : "none";
-    const colspan = 2 + models.length;
-    dtr.innerHTML = `<td colspan="${colspan}">
-      <div class="detail-panel" id="panel-${repo}"></div>
-    </td>`;
-    tbody.appendChild(dtr);
-
-    if (expandedRepo === repo) {
-      renderDetailPanel(repo, models, runData);
+    const row = { repo, lang };
+    for (const m of models) {
+      row[m] = (runData[m] || {})[repo] || null;
     }
+    rows.push(row);
   });
+  return rows;
 }
 
-function renderDetailPanel(repo, models, runData) {
-  const panel = document.getElementById("panel-" + repo);
-  if (!panel) return;
+class SortModeHeader {
+  init(params) {
+    this.params = params;
+    this.field = params.column.getColId();
+    this.el = document.createElement("div");
+    this.el.style.cssText = "display:flex;align-items:center;gap:4px;width:100%;cursor:pointer";
+    this.el.onclick = () => { this.params.progressSort(); };
 
+    const label = document.createElement("span");
+    label.textContent = params.displayName;
+    label.style.cssText = "overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+
+    this.btn = document.createElement("span");
+    this.btn.className = "sort-mode-btn";
+    this.btn.title = "Click to cycle: status / cost / time";
+    this.updateLabel();
+    this.btn.onclick = (e) => {
+      e.stopPropagation();
+      const modes = ["status", "cost", "time"];
+      const cur = columnSortModes[this.field] || "status";
+      columnSortModes[this.field] = modes[(modes.indexOf(cur) + 1) % modes.length];
+      this.updateLabel();
+      // Re-apply sort
+      const sortModel = gridApi.getSortModel ? gridApi.getSortModel() : [];
+      if (gridApi) {
+        gridApi.setColumnDefs(buildColDefs());
+        gridApi.setRowData(buildRowData());
+      }
+    };
+
+    this.el.appendChild(label);
+    this.el.appendChild(this.btn);
+
+    // Sort indicator
+    this.sortIcon = document.createElement("span");
+    this.sortIcon.style.cssText = "font-size:10px;color:#475569;margin-left:2px";
+    this.el.appendChild(this.sortIcon);
+    this.onSortChanged();
+    params.column.addEventListener("sortChanged", () => this.onSortChanged());
+  }
+  updateLabel() {
+    const mode = columnSortModes[this.field] || "status";
+    this.btn.textContent = mode === "status" ? "\\u2713/\\u2717" : mode === "cost" ? "$" : "\\u23f1";
+  }
+  onSortChanged() {
+    const sort = this.params.column.getSort();
+    this.sortIcon.textContent = sort === "asc" ? "\\u25b2" : sort === "desc" ? "\\u25bc" : "";
+  }
+  getGui() { return this.el; }
+  destroy() {}
+}
+
+function buildColDefs() {
+  const models = modelOrder(currentRun);
+  return [
+    {
+      field: "repo",
+      headerName: "Repo",
+      headerTooltip: "Repository name",
+      pinned: "left",
+      minWidth: 180,
+      flex: 1,
+      filter: "agTextColumnFilter",
+      suppressMovable: true,
+      cellRenderer: params => {
+        if (params.data._isDetail) return "";
+        const chevron = expandedRepo === params.value
+          ? `<span style="color:#6366f1;margin-right:4px">&#9660;</span>`
+          : `<span style="color:#475569;margin-right:4px">&#9658;</span>`;
+        return chevron + escHtml(params.value);
+      },
+      cellStyle: { fontWeight: "500", color: "#c7d2fe", cursor: "pointer" },
+    },
+    {
+      field: "lang",
+      headerName: "Lang",
+      headerTooltip: "Language",
+      minWidth: 60,
+      flex: 0.5,
+      filter: "agTextColumnFilter",
+      cellStyle: { color: "#475569", fontSize: "12px" },
+    },
+    ...models.map(m => {
+      const meta = getModelMeta(m);
+      if (!columnSortModes[m]) columnSortModes[m] = "status";
+      return {
+        field: m,
+        headerName: meta.label,
+        headerComponent: SortModeHeader,
+        headerTooltip: meta.label,
+        headerStyle: { color: meta.color },
+        minWidth: 120,
+        flex: 1,
+        sortable: true,
+        filter: false,
+        tooltipValueGetter: params => {
+          const r = params.value;
+          if (!r) return "No data";
+          const parts = [r.success ? "PASS" : "FAIL"];
+          if (r.cost_usd) parts.push("Cost: $" + r.cost_usd.toFixed(2));
+          if (r.duration_s) parts.push("Time: " + fmtDuration(r.duration_s));
+          if (r.error) parts.push("Error: " + r.error.slice(0, 120));
+          if (r.summary) parts.push("Summary: " + r.summary.slice(0, 120));
+          return parts.join("\\n");
+        },
+        cellRenderer: params => {
+          const r = params.value;
+          const expanded = expandedRepo === params.data.repo;
+          if (!r) return `<div class="rc"><span class="badge missing">&#8212;</span></div>`;
+          const durStr = r.duration_s ? fmtDuration(r.duration_s) : "";
+          const costStr = r.cost_usd ? "$" + r.cost_usd.toFixed(2) : "";
+          const cat = categorizeError(r.error || "");
+          let badge;
+          if (r.success) badge = `<span class="badge pass">&#10003;</span>`;
+          else if (cat === "Agent timeout") badge = `<span class="badge timeout" title="Agent timeout">&#9201;</span>`;
+          else if (INFRA_CATEGORIES.has(cat)) badge = `<span class="badge infra" title="${escHtml(cat)}">?</span>`;
+          else badge = `<span class="badge fail">&#10007;</span>`;
+          if (!expanded) {
+            return `<div class="rc">${badge}<div class="rc-meta"><span class="rc-cost">${costStr}</span><span class="rc-time">${durStr}</span></div></div>`;
+          }
+          // Expanded: show full detail in-cell
+          const tests = (r.tests_passed != null) ? `${r.tests_passed}\\u2713 ${r.tests_failed||0}\\u2717` : "";
+          const errHtml = r.error ? `<div class="rc-err">\\u2717 ${escHtml(r.error.slice(0,200))}</div>` : "";
+          const summaryHtml = r.summary ? `<div class="rc-summary">${escHtml(r.summary.slice(0,300))}</div>` : "";
+          const steps = r.status_messages || [];
+          const lastSteps = steps.slice(-3).map(s => `<div class="rc-step">${escHtml(s)}</div>`).join("");
+          const stepsHtml = lastSteps ? `<div class="rc-steps"><div style="font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Agent steps</div>${lastSteps}</div>` : "";
+          return `<div class="rc-expanded">
+            <div class="rc-expanded-header">${badge}<span class="rc-cost">${costStr}</span><span class="rc-time">${durStr}</span>${tests ? `<span class="rc-tests">${tests}</span>` : ""}</div>
+            ${errHtml}${stepsHtml}${summaryHtml}
+          </div>`;
+        },
+        autoHeight: true,
+        comparator: (a, b) => {
+          const mode = columnSortModes[m] || "status";
+          if (mode === "cost") {
+            const ac = a ? (a.cost_usd || 0) : 0;
+            const bc = b ? (b.cost_usd || 0) : 0;
+            return ac - bc;
+          }
+          if (mode === "time") {
+            const at = a ? (a.duration_s || 0) : 0;
+            const bt = b ? (b.duration_s || 0) : 0;
+            return at - bt;
+          }
+          const av = a ? (a.success ? 2 : 1) : 0;
+          const bv = b ? (b.success ? 2 : 1) : 0;
+          return av - bv;
+        },
+      };
+    }),
+  ];
+}
+
+function initGrid() {
+  const container = document.getElementById("myGrid");
+  if (gridApi) { gridApi.destroy(); gridApi = null; }
+  const options = {
+    columnDefs: buildColDefs(),
+    rowData: buildRowData(),
+    headerHeight: 40,
+    domLayout: 'autoHeight',
+    defaultColDef: { sortable: true, resizable: true },
+    suppressCellFocus: true,
+    animateRows: false,
+    suppressStatusBar: true,
+    suppressPaginationPanel: true,
+    tooltipShowDelay: 300,
+    tooltipMouseTrack: true,
+    getRowHeight: params => expandedRepo === params.data.repo ? null : 52,
+    onRowClicked: handleRowClick,
+  };
+  new agGrid.Grid(container, options);
+  gridApi = options.api;
+}
+
+function handleRowClick(params) {
+  const repo = params.data.repo;
+  if (expandedRepo === repo) {
+    expandedRepo = null;
+  } else {
+    expandedRepo = repo;
+  }
+  gridApi.resetRowHeights();
+  gridApi.refreshCells({ force: true });
+}
+
+function renderDetailPanelInto(panel, repo, models, runData) {
   const cards = models.map(model => {
     const r = (runData[model] || {})[repo];
     if (!r) return `<div class="model-card"><div class="card-header">
@@ -818,20 +1000,7 @@ function renderDetailPanel(repo, models, runData) {
     </div>`;
   }).join("");
 
-  panel.innerHTML = `<h3>${repo}</h3><div class="model-cards">${cards}</div>`;
-}
-
-function toggleDetail(repo) {
-  if (expandedRepo === repo) {
-    expandedRepo = null;
-  } else {
-    expandedRepo = repo;
-  }
-  renderTable();
-  if (expandedRepo) {
-    const el = document.getElementById("row-" + expandedRepo);
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }
+  panel.innerHTML = `<h3 style="color:#a78bfa;font-size:13px;margin-bottom:12px;font-weight:600;padding-top:16px">${escHtml(repo)}</h3><div class="model-cards">${cards}</div>`;
 }
 
 function selectRun(run) {
@@ -839,7 +1008,11 @@ function selectRun(run) {
   expandedRepo = null;
   renderTabs();
   renderStats();
-  renderTable();
+  if (gridApi) {
+    gridApi.setColumnDefs(buildColDefs());
+    gridApi.setRowData(buildRowData());
+    gridApi.sizeColumnsToFit();
+  }
   if (breakdownOpen) renderBreakdown();
 }
 
@@ -971,10 +1144,43 @@ function showToast(msg) {
   setTimeout(() => { t.style.opacity = "0"; }, 1800);
 }
 
+// Right-click context menu to reset columns
+document.getElementById("myGrid").addEventListener("contextmenu", function(e) {
+  e.preventDefault();
+  const existing = document.getElementById("gridContextMenu");
+  if (existing) existing.remove();
+  const menu = document.createElement("div");
+  menu.id = "gridContextMenu";
+  menu.style.cssText = "position:fixed;z-index:9999;background:#1a1d27;border:1px solid #3d4163;" +
+    "border-radius:6px;padding:4px 0;box-shadow:0 4px 12px rgba(0,0,0,.4);";
+  menu.style.left = e.clientX + "px";
+  menu.style.top = e.clientY + "px";
+  const item = document.createElement("div");
+  item.textContent = "Reset columns";
+  item.style.cssText = "padding:6px 16px;cursor:pointer;font-size:13px;color:#94a3b8;";
+  item.onmouseenter = () => { item.style.background = "#272b42"; item.style.color = "#e2e8f0"; };
+  item.onmouseleave = () => { item.style.background = "none"; item.style.color = "#94a3b8"; };
+  item.onclick = () => {
+    menu.remove();
+    if (gridApi) {
+      const colDefs = buildColDefs();
+      gridApi.setColumnDefs(colDefs);
+      // Make all columns visible
+      const allColIds = gridApi.getColumnDefs().map(c => c.field);
+      gridApi.columnModel.setColumnsVisible(allColIds, true);
+      gridApi.sizeColumnsToFit();
+    }
+  };
+  menu.appendChild(item);
+  document.body.appendChild(menu);
+  const dismiss = (ev) => { if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener("click", dismiss); } };
+  setTimeout(() => document.addEventListener("click", dismiss), 0);
+});
+
 // Init
 renderTabs();
 renderStats();
-renderTable();
+initGrid();
 </script>
 </body>
 </html>

@@ -1,0 +1,26 @@
+{
+  "description": "Rerun codex-5.4 with corrected model name (gpt-5.4, not gpt-5.4-codex)",
+  "repo_list_path": "examples/repos.jsonl",
+  "s3_output_prefix": "s3://int8-datasets/keystone/evals/2026-03-18-cat-gpt54-rerun/",
+  "max_concurrent": 200,
+  "task_start_stagger_seconds": 1,
+  "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs/",
+  "configs": [
+    {
+      "name": "gpt-5.4",
+      "keystone_config": {
+        "agent_config": {
+          "provider": "codex",
+          "guardrail": true,
+          "use_agents_md": true,
+          "agent_in_modal": true,
+          "model": "gpt-5.4",
+          "codex_reasoning_level": "high",
+          "max_budget_usd": 10.0,
+          "agent_time_limit_seconds": 3600
+        }
+      },
+      "trials_per_repo": 3
+    }
+  ]
+}

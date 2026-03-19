@@ -43,12 +43,14 @@ class LLMModel(str, Enum):
     CODEX_MINI = "gpt-5.1-codex-mini"
     CODEX = "gpt-5.2-codex"
     CODEX_53 = "gpt-5.3-codex"
+    GPT_54 = "gpt-5.4"
     FAKE_ERROR = "fake-error-model"
     # OpenCode models (provider/model format — same backends, routed through OpenCode)
     OPENCODE_HAIKU = "anthropic/claude-haiku-4-5"
     OPENCODE_OPUS = "anthropic/claude-opus-4-6"
     OPENCODE_CODEX_MINI = "openai/gpt-5.1-codex-mini"
     OPENCODE_CODEX = "openai/gpt-5.2-codex"
+    OPENCODE_GPT_54 = "openai/gpt-5.4"
 
 
 class AgentConfig(BaseModel):

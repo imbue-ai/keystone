@@ -228,7 +228,7 @@ def build_cdf_figure(
         sub = pdf[pdf["config_name"] == config].copy()
         if sub.empty:
             continue
-        sub = sub.sort_values(x_col).reset_index(drop=True)
+        sub = sub.sort_values(x_col).reset_index(drop=True)  # type: ignore[call-overload]
         n = len(sub)
         sub["cdf"] = (np.arange(n) + 1) / n
         color = config_colors.get(config, "#888888")
@@ -244,7 +244,7 @@ def build_cdf_figure(
             sub["repo_id"].values,
             sub["failed"].astype(str).values,
         ] + [sub[c].fillna(0).values for c in extra_keys]
-        customdata = np.column_stack(customdata_cols)
+        customdata = np.column_stack(customdata_cols)  # type: ignore[call-overload]
 
         # Build hover template — customdata[1] is the failed flag
         hover_lines = [

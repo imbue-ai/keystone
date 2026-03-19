@@ -19,10 +19,14 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
-from playwright.sync_api import Page
 from syrupy.extensions.single_file import SingleFileSnapshotExtension
+
+if TYPE_CHECKING:
+    from playwright.sync_api import Page
+    from syrupy.assertion import SnapshotAssertion
 
 from evals.eda.cdf_plot import (
     DEFAULT_PARQUET,
@@ -57,7 +61,7 @@ def generated_html() -> tuple[str, Path]:
 
 
 @pytest.fixture()
-def snapshot_html(snapshot: object) -> object:
+def snapshot_html(snapshot: SnapshotAssertion) -> SnapshotAssertion:
     """Provide a snapshot fixture that writes ``.html`` golden files."""
     return snapshot.use_extension(HTMLSnapshotExtension)
 
@@ -66,7 +70,7 @@ def snapshot_html(snapshot: object) -> object:
 # Golden snapshot test
 # ---------------------------------------------------------------------------
 def test_time_cdf_html_snapshot(
-    generated_html: tuple[str, Path], snapshot_html: object
+    generated_html: tuple[str, Path], snapshot_html: SnapshotAssertion
 ) -> None:
     """The generated HTML should match the golden snapshot."""
     html, _ = generated_html
@@ -93,16 +97,12 @@ def _open_and_wait(page: Page, html_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # Playwright tests (all load the same generated HTML)
 # ---------------------------------------------------------------------------
-def test_plotly_renders_with_expected_traces(
-    page: Page, generated_html: tuple[str, Path]
-) -> None:
+def test_plotly_renders_with_expected_traces(page: Page, generated_html: tuple[str, Path]) -> None:
     """The plot should have at least 6 traces (one per config, plus fail traces)."""
     _, html_path = generated_html
     _open_and_wait(page, html_path)
 
-    trace_count: int = page.evaluate(
-        f"() => document.getElementById('{PLOT_DIV_ID}').data.length"
-    )
+    trace_count: int = page.evaluate(f"() => document.getElementById('{PLOT_DIV_ID}').data.length")
     assert trace_count >= 6, f"Expected ≥6 traces, got {trace_count}"
 
 
@@ -113,9 +113,7 @@ def test_cdn_version_is_pinned(generated_html: tuple[str, Path]) -> None:
     assert "plotly-latest" not in html
 
 
-def test_cross_highlight_enlarges_markers(
-    page: Page, generated_html: tuple[str, Path]
-) -> None:
+def test_cross_highlight_enlarges_markers(page: Page, generated_html: tuple[str, Path]) -> None:
     """Hovering a point should enlarge same-repo markers on other traces."""
     _, html_path = generated_html
     _open_and_wait(page, html_path)
@@ -158,14 +156,11 @@ def test_cross_highlight_enlarges_markers(
         return false;
     }}""")
     assert enlarged, (
-        f"Hovering repo '{repo}' on trace {trace_idx} "
-        "did not enlarge markers on other traces"
+        f"Hovering repo '{repo}' on trace {trace_idx} did not enlarge markers on other traces"
     )
 
 
-def test_unhover_resets_markers(
-    page: Page, generated_html: tuple[str, Path]
-) -> None:
+def test_unhover_resets_markers(page: Page, generated_html: tuple[str, Path]) -> None:
     """After unhover, all markers should return to their base sizes."""
     _, html_path = generated_html
     _open_and_wait(page, html_path)

@@ -1,0 +1,72 @@
+{
+  "description": "4-model comparison: opencode-codex, opencode-claude, codex-5.4, opus-4.6, all with guardrail + agents.md.",
+  "repo_list_path": "examples/repos.jsonl",
+  "s3_output_prefix": "s3://int8-datasets/keystone/evals/2026-03-18-cat/",
+  "max_concurrent": 200,
+  "task_start_stagger_seconds": 1,
+  "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs/",
+  "configs": [
+    {
+      "name": "opencode-codex",
+      "keystone_config": {
+        "agent_config": {
+          "provider": "opencode",
+          "guardrail": true,
+          "use_agents_md": true,
+          "agent_in_modal": true,
+          "model": "openai/gpt-5.2-codex",
+          "max_budget_usd": 10.0,
+          "agent_time_limit_seconds": 3600
+        }
+      },
+      "trials_per_repo": 3
+    },
+    {
+      "name": "opencode-claude",
+      "keystone_config": {
+        "agent_config": {
+          "provider": "opencode",
+          "guardrail": true,
+          "use_agents_md": true,
+          "agent_in_modal": true,
+          "model": "anthropic/claude-opus-4-6",
+          "max_budget_usd": 10.0,
+          "agent_time_limit_seconds": 3600
+        }
+      },
+      "trials_per_repo": 3
+    },
+    {
+      "name": "gpt-5.4",
+      "keystone_config": {
+        "agent_config": {
+          "provider": "codex",
+          "guardrail": true,
+          "use_agents_md": true,
+          "agent_in_modal": true,
+          "model": "gpt-5.4",
+          "codex_reasoning_level": "high",
+          "max_budget_usd": 10.0,
+          "agent_time_limit_seconds": 3600
+        }
+      },
+      "trials_per_repo": 3
+    },
+    {
+      "name": "opus-4.6",
+      "keystone_config": {
+        "agent_config": {
+          "provider": "claude",
+          "guardrail": true,
+          "use_agents_md": true,
+          "agent_in_modal": true,
+          "model": "claude-opus-4-6",
+          "claude_reasoning_level": "high",
+          "max_budget_usd": 10.0,
+          "agent_time_limit_seconds": 3600
+        }
+      },
+      "trials_per_repo": 3
+    }
+  ]
+}

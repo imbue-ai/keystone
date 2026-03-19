@@ -306,7 +306,7 @@ def build_cdf_figure(
     if x_format:
         fig.update_layout(xaxis_tickformat=x_format)
     if logx:
-        fig.update_xaxes(type="log")
+        fig.update_xaxes(type="log", dtick=1)
     return fig
 
 

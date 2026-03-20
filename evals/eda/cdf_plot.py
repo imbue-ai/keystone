@@ -266,11 +266,11 @@ def build_cdf_figure(
         # Build per-point hover text to append fail marker
         hover_texts = []
         for _, row in sub.iterrows():
-            fail_label = " ✕ FAIL" if row["failed"] else ""  # type: ignore[reportGeneralTypeIssues]
+            fail_label = " ✕ FAIL" if bool(row["failed"]) else ""
             x_val = f"${row[x_col]:.2f}" if "cost" in x_col else f"{row[x_col]}"
             lines = [f"<b>{row['repo_id']}</b>{fail_label}", f"{x_label}: {x_val}"]
             for _ci, (col_name, label) in enumerate(hover_extra_cols.items()):
-                val = row[col_name] if pd.notna(row[col_name]) else 0  # type: ignore[reportGeneralTypeIssues]
+                val = row[col_name] if bool(pd.notna(row[col_name])) else 0
                 formatted = f"${val:.2f}" if "cost" in col_name else f"{val}"
                 lines.append(f"{label}: {formatted}")
             lines.append(f"CDF: {row['cdf']:.0%}")

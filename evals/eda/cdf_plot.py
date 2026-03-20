@@ -530,8 +530,8 @@ XHTML_TEMPLATE: str = """\
 <script src="https://cdn.plot.ly/plotly-__CDN_VERSION__.min.js">//</script>
 <style type="text/css">
 /*<![CDATA[*/
-    body {{ margin: 0; padding: 0; background: #fff; }}
-    #__DIV_ID__ {{ width: 100%; height: 100vh; }}
+    body { margin: 0; padding: 0; background: #fff; }
+    #__DIV_ID__ { width: 100%; height: 100vh; }
 /*]]>*/
 </style>
 </head>
@@ -541,7 +541,7 @@ XHTML_TEMPLATE: str = """\
 //<![CDATA[
     var data = __DATA_JSON__;
     var layout = __LAYOUT_JSON__;
-    Plotly.newPlot('__DIV_ID__', data, layout, {{ responsive: true }});
+    Plotly.newPlot('__DIV_ID__', data, layout, { responsive: true });
 __CROSS_HIGHLIGHT_JS__
 //]]>
   </script>

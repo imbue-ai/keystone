@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 import fsspec
+import polars as pl
 from tqdm import tqdm
 
 # Ensure the project root is importable.
@@ -23,6 +24,7 @@ from eval_schema import KeystoneRepoResult  # noqa: E402
 
 EVALS_DIR = Path.home() / "keystone_evals"
 DEFAULT_S3_PREFIX = "s3://int8-datasets/keystone/evals/"
+VIEWER_CACHE_DIR = Path.home() / "keystone_evals" / "viewer_cache"
 
 # Which runs to include and in what order
 RUN_NAMES = [
@@ -38,11 +40,11 @@ RUN_NAMES = [
     # "2026-03-11_opencode_vs_claude_v2",
     # "2026-03-12_opencode_vs_claude_cost_v2",
     # "2026-03-12_opencode_vs_claude_cost_v3",
+    "2026-03-18-cat",
     "2026-03-13_four_model_thad",
     "2026-03-13_five_model_full_v3",
     "2026-03-14_thad_eval",
     "main",
-    "2026-03-18-cat",
 ]
 
 RUN_LABELS = {
@@ -149,7 +151,11 @@ def load_run(
             continue
         if config_name not in models:
             models[config_name] = {}
-        models[config_name][result.repo_entry.id] = result
+        repo_id = result.repo_entry.id
+        existing = models[config_name].get(repo_id)
+        # Keep the best trial: prefer success over failure
+        if existing is None or (not existing.success and result.success):
+            models[config_name][repo_id] = result
 
     # Load rerun manifests (one per model directory)
     for rp in fs.glob(f"{base_prefix}/*/rerun.json"):
@@ -205,8 +211,47 @@ def extract_summary(result: KeystoneRepoResult) -> dict:
     }
 
 
+def save_run_cache(run_name: str, models: dict[str, dict[str, KeystoneRepoResult]]) -> None:
+    """Serialize a run's results to a local parquet cache."""
+    rows = []
+    for config_name, repos in models.items():
+        for repo_id, result in repos.items():
+            summary = extract_summary(result)
+            rows.append(
+                {
+                    "config_name": config_name,
+                    "repo_id": repo_id,
+                    **summary,
+                    "status_messages": json.dumps(summary["status_messages"]),
+                    "agent_error_msgs": json.dumps(summary["agent_error_msgs"]),
+                }
+            )
+    if not rows:
+        return
+    VIEWER_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    pl.DataFrame(rows).write_parquet(VIEWER_CACHE_DIR / f"{run_name}.parquet")
+
+
+def load_run_cache(run_name: str) -> dict[str, dict[str, dict]] | None:
+    """Load cached run data, or None if no cache exists."""
+    cache_path = VIEWER_CACHE_DIR / f"{run_name}.parquet"
+    if not cache_path.exists():
+        return None
+    models: dict[str, dict[str, dict]] = {}
+    for row in pl.read_parquet(cache_path).to_dicts():
+        config_name = row.pop("config_name")
+        repo_id = row.pop("repo_id")
+        row["status_messages"] = json.loads(row["status_messages"])
+        row["agent_error_msgs"] = json.loads(row["agent_error_msgs"])
+        models.setdefault(config_name, {})[repo_id] = row
+    return models
+
+
 def build_data(
-    run_names: list[str], use_s3: bool = True, s3_prefix: str = DEFAULT_S3_PREFIX
+    run_names: list[str],
+    use_s3: bool = True,
+    s3_prefix: str = DEFAULT_S3_PREFIX,
+    use_cache: bool = True,
 ) -> dict:
     """Build the full data dict for embedding in HTML."""
     runs: dict[str, dict] = {}
@@ -214,8 +259,17 @@ def build_data(
     all_repos: set[str] = set()
 
     for run_name in run_names:
-        run_uri = f"{s3_prefix.rstrip('/')}/{run_name}" if use_s3 else str(EVALS_DIR / run_name)
+        # Try cache first
+        if use_cache:
+            cached = load_run_cache(run_name)
+            if cached is not None:
+                print(f"  Loading {run_name} from cache...")
+                for repos in cached.values():
+                    all_repos.update(repos.keys())
+                runs[run_name] = cached
+                continue
 
+        run_uri = f"{s3_prefix.rstrip('/')}/{run_name}" if use_s3 else str(EVALS_DIR / run_name)
         print(f"  Loading {run_name} from {run_uri}...")
         models, run_rerun = load_run(run_uri, run_label=run_name)
         if not models:
@@ -226,12 +280,13 @@ def build_data(
         # Collect repo names
         for repos in models.values():
             all_repos.update(repos.keys())
-        # Summarize
-        runs[run_name] = {}
-        for model, repos in models.items():
-            runs[run_name][model] = {
-                repo: extract_summary(result) for repo, result in repos.items()
-            }
+        # Summarize and cache
+        runs[run_name] = {
+            model: {repo: extract_summary(result) for repo, result in repos.items()}
+            for model, repos in models.items()
+        }
+        if use_cache:
+            save_run_cache(run_name, models)
 
     # Sort repos alphabetically
     repo_list = sorted(all_repos)
@@ -915,6 +970,7 @@ function initGrid() {
     headerHeight: 40,
     domLayout: 'autoHeight',
     defaultColDef: { sortable: true, resizable: true },
+    suppressFieldDotNotation: true,
     suppressCellFocus: true,
     animateRows: false,
     suppressStatusBar: true,
@@ -1187,12 +1243,21 @@ initGrid();
 """
 
 
+BLOG_STATIC = Path.home() / "src" / "generallyintelligent.com" / "static" / "keystone"
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate keystone eval HTML viewer")
     parser.add_argument(
         "--out",
         default=str(EVALS_DIR / "viewer" / "viewer.html"),
         help="Output HTML file path",
+    )
+    parser.add_argument(
+        "--blog",
+        action="store_true",
+        default=False,
+        help=f"Save output to blog repo at {BLOG_STATIC / 'eval_viewer.html'}",
     )
     parser.add_argument(
         "--s3",
@@ -1211,14 +1276,22 @@ def main():
         default=DEFAULT_S3_PREFIX,
         help=f"S3 prefix for eval results (default: {DEFAULT_S3_PREFIX})",
     )
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        default=False,
+        help=f"Skip local parquet cache and fetch from S3 (cache dir: {VIEWER_CACHE_DIR})",
+    )
     args = parser.parse_args()
 
     use_s3 = not args.local
 
     print("Loading eval data...")
-    data = build_data(RUN_NAMES, use_s3=use_s3, s3_prefix=args.s3_prefix)
+    data = build_data(
+        RUN_NAMES, use_s3=use_s3, s3_prefix=args.s3_prefix, use_cache=not args.no_cache
+    )
 
-    out_path = Path(args.out)
+    out_path = BLOG_STATIC / "eval_viewer.html" if args.blog else Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     html = HTML_TEMPLATE.replace("__DATA__", json.dumps(data, indent=None))

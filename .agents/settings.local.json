@@ -16,7 +16,16 @@
       "Bash(echo \"exit: $?\")",
       "Read(//tmp/**)",
       "Bash(open /tmp/eval_viewer.html)",
-      "WebFetch(domain:int8-shared-internal.s3.amazonaws.com)"
+      "WebFetch(domain:int8-shared-internal.s3.amazonaws.com)",
+      "WebFetch(domain:gitlab.com)",
+      "Bash(git clone:*)",
+      "Bash(find ~/src/generallyintelligent.com -name *keystone* -type f)",
+      "Bash(grep -E \"\\\\.\\(xhtml|html\\)$\")",
+      "Bash(grep -r 2026-03-18 /Users/catherinekim/bootstrap_devcontainer/evals --include=*.py --include=*.ipynb)",
+      "Bash(grep -i \"gpt.5\\\\.4\\\\|neovim\" /Users/catherinekim/bootstrap_devcontainer/evals/eda/*.ipynb)",
+      "Bash(grep -r \"2026-03-18\\\\|gpt-5.4\" /Users/catherinekim/bootstrap_devcontainer/evals --include=*.md --include=*.txt)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(git stash:*)"
     ]
   }
 }

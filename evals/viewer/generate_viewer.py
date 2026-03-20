@@ -1192,12 +1192,21 @@ initGrid();
 """
 
 
+BLOG_STATIC = Path.home() / "src" / "generallyintelligent.com" / "static" / "keystone"
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate keystone eval HTML viewer")
     parser.add_argument(
         "--out",
         default=str(EVALS_DIR / "viewer" / "viewer.html"),
         help="Output HTML file path",
+    )
+    parser.add_argument(
+        "--blog",
+        action="store_true",
+        default=False,
+        help=f"Save output to blog repo at {BLOG_STATIC / 'eval_viewer.html'}",
     )
     parser.add_argument(
         "--s3",
@@ -1223,7 +1232,7 @@ def main():
     print("Loading eval data...")
     data = build_data(RUN_NAMES, use_s3=use_s3, s3_prefix=args.s3_prefix)
 
-    out_path = Path(args.out)
+    out_path = BLOG_STATIC / "eval_viewer.html" if args.blog else Path(args.out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     html = HTML_TEMPLATE.replace("__DATA__", json.dumps(data, indent=None))

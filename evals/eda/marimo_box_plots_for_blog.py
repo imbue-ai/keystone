@@ -44,9 +44,9 @@ def _(mo):
     PARQUET_PATH = Path.home() / "keystone_eval" / "blog.parquet"
 
     CONFIGS = [
-        "gpt-5.4",
-        "codex-gpt-5.3",
         "codex-mini-gpt-5.1",
+        "codex-gpt-5.3",
+        "gpt-5.4",
         "opus-4.6",
         "claude-haiku",
     ]

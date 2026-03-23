@@ -65,10 +65,10 @@ def _(mo):
     )
 
     # Collapse multiple trials per (repo, config) into a single row:
-    # pick the highest-cost trial (the one where the agent did the most work).
-    # If all trials have null cost, fall back to the first trial.
+    # pick the first successful trial (lowest trial_index where success=True).
+    # If no trial succeeded, fall back to the lowest trial_index.
     all_df = all_df.sort(
-        ["config_name", "repo_id", "cost_usd", "trial_index"],
+        ["config_name", "repo_id", "success", "trial_index"],
         descending=[False, False, True, False],
         nulls_last=True,
     )

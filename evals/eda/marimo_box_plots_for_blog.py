@@ -106,7 +106,7 @@ def _(CONFIGS, Path, df, mo, px):
         y="agent_walltime_seconds",
         color="config_name",
         points="all",
-        hover_data=["repo_id", "trial_index"],
+        hover_data=["repo_id", "trial_index", "tests_passed"],
         category_orders={"config_name": CONFIGS},
         title="Agent Wall-clock Time by Config",
         labels={
@@ -145,7 +145,7 @@ def _(CONFIGS, Path, df, mo, px):
         y="cost_usd",
         color="config_name",
         points="all",
-        hover_data=["repo_id", "trial_index"],
+        hover_data=["repo_id", "trial_index", "tests_passed"],
         category_orders={"config_name": CONFIGS},
         title="Inference Cost by Config",
         labels={
@@ -184,7 +184,7 @@ def _(CONFIGS, Path, df, mo, px):
         y="norm_tests_passed",
         color="config_name",
         points="all",
-        hover_data=["repo_id", "trial_index"],
+        hover_data=["repo_id", "trial_index", "tests_passed"],
         category_orders={"config_name": CONFIGS},
         title="Tests Passed (fraction of max discovered per repo)",
         labels={

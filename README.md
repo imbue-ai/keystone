@@ -39,20 +39,37 @@ In short: containerization is especially important for safety when your agent is
 
 - A [Modal account](https://modal.com/docs/guide#getting-started) — used to safely sandbox Claude Code as it works on your container
 - `$ANTHROPIC_API_KEY` — Keystone uses your API key to run Claude Code inside the Modal sandbox
-- [`uvx`](https://docs.astral.sh/uv/getting-started/installation/) to run Keystone
 
+## Installation
+
+The package is published on PyPI as [`kystn`](https://pypi.org/project/kystn/). Install it with pip:
+
+```bash
+pip install kystn
+```
+
+Or run it directly without installing using `uvx`:
+
+```bash
+uvx kystn --help
+```
+
+Both methods provide the `keystone` CLI command.
 
 ## Example usage
-
-Run directly from the repository using `uvx`:
 
 ```bash
 # Make a repo.
 git clone https://github.com/fastapi/fastapi
 
-# Make a devcontainer for it.
-uvx --from 'git+https://github.com/imbue-ai/keystone@prod' \
-  keystone \
+# Run with pip install:
+keystone \
+  --max_budget_usd 1.0 \
+  --test_artifacts_dir /tmp/test_artifacts \
+  --project_root ./fastapi
+
+# Or run directly with uvx (no install needed):
+uvx kystn \
   --max_budget_usd 1.0 \
   --test_artifacts_dir /tmp/test_artifacts \
   --project_root ./fastapi

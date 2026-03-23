@@ -47,9 +47,11 @@ def _(mo):
     from eval_schema import KeystoneRepoResult
 
     PARQUET_PATH = Path.home() / "keystone_eval" / "blog.parquet"
-    raw_df = pl.read_parquet(PARQUET_PATH).select("config_name", "repo_id", "raw_json")
+    raw_df = pl.read_parquet(PARQUET_PATH).select(
+        "config_name", "repo_id", "trial_index", "raw_json"
+    )
 
-    # repo_id -> config_name -> set of normalized test names (union across trials)
+    # repo_id -> "config tN" -> set of normalized test names (one entry per trial)
     repo_tests: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
 
     for row in raw_df.iter_rows(named=True):
@@ -64,7 +66,8 @@ def _(mo):
         for t in tr:
             _n = t.name[:-2] if t.name.endswith("()") else t.name
             _names.add(_n)
-        repo_tests[row["repo_id"]][row["config_name"]] |= _names
+        _key = f"{row['config_name']} t{row['trial_index']}"
+        repo_tests[row["repo_id"]][_key] |= _names
 
     mo.md(
         f"Extracted test names for **{len(repo_tests)}** repos "

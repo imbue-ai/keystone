@@ -602,7 +602,7 @@ def _(df, mo, np, px):
             _conditions.append("gpt-only succeed")
     _merged["agreement"] = _conditions
 
-    _fig = px.scatter(
+    fig_scatter_log = px.scatter(
         _merged,
         x="opus_log",
         y="gpt_log",
@@ -616,13 +616,13 @@ def _(df, mo, np, px):
     )
 
     _max_val = max(_merged["opus_log"].max(), _merged["gpt_log"].max(), 1)
-    _fig.add_shape(
+    fig_scatter_log.add_shape(
         type="line", x0=0, y0=0, x1=_max_val, y1=_max_val, line={"dash": "dash", "color": "gray"}
     )
 
     mo.md("## Tests Passed: opus-4.6 vs gpt-5.4 (log-log scatter, trial 0)")
-    _scatter_fig = mo.ui.plotly(_fig)
-    return (_scatter_fig,)
+    scatter_log = mo.ui.plotly(fig_scatter_log)
+    return (scatter_log, fig_scatter_log)
 
 
 if __name__ == "__main__":

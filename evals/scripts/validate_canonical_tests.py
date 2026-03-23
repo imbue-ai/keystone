@@ -169,7 +169,7 @@ def main() -> None:
                 f"  Tests: {total}  |  Matched: {matched}  |  "
                 f"Unmatched tests: {unmatched_t}  |  Unmatched patterns: {len(unmatched_p)}"
             )
-            if unmatched_names and not args.verbose:
+            if unmatched_names:
                 shown = unmatched_names[:10]
                 print(f"  Unmatched tests (first {len(shown)}):")
                 for name in shown:

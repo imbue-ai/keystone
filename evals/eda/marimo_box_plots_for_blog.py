@@ -14,7 +14,7 @@ Render to static HTML::
 
 import marimo
 
-__generated_with = "0.20.4"
+__generated_with = "0.21.1"
 app = marimo.App(width="medium")
 
 
@@ -87,23 +87,27 @@ def _(mo):
     df["config_name"] = pd.Categorical(df["config_name"], categories=CONFIGS, ordered=True)
 
     mo.md(f"Loaded **{len(df)}** rows for {len(CONFIGS)} configs from `{PARQUET_PATH.name}`")
-    return CONFIGS, PARQUET_PATH, Path, df, pd, px, pl
+    return CONFIGS, Path, df, px
 
 
 @app.cell
 def _(mo):
-    mo.md("## Agent Wall-clock Time")
+    mo.md("""
+    ## Agent Wall-clock Time
+    """)
     return
 
 
 @app.cell
-def _(Path, df, mo, px):
+def _(CONFIGS, Path, df, mo, px):
     fig_time = px.box(
         df,
         x="config_name",
         y="agent_walltime_seconds",
         color="config_name",
         points="all",
+        hover_data=["repo_id", "trial_index"],
+        category_orders={"config_name": CONFIGS},
         title="Agent Wall-clock Time by Config",
         labels={
             "config_name": "Config",
@@ -127,18 +131,22 @@ def _(fig_time, mo):
 
 @app.cell
 def _(mo):
-    mo.md("## Inference Cost")
+    mo.md("""
+    ## Inference Cost
+    """)
     return
 
 
 @app.cell
-def _(Path, df, mo, px):
+def _(CONFIGS, Path, df, mo, px):
     fig_cost = px.box(
         df,
         x="config_name",
         y="cost_usd",
         color="config_name",
         points="all",
+        hover_data=["repo_id", "trial_index"],
+        category_orders={"config_name": CONFIGS},
         title="Inference Cost by Config",
         labels={
             "config_name": "Config",
@@ -162,18 +170,22 @@ def _(fig_cost, mo):
 
 @app.cell
 def _(mo):
-    mo.md("## Tests Passed (fraction of max discovered)")
+    mo.md("""
+    ## Tests Passed (fraction of max discovered)
+    """)
     return
 
 
 @app.cell
-def _(Path, df, mo, px):
+def _(CONFIGS, Path, df, mo, px):
     fig_tests = px.box(
         df,
         x="config_name",
         y="norm_tests_passed",
         color="config_name",
         points="all",
+        hover_data=["repo_id", "trial_index"],
+        category_orders={"config_name": CONFIGS},
         title="Tests Passed (fraction of max discovered per repo)",
         labels={
             "config_name": "Config",

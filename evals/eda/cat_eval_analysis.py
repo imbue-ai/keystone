@@ -570,5 +570,60 @@ def _(df, mo, pd):
     return detail_df, repo_disagree, top_repos
 
 
+# ---------------------------------------------------------------------------
+# Cell 10: Log-log scatterplot — opus-4.6 vs gpt-5.4 tests passed (trial 0)
+# ---------------------------------------------------------------------------
+@app.cell
+def _(df, mo, np, px):
+    _t0 = df[df["trial_index"] == 0].copy()
+    _t0.loc[_t0["success"] == False, "tests_passed"] = 0  # noqa: E712
+
+    _opus = _t0[_t0["config_name"] == "opus-4.6"][["repo_id", "tests_passed", "success"]].rename(
+        columns={"tests_passed": "opus_tests", "success": "opus_success"}
+    )
+    _gpt = _t0[_t0["config_name"] == "gpt-5.4"][["repo_id", "tests_passed", "success"]].rename(
+        columns={"tests_passed": "gpt_tests", "success": "gpt_success"}
+    )
+
+    _merged = _opus.merge(_gpt, on="repo_id", how="inner")
+    _merged["opus_log"] = np.log10(_merged["opus_tests"] + 1)
+    _merged["gpt_log"] = np.log10(_merged["gpt_tests"] + 1)
+
+    # Color by agreement category
+    _conditions = []
+    for _, _r in _merged.iterrows():
+        if _r["opus_success"] and _r["gpt_success"]:
+            _conditions.append("both succeed")
+        elif not _r["opus_success"] and not _r["gpt_success"]:
+            _conditions.append("both fail")
+        elif _r["opus_success"]:
+            _conditions.append("opus-only succeed")
+        else:
+            _conditions.append("gpt-only succeed")
+    _merged["agreement"] = _conditions
+
+    _fig = px.scatter(
+        _merged,
+        x="opus_log",
+        y="gpt_log",
+        color="agreement",
+        hover_data=["repo_id", "opus_tests", "gpt_tests"],
+        title="Tests Passed: opus-4.6 vs gpt-5.4 (trial 0, log scale)",
+        labels={
+            "opus_log": "opus-4.6 log10(tests_passed+1)",
+            "gpt_log": "gpt-5.4 log10(tests_passed+1)",
+        },
+    )
+
+    _max_val = max(_merged["opus_log"].max(), _merged["gpt_log"].max(), 1)
+    _fig.add_shape(
+        type="line", x0=0, y0=0, x1=_max_val, y1=_max_val, line={"dash": "dash", "color": "gray"}
+    )
+
+    mo.md("## Tests Passed: opus-4.6 vs gpt-5.4 (log-log scatter, trial 0)")
+    _scatter_fig = mo.ui.plotly(_fig)
+    return (_scatter_fig,)
+
+
 if __name__ == "__main__":
     app.run()

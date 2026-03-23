@@ -52,6 +52,10 @@ echo ""
 PROMPT=$(cat <<'PROMPT_EOF'
 You are analyzing eval results for the repo "${REPO_ID}" to identify its **canonical test suite** — the set of real, fine-grained tests that a correctly-configured CI environment should be able to pass.
 
+## Goal
+
+Create the most comprehensive list of tests that any agent should be able to execute and report on, in one way or another, regardless of naming scheme. We want to capture every real test in the repo — the regexes should be flexible enough to match naming variations across different test runners and agent configurations.
+
 ## Your data
 
 All trial results are in: ${RESULTS_DIR}

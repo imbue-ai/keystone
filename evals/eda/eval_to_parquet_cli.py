@@ -56,7 +56,10 @@ def _deduped_test_names(ver: object | None) -> dict[str, bool] | None:
         return None
     seen: dict[str, bool] = {}
     for t in tr:
-        seen[t.name] = seen.get(t.name, False) or t.passed
+        # Normalize: strip trailing "()" so Java test names like
+        # "contextLoads" and "contextLoads()" collapse to one entry.
+        name = t.name[:-2] if t.name.endswith("()") else t.name
+        seen[name] = seen.get(name, False) or t.passed
     return seen
 
 

@@ -149,5 +149,7 @@ PROMPT="${PROMPT//\$\{REPO_ID\}/$REPO_ID}"
 PROMPT="${PROMPT//\$\{RESULTS_DIR\}/$RESULTS_DIR}"
 PROMPT="${PROMPT//\$\{OUTPUT_DIR\}/$OUTPUT_DIR}"
 
-exec claude --allowedTools "Bash,Read,Write,Edit" \
-    "$PROMPT"
+exec claude --dangerously-skip-permissions \
+    --allowedTools "Bash,Read,Write,Edit" \
+    --append-system-prompt "$PROMPT" \
+    "Begin analyzing the test results for ${REPO_ID} in ${RESULTS_DIR}. Start by surveying test counts across all configs (wc -l */trial_*/passing_tests.txt), then identify clusters and outliers."

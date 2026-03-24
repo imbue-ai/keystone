@@ -34,18 +34,6 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/keystone"]
 
-[tool.pytest.ini_options]
-markers = [
-    "manual: marks tests as manual (deselect with '-k not manual')",
-    "modal: marks tests that run on Modal (deterministic)",
-    "local_docker: marks tests that expect a local Docker daemon",
-    "agentic: marks tests that run a real coding agent (non-deterministic)",
-]
-testpaths = ["tests"]
-log_cli = true
-log_cli_level = "INFO"
-addopts = "-s"
-
 [dependency-groups]
 dev = [
     "ruff>=0.9.0",

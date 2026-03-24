@@ -27,10 +27,10 @@ if [ -n "$AGENT_BUDGET_CAP_USD" ] && [ -n "$CCUSAGE_COMMAND" ]; then
     # Check if over budget (awk prints 1 for true, 0 for false)
     IS_OVER=$(awk "BEGIN {print ($REMAINING <= 0) ? 1 : 0}")
     if [ "$IS_OVER" -eq 1 ]; then
-      printf "Remaining budget: %.2f USD (OVER BUDGET)\n" "$REMAINING"
+      printf "Remaining budget: %.4f USD (OVER BUDGET)\n" "$REMAINING"
       OVER_BUDGET=1
     else
-      printf "Remaining budget: %.2f USD\n" "$REMAINING"
+      printf "Remaining budget: %.4f USD\n" "$REMAINING"
     fi
   else
     echo "Remaining budget: unknown (ccusage failed)"

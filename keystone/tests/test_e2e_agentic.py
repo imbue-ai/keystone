@@ -330,6 +330,8 @@ def test_e2e_codex_cost_limit_on_modal(tmp_path: Path, project_root: Path) -> No
         "0.01",
         "--cost_poll_interval_seconds",
         "5",
+        "--codex_reasoning_level",
+        "high",
         "--agent_in_modal",
         "--docker_registry_mirror",
         os.environ["DOCKER_REGISTRY_MIRROR"],

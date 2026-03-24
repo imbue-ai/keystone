@@ -423,16 +423,18 @@ class ModalAgentRunner(AgentRunner):
         # We write a wrapper script to avoid quoting hell with 'su -c'
         # Add budget/time env vars so budget.sh can report remaining resources
         ccusage_command = "ccusage-codex" if provider.name == "codex" else "ccusage"
-        env_vars["AGENT_TIME_DEADLINE"] = str(int(time.time()) + time_limit_seconds)
         env_vars["AGENT_BUDGET_CAP_USD"] = str(max_budget_usd)
         env_vars["CCUSAGE_COMMAND"] = ccusage_command
 
         export_lines = "\n".join(f"export {k}={shlex.quote(v)}" for k, v in env_vars.items() if v)
 
+        # Compute AGENT_TIME_DEADLINE inside the sandbox to avoid clock skew
+        # between the user's machine and the Modal worker.
         agent_script_content = f"""#!/bin/bash
 set -e
 cd /project
 {export_lines}
+export AGENT_TIME_DEADLINE=$(( $(date +%s) + {time_limit_seconds} ))
 exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
 """
         # Upload script using Modal's native filesystem API

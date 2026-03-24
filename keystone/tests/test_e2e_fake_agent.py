@@ -128,6 +128,8 @@ def test_e2e_fake_agent(
         "[fake_claude_agent/claude-opus-4-6] Completed setup of devcontainer files.",
         "[fake_claude_agent/claude-opus-4-6] Running guardrail.sh self-check.",
         "[fake_claude_agent/claude-opus-4-6] Guardrail self-check passed.",
+        "[fake_claude_agent/claude-opus-4-6] Running keystone_budget.sh check.",
+        "[fake_claude_agent/claude-opus-4-6] Budget check passed.",
     ], f"Expected status_messages to be captured, got: {output.agent.status_messages}"
 
     # Verify test_results contents (now nested in verification)

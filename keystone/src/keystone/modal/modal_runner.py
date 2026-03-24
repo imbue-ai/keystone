@@ -19,6 +19,7 @@ from typing import Any, ClassVar
 import modal
 
 from keystone.agent_runner import (
+    BUDGET_SCRIPT_PATH,
     GUARDRAIL_SCRIPT_PATH,
     TIMEOUT_EXIT_CODE,
     AgentRunner,
@@ -311,6 +312,11 @@ class ModalAgentRunner(AgentRunner):
                 f.write(GUARDRAIL_SCRIPT_PATH.read_bytes())
             run_modal_command(sb, "chmod", "+x", "/project/guardrail.sh", name="upload").wait()
 
+        # Upload keystone_budget.sh so the agent can check remaining time/budget
+        with sb.open("/project/keystone_budget.sh", "wb") as f:
+            f.write(BUDGET_SCRIPT_PATH.read_bytes())
+        run_modal_command(sb, "chmod", "+x", "/project/keystone_budget.sh", name="upload").wait()
+
         # Write AGENTS.md if provided (used by codex to read instructions as system context)
         if agents_md:
             with sb.open("/project/AGENTS.md", "w") as f:
@@ -415,12 +421,20 @@ class ModalAgentRunner(AgentRunner):
 
         # Run agent in project directory
         # We write a wrapper script to avoid quoting hell with 'su -c'
+        # Add budget/time env vars so budget.sh can report remaining resources
+        ccusage_command = "ccusage-codex" if provider.name == "codex" else "ccusage"
+        env_vars["AGENT_BUDGET_CAP_USD"] = str(max_budget_usd)
+        env_vars["CCUSAGE_COMMAND"] = ccusage_command
+
         export_lines = "\n".join(f"export {k}={shlex.quote(v)}" for k, v in env_vars.items() if v)
 
+        # Compute AGENT_TIME_DEADLINE inside the sandbox to avoid clock skew
+        # between the user's machine and the Modal worker.
         agent_script_content = f"""#!/bin/bash
 set -e
 cd /project
 {export_lines}
+export AGENT_TIME_DEADLINE=$(( $(date +%s) + {time_limit_seconds} ))
 exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
 """
         # Upload script using Modal's native filesystem API

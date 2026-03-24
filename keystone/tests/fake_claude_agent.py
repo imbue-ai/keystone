@@ -156,6 +156,48 @@ def main() -> None:
     }
     print(json.dumps(guardrail_pass_status))
 
+    # Run keystone_budget.sh to validate budget/time env vars are set correctly.
+    budget_path = Path("keystone_budget.sh")
+    assert budget_path.exists(), f"keystone_budget.sh not found in {Path.cwd()}"
+
+    budget_status = {
+        "type": "assistant",
+        "message": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": f"BOOTSTRAP_DEVCONTAINER_STATUS: [fake_claude_agent/{model_label}] Running keystone_budget.sh check.",
+                }
+            ]
+        },
+    }
+    print(json.dumps(budget_status))
+
+    budget_result = subprocess.run(
+        ["bash", str(budget_path)],
+        stdout=sys.stderr,
+    )
+
+    if budget_result.returncode != 0:
+        print(
+            f"FATAL: keystone_budget.sh failed (exit {budget_result.returncode})",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    budget_pass_status = {
+        "type": "assistant",
+        "message": {
+            "content": [
+                {
+                    "type": "text",
+                    "text": f"BOOTSTRAP_DEVCONTAINER_STATUS: [fake_claude_agent/{model_label}] Budget check passed.",
+                }
+            ]
+        },
+    }
+    print(json.dumps(budget_pass_status))
+
     result = {
         "type": "result",
         "usage": {

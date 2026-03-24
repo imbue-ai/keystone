@@ -20,6 +20,7 @@ from keystone.prompts import generate_devcontainer_json
 from keystone.schema import AgentConfig, InferenceCost, StreamEvent, StreamType, VerificationResult
 
 GUARDRAIL_SCRIPT_PATH = Path(__file__).parent / "guardrail.sh"
+BUDGET_SCRIPT_PATH = Path(__file__).parent / "keystone_budget.sh"
 
 logger = getLogger(__name__)
 
@@ -218,6 +219,11 @@ class LocalAgentRunner(AgentRunner):
             dest_guardrail.write_bytes(GUARDRAIL_SCRIPT_PATH.read_bytes())
             dest_guardrail.chmod(0o755)
 
+        # Copy budget script so the agent can check remaining time/budget
+        dest_budget = self._work_dir / "keystone_budget.sh"
+        dest_budget.write_bytes(BUDGET_SCRIPT_PATH.read_bytes())
+        dest_budget.chmod(0o755)
+
         # Write AGENTS.md if provided (used by codex to read instructions as system context)
         if agents_md:
             (self._work_dir / "AGENTS.md").write_text(agents_md)
@@ -233,10 +239,18 @@ class LocalAgentRunner(AgentRunner):
         full_cmd = provider.build_command(prompt, max_budget_usd, agent_cmd)
         full_cmd = self._with_timeout(time_limit_seconds, full_cmd)
 
+        # Set budget/time env vars for budget.sh
+        ccusage_command = "ccusage-codex" if provider.name == "codex" else "ccusage"
+        budget_env = {
+            "AGENT_TIME_DEADLINE": str(int(time.time()) + time_limit_seconds),
+            "AGENT_BUDGET_CAP_USD": str(max_budget_usd),
+            "CCUSAGE_COMMAND": ccusage_command,
+        }
+
         result = run_process(
             full_cmd,
             log_prefix="[local_agent]",
-            env={**os.environ, **provider.env_vars()},
+            env={**os.environ, **provider.env_vars(), **budget_env},
             cwd=str(self._work_dir),
             stdout_callback=collect_stdout,
             stderr_callback=collect_stderr,

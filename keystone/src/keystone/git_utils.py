@@ -32,10 +32,16 @@ def get_git_tree_hash(repo_path: Path) -> str:
 def create_git_archive_bytes(repo_path: Path) -> bytes:
     """Create a tarball of the repository and return as bytes.
 
-    TODO: Use `git archive --recurse-submodules` once available in mainline git
-    to include submodule contents. Currently submodules are not included.
+    If the repository contains submodules, initializes them and builds the
+    tarball from ``git ls-files --recurse-submodules`` so that submodule
+    contents are included.  Repositories without submodules use the faster
+    ``git archive`` path.
     """
     try:
+        has_submodules = (repo_path / ".gitmodules").exists()
+        if has_submodules:
+            return _create_archive_with_submodules(repo_path)
+
         result = subprocess.run(
             ["git", "archive", "--format=tar.gz", "HEAD"],
             cwd=repo_path,
@@ -44,7 +50,51 @@ def create_git_archive_bytes(repo_path: Path) -> bytes:
         )
         return result.stdout
     except subprocess.CalledProcessError as e:
-        raise GitError(f"Failed to create git archive: {e.stderr.decode()}") from e
+        stderr = e.stderr if isinstance(e.stderr, str) else e.stderr.decode()
+        raise GitError(f"Failed to create git archive: {stderr}") from e
+
+
+def _create_archive_with_submodules(repo_path: Path) -> bytes:
+    """Build a tar.gz that includes submodule contents.
+
+    Unlike ``git archive`` (which archives committed state), this archives
+    the working tree, so we require a clean tree to avoid capturing
+    uncommitted changes.
+
+    1. Verify the working tree is clean.
+    2. Ensure submodules are initialised and checked out.
+    3. List every tracked file (including inside submodules) with
+       null-delimited output for safe filename handling.
+    4. Feed that list to ``tar`` to produce the archive.
+    """
+    if is_git_dirty(repo_path):
+        raise GitError(
+            "Cannot create archive with submodules from a dirty working tree. "
+            "Please commit or stash your changes first."
+        )
+
+    subprocess.run(
+        ["git", "submodule", "update", "--init", "--recursive"],
+        cwd=repo_path,
+        capture_output=True,
+        check=True,
+    )
+
+    ls_result = subprocess.run(
+        ["git", "ls-files", "--recurse-submodules", "-z"],
+        cwd=repo_path,
+        capture_output=True,
+        check=True,
+    )
+
+    result = subprocess.run(
+        ["tar", "-czf", "-", "--null", "-T", "-"],
+        input=ls_result.stdout,
+        cwd=repo_path,
+        capture_output=True,
+        check=True,
+    )
+    return result.stdout
 
 
 def is_git_repo(path: Path) -> bool:

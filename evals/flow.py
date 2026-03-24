@@ -172,8 +172,13 @@ def archive_repo_task(
     with tempfile.TemporaryDirectory() as tmp_dir:
         clone_path = Path(tmp_dir) / repo_id
         log.info(f"Cloning {repo_url} (pinned to {commit_hash[:12]})...")
-        _run_git(["clone", repo_url, str(clone_path)])
+        _run_git(["clone", "--recurse-submodules", repo_url, str(clone_path)])
         _run_git(["checkout", commit_hash], cwd=clone_path)
+        # --recurse-submodules on clone fetches submodules at the default
+        # branch's HEAD.  After checking out a different commit the submodule
+        # working directories are stale — sync them to the commits pinned at
+        # the checked-out revision.
+        _run_git(["submodule", "update", "--recursive"], cwd=clone_path)
 
         # Verify checkout
         result = _run_git(["rev-parse", "HEAD"], cwd=clone_path)
@@ -184,16 +189,37 @@ def archive_repo_task(
             )
         log.info(f"{repo_id} at commit {commit_hash[:12]}")
 
-        # Create git archive tarball
-        archive_result = subprocess.run(
-            ["git", "archive", "--format=tar.gz", "-o", str(clone_path / "archive.tar.gz"), "HEAD"],
-            cwd=clone_path,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        if archive_result.returncode != 0:
-            raise RuntimeError(f"git archive failed: {archive_result.stderr}")
+        # Create git archive tarball (with submodule support)
+        has_submodules = (clone_path / ".gitmodules").exists()
+        if has_submodules:
+            # Verify clean tree — the tar-based approach archives the working
+            # tree rather than committed state, so we must not capture stray files.
+            status_result = _run_git(["status", "--porcelain"], cwd=clone_path)
+            if status_result.stdout.strip():
+                raise RuntimeError(
+                    f"Cannot archive {repo_id}: working tree is dirty after checkout"
+                )
+            ls_result = subprocess.run(
+                ["git", "ls-files", "--recurse-submodules", "-z"],
+                cwd=clone_path,
+                capture_output=True,
+                check=True,
+            )
+            subprocess.run(
+                ["tar", "-czf", str(clone_path / "archive.tar.gz"), "--null", "-T", "-"],
+                input=ls_result.stdout,
+                cwd=clone_path,
+                capture_output=True,
+                check=True,
+            )
+        else:
+            subprocess.run(
+                ["git", "archive", "--format=tar.gz", "-o", str(clone_path / "archive.tar.gz"), "HEAD"],
+                cwd=clone_path,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
 
         tarball_bytes = (clone_path / "archive.tar.gz").read_bytes()
 

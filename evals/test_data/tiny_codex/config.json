@@ -5,7 +5,7 @@
   "description": "Manual smoke test for codex default model on requests repo.",
   "repo_list_path": "test_data/tiny_codex/repos.jsonl",
   "s3_output_prefix": "s3://int8-datasets/keystone/evals/test-tiny-codex/",
-  "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs/",
+  "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs-with-submodules/",
   "configs": [
     {
       "name": "codex-default",
@@ -15,7 +15,8 @@
           "guardrail": true, "use_agents_md": true,
           "agent_in_modal": true,
           "max_budget_usd": 5.0,
-          "agent_time_limit_seconds": 1200
+          "agent_time_limit_seconds": 1200,
+          "cost_poll_interval_seconds": 30
         }
       },
       "trials_per_repo": 1,

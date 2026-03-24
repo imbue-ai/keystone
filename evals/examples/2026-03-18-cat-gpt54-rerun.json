@@ -4,7 +4,7 @@
   "s3_output_prefix": "s3://int8-datasets/keystone/evals/2026-03-18-cat-gpt54-rerun/",
   "max_concurrent": 200,
   "task_start_stagger_seconds": 1,
-  "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs/",
+  "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs-with-submodules/",
   "configs": [
     {
       "name": "gpt-5.4",
@@ -17,7 +17,8 @@
           "model": "gpt-5.4",
           "codex_reasoning_level": "high",
           "max_budget_usd": 10.0,
-          "agent_time_limit_seconds": 3600
+          "agent_time_limit_seconds": 3600,
+          "cost_poll_interval_seconds": 30
         }
       },
       "trials_per_repo": 3

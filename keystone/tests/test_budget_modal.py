@@ -26,6 +26,10 @@ def test_budget_script_reports_cost_after_claude() -> None:
     sb = modal.Sandbox.create(app=app, image=image, timeout=300)
 
     try:
+        # Ensure /project directory exists and is accessible
+        run_modal_command(sb, "mkdir", "-p", "/project", name="setup").wait()
+        run_modal_command(sb, "chown", "-R", "agent:agent", "/project", name="setup").wait()
+
         # Upload budget script
         with sb.open("/project/keystone_budget.sh", "wb") as f:
             f.write(BUDGET_SCRIPT_PATH.read_bytes())

@@ -262,67 +262,63 @@
     'agent': dict({
       'cost': dict({
         'ccusage_raw': dict({
-          'cacheCreationTokens': 26009,
-          'cacheReadTokens': 59921,
-          'inputTokens': 6,
-          'lastActivity': '2026-03-13',
+          'cacheCreationTokens': 38870,
+          'cacheReadTokens': 144151,
+          'inputTokens': 125,
+          'lastActivity': '2026-03-24',
           'modelBreakdowns': list([
             dict({
-              'cacheCreationTokens': 26009,
-              'cacheReadTokens': 59921,
-              'cost': 0.19849674999999997,
-              'inputTokens': 6,
+              'cacheCreationTokens': 38870,
+              'cacheReadTokens': 144151,
+              'cost': 0.32326299999999997,
+              'inputTokens': 125,
               'modelName': 'claude-opus-4-6',
-              'outputTokens': 238,
+              'outputTokens': 305,
             }),
           ]),
           'modelsUsed': list([
             'claude-opus-4-6',
           ]),
-          'outputTokens': 238,
+          'outputTokens': 305,
           'projectPath': 'Unknown Project',
           'sessionId': '-project',
-          'totalCost': 0.19849674999999997,
-          'totalTokens': 86174,
+          'totalCost': 0.32326299999999997,
+          'totalTokens': 183451,
         }),
-        'cost_usd': 0.19849674999999997,
+        'cost_usd': 0.32326299999999997,
         'cost_usd_computed': 0.0,
         'token_spending': dict({
-          'cache_creation': 26009,
-          'cached': 59921,
-          'input': 6,
-          'output': 238,
+          'cache_creation': 38870,
+          'cached': 144151,
+          'input': 125,
+          'output': 305,
         }),
       }),
-      'duration_seconds': 80.35671558300965,
-      'end_time': '2026-03-13T18:41:12.396963+00:00',
+      'cost_limit_exceeded': False,
+      'duration_seconds': 88.39384349994361,
+      'end_time': '2026-03-24T10:43:28.028200+00:00',
       'error_messages': list([
       ]),
       'exit_code': 0,
-      'start_time': '2026-03-13T18:39:41.171924+00:00',
+      'start_time': '2026-03-24T10:41:48.901906+00:00',
       'status_messages': list([
         dict({
-          'message': 'Exploring repository structure to identify file types and test locations.',
-          'timestamp': '2026-03-13T18:40:19.639000+00:00',
-        }),
-        dict({
-          'message': 'Creating Dockerfile and test runner script.',
-          'timestamp': '2026-03-13T18:40:26.219062+00:00',
+          'message': 'Exploring repository structure to identify project type and test framework.',
+          'timestamp': '2026-03-24T10:42:09.450270+00:00',
         }),
       ]),
       'summary': dict({
-        'message': 'Everything worked on the first try. Simple Python project with 2 tests. Used `python:3.11-slim` as base image and `uv` for fast dependency installation. Dependencies (pytest, pytest-json-report) were pre-installed in a cached layer before copying source code. All 2 tests pass.',
-        'timestamp': '2026-03-13T18:40:53.842787+00:00',
+        'message': 'Everything worked. Simple Python project with pytest — used python:3.11-slim base image with uv for fast dependency installation. Only needed to set PYTHONPATH so tests could import the `app` module. All 2 tests pass, JUnit XML generated natively by pytest.',
+        'timestamp': '2026-03-24T10:43:10.004147+00:00',
       }),
       'timed_out': False,
     }),
     'cli_args': list([
-      '/Users/thad/Imbue Dropbox/Thad Hughes/src/bootstrap_devcontainer/.venv/bin/pytest',
-      'tests/test_e2e_agentic.py::test_e2e_claude_on_modal_sample_projects[python_project]',
-      '-x',
-      '-v',
-      '--no-header',
+      '/Users/thad/.cursor/extensions/ms-python.python-2025.6.1-darwin-arm64/python_files/vscode_pytest/run_pytest_script.py',
+      '-sv',
+      '--log-cli-level=DEBUG',
       '--snapshot-update',
+      '--rootdir=/Users/thad/Imbue Dropbox/Thad Hughes/src/keystone',
     ]),
     'error_message': None,
     'generated_files': dict({
@@ -347,15 +343,19 @@
         # Create test artifacts directory.
         RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
         
+        # Copy uv from official image.
         COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-        
         ENV UV_LINK_MODE=copy
         ENV UV_PROJECT_ENVIRONMENT=/venv
         
+        # Copy dependency files first for caching
         WORKDIR /project_src
         COPY pyproject.toml uv.lock ./
+        
+        # Install dependencies
         RUN uv sync --locked --no-install-project
         
+        # Copy source code
         COPY app.py ./
         COPY tests/ ./tests/
         
@@ -368,12 +368,11 @@
         #!/bin/bash
         set -euo pipefail
         
-        cd /project_src
-        export PYTHONPATH=/project_src:${PYTHONPATH:-}
-        
         mkdir -p /test_artifacts/junit
         
-        /venv/bin/pytest tests/ --junitxml=/test_artifacts/junit/results.xml --no-header -v 2>&1
+        cd /project_src
+        export PYTHONPATH=/project_src:${PYTHONPATH:-}
+        /venv/bin/pytest tests/ --junitxml=/test_artifacts/junit/results.xml -v
         
         echo '{"success": true}' > /test_artifacts/final_result.json
   
@@ -382,9 +381,9 @@
     'success': True,
     'verification': dict({
       'error_message': None,
-      'image_build_seconds': 3.3673970699310303,
+      'image_build_seconds': 3.0637450218200684,
       'success': True,
-      'test_execution_seconds': 1.823547124862671,
+      'test_execution_seconds': 2.105252742767334,
       'test_results': list([
         dict({
           'name': 'tests.test_app::test_add',
@@ -407,47 +406,59 @@
   dict({
     'agent': dict({
       'cost': dict({
-        'ccusage_raw': None,
-        'cost_usd': 0.0,
+        'ccusage_raw': dict({
+          'cacheCreationTokens': 16034,
+          'cacheReadTokens': 110898,
+          'inputTokens': 109,
+          'lastActivity': '2026-03-24',
+          'modelBreakdowns': list([
+            dict({
+              'cacheCreationTokens': 16034,
+              'cacheReadTokens': 110898,
+              'cost': 0.1612065,
+              'inputTokens': 109,
+              'modelName': 'claude-opus-4-6',
+              'outputTokens': 200,
+            }),
+          ]),
+          'modelsUsed': list([
+            'claude-opus-4-6',
+          ]),
+          'outputTokens': 200,
+          'projectPath': 'Unknown Project',
+          'sessionId': '-project',
+          'totalCost': 0.1612065,
+          'totalTokens': 127241,
+        }),
+        'cost_usd': 0.1612065,
         'cost_usd_computed': 0.0,
         'token_spending': dict({
-          'cache_creation': 0,
-          'cached': 0,
-          'input': 0,
-          'output': 0,
+          'cache_creation': 16034,
+          'cached': 110898,
+          'input': 109,
+          'output': 200,
         }),
       }),
-      'duration_seconds': 0.0433206669986248,
-      'end_time': datetime.datetime(2026, 3, 5, 0, 54, 31, 980184, tzinfo=TzInfo(0)),
+      'cost_limit_exceeded': False,
+      'duration_seconds': 84.04371233307756,
+      'end_time': '2026-03-24T10:45:02.600119+00:00',
       'error_messages': list([
       ]),
       'exit_code': 0,
-      'start_time': datetime.datetime(2026, 3, 5, 0, 54, 4, 641208, tzinfo=TzInfo(0)),
+      'start_time': '2026-03-24T10:43:28.156621+00:00',
       'status_messages': list([
         dict({
-          'message': 'Exploring repository structure to identify file types and test locations.',
-          'timestamp': datetime.datetime(2026, 3, 5, 0, 54, 4, 682990, tzinfo=TzInfo(0)),
+          'message': 'Exploring repository structure to identify project type and test framework.',
+          'timestamp': '2026-03-24T10:43:49.633799+00:00',
         }),
         dict({
-          'message': 'Creating .devcontainer directory and copying devcontainer.json.',
-          'timestamp': datetime.datetime(2026, 3, 5, 0, 54, 4, 683727, tzinfo=TzInfo(0)),
-        }),
-        dict({
-          'message': 'Creating Dockerfile for Python 3.12 project with uv package manager.',
-          'timestamp': datetime.datetime(2026, 3, 5, 0, 54, 4, 683906, tzinfo=TzInfo(0)),
-        }),
-        dict({
-          'message': 'Running guardrail check to validate the setup.',
-          'timestamp': datetime.datetime(2026, 3, 5, 0, 54, 4, 684174, tzinfo=TzInfo(0)),
-        }),
-        dict({
-          'message': 'The test_impossible test intentionally always fails. Skipping it in run_all_tests.sh using pytest deselect option.',
-          'timestamp': datetime.datetime(2026, 3, 5, 0, 54, 4, 684277, tzinfo=TzInfo(0)),
+          'message': 'Creating Dockerfile and test runner for simple Python/pytest project with one intentionally failing test to disable.',
+          'timestamp': '2026-03-24T10:44:05.075864+00:00',
         }),
       ]),
       'summary': dict({
-        'message': 'Everything worked. The project is a simple Python 3.12 project using pytest with uv as package manager. The key insight is the project is named "sample-python-project-with-failing-test" and contains a `test_impossible` test intentionally designed to always fail (it asserts False). This test was excluded using pytest\'s `--deselect` flag so the test suite completes successfully. Used uv from the official image for fast dependency installation with layer caching via `uv sync --locked --no-install-project`.',
-        'timestamp': datetime.datetime(2026, 3, 5, 0, 54, 4, 684395, tzinfo=TzInfo(0)),
+        'message': 'Everything worked on the first try. Simple Python project using pytest with uv for fast dependency management. The project had one intentionally failing test (`test_impossible`) which I removed via `sed` in the Dockerfile. Base image is `python:3.12-slim` with uv copied from the official image. 2 tests pass.',
+        'timestamp': '2026-03-24T10:44:45.742744+00:00',
       }),
       'timed_out': False,
     }),
@@ -456,7 +467,7 @@
       '-sv',
       '--log-cli-level=DEBUG',
       '--snapshot-update',
-      '--rootdir=/Users/thad/Imbue Dropbox/Thad Hughes/src/bootstrap_devcontainer',
+      '--rootdir=/Users/thad/Imbue Dropbox/Thad Hughes/src/keystone',
     ]),
     'error_message': None,
     'generated_files': dict({
@@ -481,29 +492,21 @@
         # Create test artifacts directory.
         RUN mkdir -p /test_artifacts && chmod 777 /test_artifacts
         
-        # Copy uv from official image.
         COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
         
-        # Very important on Modal -- without this, there is a crazy bug that means that some files do not show up in snapshots!
-        # This is because Modal's snapshotting mechanism does not work correctly with symlinks.
+        ENV UV_PROJECT_ENVIRONMENT=/venv
         ENV UV_LINK_MODE=copy
         
-        # Pre-create uv virtual environment and install dependencies.
-        # Install dependencies first (without the project itself) to maximize layer caching.
-        COPY pyproject.toml uv.lock /tmp/deps/
-        ENV UV_PROJECT_ENVIRONMENT=/venv
-        RUN cd /tmp/deps && \
-            uv sync --locked --no-install-project && \
-            echo "Python virtual environment created successfully at $UV_PROJECT_ENVIRONMENT"
-        
-        # Copy source code
         WORKDIR /project_src
+        
+        COPY pyproject.toml uv.lock ./
+        RUN uv sync --locked --no-install-project
+        
         COPY app.py ./
         COPY tests/ ./tests/
         
-        # Add venv to PATH
-        ENV PATH="/venv/bin:$PATH"
-        ENV PYTHONPATH="/project_src"
+        # Remove the intentionally failing test
+        RUN sed -i '/def test_impossible/,/always fail"/d' tests/test_app.py
         
         # Copy the test runner script last (this changes often during development)
         COPY .devcontainer/run_all_tests.sh /run_all_tests.sh
@@ -511,44 +514,26 @@
   
       ''',
       'run_all_tests_sh': '''
-        #!/usr/bin/env bash
-        set -uo pipefail
+        #!/bin/bash
+        set -euo pipefail
         
         mkdir -p /test_artifacts/junit
         
         cd /project_src
+        export PYTHONPATH=/project_src:${PYTHONPATH:-}
         
-        # Run pytest with JUnit XML output
-        # Note: test_impossible is intentionally designed to always fail (project is named "sample-python-project-with-failing-test")
-        # We deselect it so the test suite can complete successfully
-        pytest \
-          --junitxml=/test_artifacts/junit/pytest.xml \
-          --no-header \
-          -v \
-          --deselect tests/test_app.py::test_impossible \
-          tests/
-        PYTEST_EXIT_CODE=$?
+        /venv/bin/pytest tests/ --junitxml=/test_artifacts/junit/results.xml -v 2>&1
         
-        # Write final result JSON based on pytest exit code
-        if [ $PYTEST_EXIT_CODE -eq 0 ]; then
-          echo '{"success": true, "exit_code": 0}' > /test_artifacts/final_result.json
-        else
-          echo "{\"success\": false, \"exit_code\": $PYTEST_EXIT_CODE}" > /test_artifacts/final_result.json
-        fi
-        
-        echo "Test run complete. Exit code: $PYTEST_EXIT_CODE"
-        cat /test_artifacts/final_result.json
-        
-        exit $PYTEST_EXIT_CODE
+        echo '{"success": true}' > /test_artifacts/final_result.json
   
       ''',
     }),
     'success': True,
     'verification': dict({
       'error_message': None,
-      'image_build_seconds': 11.312418937683105,
+      'image_build_seconds': 3.4369289875030518,
       'success': True,
-      'test_execution_seconds': 1.760401964187622,
+      'test_execution_seconds': 1.7990679740905762,
       'test_results': list([
         dict({
           'name': 'tests.test_app::test_add',

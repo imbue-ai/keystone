@@ -351,6 +351,8 @@ def test_e2e_codex_cost_limit_on_modal(tmp_path: Path, project_root: Path) -> No
 
     output = parse_bootstrap_result(result.stdout)
 
+    logger.info("Reported cost: $%.4f", output.agent.cost.cost_usd)
+
     assert result.exit_code != 0, "Expected non-zero exit code when cost limit exceeded"
     assert output.agent.cost_limit_exceeded, "Expected cost_limit_exceeded=True"
     assert output.agent.exit_code == 1, "Expected agent exit_code=1"

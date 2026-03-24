@@ -155,3 +155,4 @@ uv run pytest -x -k "not manual and not modal and not agentic"
 ## Skills
 
 - **eval-parquet** (`.agents/skills/eval-parquet/SKILL.md`) — Schema reference and example queries for the eval results Parquet files produced by `evals/eda/eval_to_parquet_cli.py`. Use when analyzing or querying Keystone eval results.
+- **run-keystone** (`.agents/skills/run-keystone/SKILL.md`) — How to install and run the Keystone CLI, including all CLI flags, available models, provider options, and example commands.

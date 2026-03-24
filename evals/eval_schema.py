@@ -116,7 +116,7 @@ class EvalRunConfig(BaseModel):
         description="Global S3 output prefix. Each config gets a subdirectory named after the config.",
     )
     s3_repo_cache_prefix: str = Field(
-        default="s3://int8-datasets/keystone/evals/repo-tarballs/",
+        default="s3://int8-datasets/keystone/evals/repo-tarballs-with-submodules/",
         description="Global S3 prefix for cached repo tarballs (shared across all configs).",
     )
 

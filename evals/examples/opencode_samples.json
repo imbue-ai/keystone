@@ -3,7 +3,7 @@
   "description": "OpenCode eval on tiny repo set with 4 models.",
   "repo_list_path": "evals/examples/repos_tiny.jsonl",
   "s3_output_prefix": "s3://int8-datasets/keystone/evals/opencode-samples-2026-02-25-v4/",
-  "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs/",
+  "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs-with-submodules/",
   "configs": [
     {
       "name": "opencode-haiku",

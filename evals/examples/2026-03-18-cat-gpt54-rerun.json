@@ -4,7 +4,7 @@
   "s3_output_prefix": "s3://int8-datasets/keystone/evals/2026-03-18-cat-gpt54-rerun/",
   "max_concurrent": 200,
   "task_start_stagger_seconds": 1,
-  "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs/",
+  "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs-with-submodules/",
   "configs": [
     {
       "name": "gpt-5.4",

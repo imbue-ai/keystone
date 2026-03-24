@@ -5,7 +5,7 @@
   "description": "Manual smoke test for codex default model on requests repo.",
   "repo_list_path": "test_data/tiny_codex/repos.jsonl",
   "s3_output_prefix": "s3://int8-datasets/keystone/evals/test-tiny-codex/",
-  "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs/",
+  "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs-with-submodules/",
   "configs": [
     {
       "name": "codex-default",

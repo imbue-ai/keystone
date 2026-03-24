@@ -187,6 +187,13 @@ def archive_repo_task(
         # Create git archive tarball (with submodule support)
         has_submodules = (clone_path / ".gitmodules").exists()
         if has_submodules:
+            # Verify clean tree — the tar-based approach archives the working
+            # tree rather than committed state, so we must not capture stray files.
+            status_result = _run_git(["status", "--porcelain"], cwd=clone_path)
+            if status_result.stdout.strip():
+                raise RuntimeError(
+                    f"Cannot archive {repo_id}: working tree is dirty after checkout"
+                )
             _run_git(["submodule", "update", "--init", "--recursive"], cwd=clone_path)
             ls_result = subprocess.run(
                 ["git", "ls-files", "--recurse-submodules", "-z"],

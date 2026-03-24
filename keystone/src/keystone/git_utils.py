@@ -57,11 +57,22 @@ def create_git_archive_bytes(repo_path: Path) -> bytes:
 def _create_archive_with_submodules(repo_path: Path) -> bytes:
     """Build a tar.gz that includes submodule contents.
 
-    1. Ensure submodules are initialised and checked out.
-    2. List every tracked file (including inside submodules) with
+    Unlike ``git archive`` (which archives committed state), this archives
+    the working tree, so we require a clean tree to avoid capturing
+    uncommitted changes.
+
+    1. Verify the working tree is clean.
+    2. Ensure submodules are initialised and checked out.
+    3. List every tracked file (including inside submodules) with
        null-delimited output for safe filename handling.
-    3. Feed that list to ``tar`` to produce the archive.
+    4. Feed that list to ``tar`` to produce the archive.
     """
+    if is_git_dirty(repo_path):
+        raise GitError(
+            "Cannot create archive with submodules from a dirty working tree. "
+            "Please commit or stash your changes first."
+        )
+
     subprocess.run(
         ["git", "submodule", "update", "--init", "--recursive"],
         cwd=repo_path,

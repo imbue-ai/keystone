@@ -382,8 +382,6 @@ def bootstrap(
         agent_log = AgentLog(effective_log_db)
         cli_run_id = agent_log.generate_run_id()
 
-        effective_agent_cmd = agent_config.agent_cmd or provider.default_cmd
-
         # Compute cache key
         cache_key = compute_cache_key(
             prompt_result.cli_prompt, project_root, agent_config, cache_version
@@ -415,13 +413,9 @@ def bootstrap(
             for event in runner.run(
                 prompt_result.cli_prompt,
                 project_archive,
-                max_budget_usd,
-                effective_agent_cmd,
-                agent_time_limit_seconds,
+                agent_config,
                 provider,
                 agents_md=prompt_result.agents_md,
-                guardrail=guardrail,
-                cost_poll_interval_seconds=agent_config.cost_poll_interval_seconds,
             ):
                 if event.stream == "stdout":
                     process_stdout_line(event.line)

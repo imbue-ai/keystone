@@ -24,6 +24,7 @@ def _make_config(
         provider="claude",
         guardrail=guardrail,
         use_agents_md=use_agents_md,
+        cost_poll_interval_seconds=30,
     )
 
 

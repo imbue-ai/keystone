@@ -132,6 +132,7 @@ def test_agent_config_cache_key() -> None:
         agent_in_modal=True,
         guardrail=True,
         use_agents_md=True,
+        cost_poll_interval_seconds=30,
     )
     config2 = AgentConfig(
         agent_cmd="claude",
@@ -140,6 +141,7 @@ def test_agent_config_cache_key() -> None:
         agent_in_modal=True,
         guardrail=True,
         use_agents_md=True,
+        cost_poll_interval_seconds=30,
     )
     # Same config should produce same JSON
     assert config1.to_cache_key_json() == config2.to_cache_key_json()
@@ -152,6 +154,7 @@ def test_agent_config_cache_key() -> None:
         agent_in_modal=True,
         guardrail=True,
         use_agents_md=True,
+        cost_poll_interval_seconds=30,
     )
     assert config1.to_cache_key_json() != config3.to_cache_key_json()
 

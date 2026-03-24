@@ -27,6 +27,7 @@ def _make_config(**overrides: object) -> AgentConfig:
         "provider": "claude",
         "guardrail": False,
         "use_agents_md": False,
+        "cost_poll_interval_seconds": 30,
     }
     defaults.update(overrides)
     return AgentConfig(**defaults)  # type: ignore[arg-type]

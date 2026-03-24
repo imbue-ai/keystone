@@ -17,7 +17,7 @@ from keystone.llm_provider import AgentProvider
 from keystone.modal.image import TIMESTAMP_SCRIPT_PATH
 from keystone.process_runner import run_process
 from keystone.prompts import generate_devcontainer_json
-from keystone.schema import InferenceCost, StreamEvent, StreamType, VerificationResult
+from keystone.schema import AgentConfig, InferenceCost, StreamEvent, StreamType, VerificationResult
 
 GUARDRAIL_SCRIPT_PATH = Path(__file__).parent / "guardrail.sh"
 
@@ -35,25 +35,18 @@ class AgentRunner(ABC):
         self,
         prompt: str,
         project_archive: bytes,
-        max_budget_usd: float,
-        agent_cmd: str,
-        time_limit_seconds: int,
+        agent_config: AgentConfig,
         provider: AgentProvider,
         agents_md: str | None = None,
-        guardrail: bool = True,
-        cost_poll_interval_seconds: int = 30,
     ) -> Iterator[StreamEvent]:
         """Run the agent and yield output events.
 
         Args:
             prompt: The prompt to send to the agent.
             project_archive: Git archive tarball of the project.
-            max_budget_usd: Maximum budget for agent inference.
-            agent_cmd: Base command to run the agent.
-            time_limit_seconds: Maximum time in seconds for agent execution.
+            agent_config: Agent configuration (budget, timeouts, guardrail, etc.).
             provider: LLM provider for command building and output parsing.
             agents_md: Optional AGENTS.md content to write into the project directory.
-            cost_poll_interval_seconds: How often to poll ccusage for cost enforcement (0 disables).
 
         Yields:
             StreamEvent for each line of stdout/stderr.
@@ -166,14 +159,15 @@ class LocalAgentRunner(AgentRunner):
         self,
         prompt: str,
         project_archive: bytes,
-        max_budget_usd: float,
-        agent_cmd: str,
-        time_limit_seconds: int,
+        agent_config: AgentConfig,
         provider: AgentProvider,
         agents_md: str | None = None,
-        guardrail: bool = True,
-        cost_poll_interval_seconds: int = 30,  # noqa: ARG002  # only used by ModalAgentRunner
     ) -> Iterator[StreamEvent]:
+        agent_cmd = agent_config.agent_cmd or provider.default_cmd
+        max_budget_usd = agent_config.max_budget_usd
+        time_limit_seconds = agent_config.agent_time_limit_seconds
+        guardrail = agent_config.guardrail
+
         if not self._check_docker_available():
             yield StreamEvent(
                 stream=StreamType.STDERR,

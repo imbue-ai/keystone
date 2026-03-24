@@ -27,6 +27,7 @@ from keystone.llm_provider import AgentProvider
 from keystone.modal.image import create_modal_image
 from keystone.prompts import generate_devcontainer_json
 from keystone.schema import (
+    AgentConfig,
     InferenceCost,
     StreamEvent,
     StreamType,
@@ -339,27 +340,18 @@ class ModalAgentRunner(AgentRunner):
         self,
         prompt: str,
         project_archive: bytes,
-        max_budget_usd: float,
-        agent_cmd: str,
-        time_limit_seconds: int,
+        agent_config: AgentConfig,
         provider: AgentProvider,
         agents_md: str | None = None,
-        guardrail: bool = True,
-        cost_poll_interval_seconds: int = 30,
     ) -> Iterator[StreamEvent]:
         """Run the agent in the Modal sandbox."""
         self.ensure_sandbox()
-        self.upload_project(project_archive, agents_md=agents_md, guardrail=guardrail)
+        self.upload_project(
+            project_archive, agents_md=agents_md, guardrail=agent_config.guardrail
+        )
 
         try:
-            yield from self._run_agent(
-                prompt,
-                max_budget_usd,
-                agent_cmd,
-                time_limit_seconds,
-                provider,
-                cost_poll_interval_seconds=cost_poll_interval_seconds,
-            )
+            yield from self._run_agent(prompt, agent_config, provider)
         except SandboxCrashedError as e:
             logger.error("Sandbox crashed during agent run: %s", e)
             self._exit_code = 1
@@ -381,15 +373,17 @@ class ModalAgentRunner(AgentRunner):
     def _run_agent(
         self,
         prompt: str,
-        max_budget_usd: float,
-        agent_cmd: str,
-        time_limit_seconds: int,
+        agent_config: AgentConfig,
         provider: AgentProvider,
-        cost_poll_interval_seconds: int = 30,
     ) -> Iterator[StreamEvent]:
         """Execute the agent inside the sandbox (sandbox and project already set up)."""
         assert self._sandbox is not None
         sb = self._sandbox
+
+        agent_cmd = agent_config.agent_cmd or provider.default_cmd
+        max_budget_usd = agent_config.max_budget_usd
+        time_limit_seconds = agent_config.agent_time_limit_seconds
+        cost_poll_interval_seconds = agent_config.cost_poll_interval_seconds
 
         # Reset cost-monitor state for this run
         self._cost_limit_exceeded = False

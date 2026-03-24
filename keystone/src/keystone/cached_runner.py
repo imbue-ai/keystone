@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from keystone.llm_provider import AgentProvider
-    from keystone.schema import InferenceCost, StreamEvent, VerificationResult
+    from keystone.schema import AgentConfig, InferenceCost, StreamEvent, VerificationResult
 
 logger = logging.getLogger(__name__)
 
@@ -93,13 +93,9 @@ class CachedAgentRunner(AgentRunner):
         self,
         prompt: str,
         project_archive: bytes,
-        max_budget_usd: float,
-        agent_cmd: str,
-        time_limit_secs: int,
+        agent_config: AgentConfig,
         provider: AgentProvider,
-        cost_poll_interval_seconds: int,
         agents_md: str | None = None,
-        guardrail: bool = True,
     ) -> Iterator[StreamEvent]:
         # Try cache lookup
         cached_run: AgentRunRecord | None = None
@@ -115,15 +111,7 @@ class CachedAgentRunner(AgentRunner):
         else:
             # Cache miss path
             yield from self._run_and_record(
-                prompt,
-                project_archive,
-                max_budget_usd,
-                agent_cmd,
-                time_limit_secs,
-                provider,
-                agents_md=agents_md,
-                guardrail=guardrail,
-                cost_poll_interval_seconds=cost_poll_interval_seconds,
+                prompt, project_archive, agent_config, provider, agents_md=agents_md
             )
 
     def _replay_cached(self, cached_run: AgentRunRecord) -> Iterator[StreamEvent]:
@@ -151,13 +139,9 @@ class CachedAgentRunner(AgentRunner):
         self,
         prompt: str,
         project_archive: bytes,
-        max_budget_usd: float,
-        agent_cmd: str,
-        time_limit_secs: int,
+        agent_config: AgentConfig,
         provider: AgentProvider,
-        cost_poll_interval_seconds: int,
         agents_md: str | None = None,
-        guardrail: bool = True,
     ) -> Iterator[StreamEvent]:
         """Run the agent for real and record the result."""
         self._cache_hit = False
@@ -176,15 +160,7 @@ class CachedAgentRunner(AgentRunner):
         collected_events: list[StreamEvent] = []
         try:
             for event in self._inner.run(
-                prompt,
-                project_archive,
-                max_budget_usd,
-                agent_cmd,
-                time_limit_secs,
-                provider,
-                agents_md=agents_md,
-                cost_poll_interval_seconds=cost_poll_interval_seconds,
-                guardrail=guardrail,
+                prompt, project_archive, agent_config, provider, agents_md=agents_md
             ):
                 collected_events.append(event)
                 yield event

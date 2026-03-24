@@ -87,7 +87,7 @@ class AgentConfig(BaseModel):
     # Cost monitoring — poll ccusage every N seconds while the agent runs.
     # Set to 0 to disable mid-run cost monitoring.
     cost_poll_interval_seconds: int = Field(
-        default=30,
+        ...,
         description="How often (seconds) to poll ccusage and enforce max_budget_usd. 0 disables.",
     )
 

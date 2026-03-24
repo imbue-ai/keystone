@@ -185,6 +185,7 @@ def test_claude_streaming():
                         use_agents_md=False,
                         model=LLMModel.OPUS,
                         claude_reasoning_level="medium",
+                        cost_poll_interval_seconds=30,
                     )
                 ).build_command(
                     "Figure out what OS you are on and provide evidence.", 0.10, "claude"
@@ -266,6 +267,7 @@ def test_codex_streaming():
                         use_agents_md=False,
                         model=LLMModel.CODEX,
                         codex_reasoning_level="high",
+                        cost_poll_interval_seconds=30,
                     )
                 ).build_command(
                     "Figure out what OS you are on and provide evidence.", 0.0, "codex"

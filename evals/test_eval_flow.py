@@ -108,6 +108,7 @@ def test_eval_flow_fake_agent(sample_repos: tuple[Path, list[str]], tmp_path: Pa
         agent_config=AgentConfig(
             max_budget_usd=1.0,
             agent_time_limit_seconds=5 * 60,
+            cost_poll_interval_seconds=30,
             agent_in_modal=True,
             agent_cmd=f"python {FAKE_CLAUDE_AGENT_MODAL}",
             model=LLMModel.HAIKU,
@@ -200,6 +201,7 @@ def test_eval_flow_claude_on_modal(sample_repos: tuple[Path, list[str]], tmp_pat
         agent_config=AgentConfig(
             max_budget_usd=1.0,
             agent_time_limit_seconds=10 * 60,
+            cost_poll_interval_seconds=30,
             agent_in_modal=True,
             agent_cmd="claude",
             model=LLMModel.HAIKU,

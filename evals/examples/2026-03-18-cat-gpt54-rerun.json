@@ -17,7 +17,8 @@
           "model": "gpt-5.4",
           "codex_reasoning_level": "high",
           "max_budget_usd": 10.0,
-          "agent_time_limit_seconds": 3600
+          "agent_time_limit_seconds": 3600,
+          "cost_poll_interval_seconds": 30
         }
       },
       "trials_per_repo": 3

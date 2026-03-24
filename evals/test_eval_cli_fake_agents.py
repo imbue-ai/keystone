@@ -129,6 +129,7 @@ def test_eval_cli_fake_agents_config_file(
                     agent_config=AgentConfig(
                         max_budget_usd=1.0,
                         agent_time_limit_seconds=60,
+                        cost_poll_interval_seconds=30,
                         agent_in_modal=True,
                         agent_cmd=agent_cmd,
                         model=model,

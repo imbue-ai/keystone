@@ -16,7 +16,8 @@
           "agent_in_modal": true,
           "model": "claude-opus-4-6",
           "max_budget_usd": 5.0,
-          "agent_time_limit_seconds": 1200
+          "agent_time_limit_seconds": 1200,
+          "cost_poll_interval_seconds": 30
         }
       },
       "trials_per_repo": 1,
@@ -30,7 +31,8 @@
           "agent_in_modal": true,
           "model": "claude-haiku-4-5-20251001",
           "max_budget_usd": 5.0,
-          "agent_time_limit_seconds": 1200
+          "agent_time_limit_seconds": 1200,
+          "cost_poll_interval_seconds": 30
         }
       },
       "trials_per_repo": 1,
@@ -44,7 +46,8 @@
           "agent_in_modal": true,
           "model": "gpt-5.2-codex",
           "max_budget_usd": 5.0,
-          "agent_time_limit_seconds": 1800
+          "agent_time_limit_seconds": 1800,
+          "cost_poll_interval_seconds": 30
         }
       },
       "trials_per_repo": 1,
@@ -58,7 +61,8 @@
           "agent_in_modal": true,
           "model": "gpt-5.1-codex-mini",
           "max_budget_usd": 5.0,
-          "agent_time_limit_seconds": 1800
+          "agent_time_limit_seconds": 1800,
+          "cost_poll_interval_seconds": 30
         }
       },
       "trials_per_repo": 1,

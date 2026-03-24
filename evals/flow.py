@@ -172,7 +172,7 @@ def archive_repo_task(
     with tempfile.TemporaryDirectory() as tmp_dir:
         clone_path = Path(tmp_dir) / repo_id
         log.info(f"Cloning {repo_url} (pinned to {commit_hash[:12]})...")
-        _run_git(["clone", repo_url, str(clone_path)])
+        _run_git(["clone", "--recurse-submodules", repo_url, str(clone_path)])
         _run_git(["checkout", commit_hash], cwd=clone_path)
 
         # Verify checkout
@@ -194,7 +194,6 @@ def archive_repo_task(
                 raise RuntimeError(
                     f"Cannot archive {repo_id}: working tree is dirty after checkout"
                 )
-            _run_git(["submodule", "update", "--init", "--recursive"], cwd=clone_path)
             ls_result = subprocess.run(
                 ["git", "ls-files", "--recurse-submodules", "-z"],
                 cwd=clone_path,

@@ -39,20 +39,37 @@ In short: containerization is especially important for safety when your agent is
 
 - A [Modal account](https://modal.com/docs/guide#getting-started) — used to safely sandbox Claude Code as it works on your container
 - `$ANTHROPIC_API_KEY` — Keystone uses your API key to run Claude Code inside the Modal sandbox
-- [`uvx`](https://docs.astral.sh/uv/getting-started/installation/) to run Keystone
 
+## Installation
+
+The package is published on PyPI as [`kystn`](https://pypi.org/project/kystn/). Install it with pip:
+
+```bash
+pip install kystn
+```
+
+Or run it directly without installing using `uvx`:
+
+```bash
+uvx kystn --help
+```
+
+Both methods provide the `keystone` CLI command.
 
 ## Example usage
-
-Run directly from the repository using `uvx`:
 
 ```bash
 # Make a repo.
 git clone https://github.com/fastapi/fastapi
 
-# Make a devcontainer for it.
-uvx --from 'git+https://github.com/imbue-ai/keystone@prod' \
-  keystone \
+# Run with pip install:
+keystone \
+  --max_budget_usd 1.0 \
+  --test_artifacts_dir /tmp/test_artifacts \
+  --project_root ./fastapi
+
+# Or run directly with uvx (no install needed):
+uvx kystn \
   --max_budget_usd 1.0 \
   --test_artifacts_dir /tmp/test_artifacts \
   --project_root ./fastapi
@@ -98,6 +115,67 @@ uv run keystone \
   --test_artifacts_dir /tmp/test_artifacts \
   --project_root ./samples/python_project
 ```
+
+## Evals
+
+The `evals/` directory contains a harness for benchmarking Keystone across many repos with different LLM providers.
+
+### Repo list
+
+`evals/examples/repos.jsonl` defines the repos to evaluate — one JSON object per line with fields like `id`, `repo` (git URL), `commit_hash`, `language`, `stars`, and difficulty metadata. Example:
+
+```json
+{"id": "requests", "repo": "https://github.com/psf/requests", "commit_hash": "abc123", "language": "python", ...}
+```
+
+### S3 storage
+
+Eval results are stored in S3 at `s3://int8-datasets/keystone/evals/`. Structure:
+
+```
+s3://int8-datasets/keystone/evals/
+├── repo-tarballs/              # Cached repo snapshots
+│   └── {repo_id}.tar.gz
+└── {run_name}/                 # e.g. 2026-03-18-cat
+    └── {config_name}/          # e.g. claude-opus, codex-gpt-5.3
+        └── {repo_id}/
+            └── trial_{n}/
+                ├── eval_result.json
+                ├── keystone_stderr.log
+                ├── devcontainer.tar.gz
+                └── agent_dir.tar.gz
+```
+
+### Running an eval
+
+Evals are configured with a JSON file that specifies the repo list, S3 paths, concurrency, and model configs. See `evals/examples/` for examples. Each config entry names a provider (`claude`, `codex`, or `opencode`), a model, and budget/timeout settings.
+
+### LLM providers
+
+Three agent providers are supported in `keystone/src/keystone/llm_provider/`:
+
+| Provider | CLI | Example models |
+|----------|-----|----------------|
+| **Claude** (Anthropic) | `claude` | `claude-opus-4-6`, `claude-haiku-4-5-20251001` |
+| **Codex** (OpenAI) | `codex` | `gpt-5.3-codex`, `gpt-5.1-codex-mini` |
+| **OpenCode** | `opencode` | Any of 75+ supported models |
+
+### Parquet export
+
+`evals/eda/eval_to_parquet_cli.py` flattens eval results into a single Parquet file for analysis. Key columns: `repo_id`, `config_name`, `success`, `cost_usd`, `agent_walltime_seconds`, `tests_passed`, `tests_failed`, `input_tokens`, `output_tokens`. The full `KeystoneRepoResult` is preserved in a `raw_json` column.
+
+### CDF plots
+
+`evals/eda/cdf_plot.py` generates interactive HTML plots showing cumulative distribution functions of execution time across model configs. Features cross-trace repo highlighting on hover and failure markers. Useful for comparing model speed/reliability side-by-side.
+
+### Eval viewer
+
+`evals/viewer/generate_viewer.py` builds a self-contained HTML dashboard that loads results from S3, with:
+
+- Per-run tabs with success rates, costs, and test stats
+- Failure categorization breakdown
+- Sortable/filterable table of all repo results
+- Parquet caching locally at `~/.keystone_evals/viewer_cache/` for fast reloads
 
 ## Feedback welcome
 

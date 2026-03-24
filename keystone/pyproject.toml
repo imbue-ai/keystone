@@ -26,6 +26,7 @@ dependencies = [
 
 [project.scripts]
 keystone = "keystone.keystone_cli:main"
+imbue-keystone = "keystone.keystone_cli:main"
 
 [build-system]
 requires = ["hatchling"]

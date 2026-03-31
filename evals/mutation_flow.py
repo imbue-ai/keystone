@@ -9,6 +9,7 @@ tarball uploaded to S3.
 import contextlib
 import json
 import logging
+import shlex
 import subprocess
 import tempfile
 from collections import Counter
@@ -53,38 +54,34 @@ class MutationResult(BaseModel):
 # ---------------------------------------------------------------------------
 
 MUTATION_PROMPT_TEMPLATE = """\
-You are a code mutation agent. Your job is to introduce {n} small, independent
-test-breaking changes to the source code in /project.
+You have about 60 seconds. Be fast. Do NOT explore extensively — just act.
 
-**Context:**
-- Language: {language}
-- Build system: {build_system}
-- Tests: {tests}
-- Notes: {notes}
+Your job: introduce {n} small test-breaking changes to source code in /project.
+Language: {language}. Build system: {build_system}. Tests: {tests}. {notes}
 
-**Rules:**
-1. Only modify SOURCE files — never modify test files.
-2. Each change should be small, obvious, and self-contained (e.g., insert
-   `raise AssertionError("mutation")` at the start of a function, change a
-   return value, flip a comparison operator).
-3. For each mutation, create a branch off the current HEAD:
-   - `git checkout -b broken-{{i}}` (where i = 1..{n})
-   - Make the change, `git add -A`, `git commit -m "mutation {{i}}"`
-   - `git checkout main` (return to base before the next mutation)
-4. Do NOT chain mutations — each broken-{{i}} branch should diverge from the
-   same base commit (main/HEAD).
-5. Explore the repo first to find appropriate source files to mutate. Target
-   functions that are exercised by tests.
-6. You do NOT have a working build environment. Just make your best guess at
-   which source changes will break tests.
+For EACH mutation (i=1 to {n}):
+  git checkout -b broken-{{i}} main
+  # Edit ONE source file (NOT test files) — e.g. insert `raise Exception("mutation")`
+  # at the top of an important function, or change `return x` to `return None`
+  git add -A && git commit -m "mutation {{i}}"
+  git checkout main
 
-After creating all branches, run: `git branch -v`
+Each broken-{{i}} branch must diverge from main independently. Keep changes tiny.
+Pick obvious core source files (e.g. the main module's __init__.py or core.py).
+Do NOT run tests. Do NOT install anything. Just edit, commit, move on.
+
+When done: `git branch -v`
 """
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _shell_quote(s: str) -> str:
+    """Shell-quote a string for use in a bash -c command."""
+    return shlex.quote(s)
 
 
 def _run_git(args: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
@@ -137,6 +134,7 @@ def mutate_repo_task(
     s3_prefix: str,
     n: int,
     modal_timeout_seconds: int,
+    use_claude: bool = True,
 ) -> MutationResult:
     """Clone a repo, run Claude Code to create broken branches, package and upload."""
     repo_id = repo_entry.id
@@ -151,11 +149,14 @@ def mutate_repo_task(
         _run_git(["checkout", repo_entry.commit_hash], cwd=clone_path)
         _run_git(["submodule", "update", "--recursive"], cwd=clone_path)
 
-        # Ensure we have a 'main' branch at the base commit
-        try:
-            _run_git(["branch", "-M", "main"], cwd=clone_path)
-        except subprocess.CalledProcessError:
-            _run_git(["checkout", "-b", "main"], cwd=clone_path)
+        # Ensure we're on a 'main' branch at the base commit
+        # Delete existing main if it points elsewhere, then create at HEAD
+        subprocess.run(
+            ["git", "branch", "-D", "main"],
+            cwd=clone_path,
+            capture_output=True,
+        )  # ignore errors
+        _run_git(["checkout", "-b", "main"], cwd=clone_path)
 
         # Create Modal sandbox and run Claude Code
         prompt = MUTATION_PROMPT_TEMPLATE.format(
@@ -167,7 +168,10 @@ def mutate_repo_task(
         )
 
         try:
-            broken_hashes = _run_mutation_in_modal(clone_path, prompt, n, modal_timeout_seconds)
+            if use_claude:
+                broken_hashes = _run_mutation_in_modal(clone_path, prompt, n, modal_timeout_seconds)
+            else:
+                broken_hashes = _run_mutation_locally(clone_path, n, repo_entry.language)
             result.broken_commit_hashes = broken_hashes
             if len(broken_hashes) < n:
                 result.warnings.append(f"Only {len(broken_hashes)}/{n} broken branches created")
@@ -197,6 +201,102 @@ def mutate_repo_task(
         result.s3_tarball_path = s3_tarball_path
 
     return result
+
+
+def _run_mutation_locally(
+    clone_path: Path,
+    n: int,
+    language: str | None,
+) -> list[str]:
+    """Create broken branches locally using a simple scripted approach (no Claude)."""
+    log.info("Running scripted mutations locally in %s", clone_path)
+
+    # Find candidate source files to mutate (skip test files)
+    source_files: list[Path] = []
+    for pattern in (
+        "**/*.py",
+        "**/*.js",
+        "**/*.ts",
+        "**/*.rb",
+        "**/*.go",
+        "**/*.rs",
+        "**/*.c",
+        "**/*.cpp",
+        "**/*.java",
+    ):
+        for f in clone_path.glob(pattern):
+            rel = str(f.relative_to(clone_path))
+            if "test" in rel.lower() or "spec" in rel.lower() or ".git/" in rel:
+                continue
+            # Prefer files with some content
+            try:
+                if f.stat().st_size > 50:
+                    source_files.append(f)
+            except OSError:
+                continue
+
+    # Sort by size descending (larger files are more likely to be core modules)
+    source_files.sort(key=lambda f: f.stat().st_size, reverse=True)
+
+    if not source_files:
+        log.warning("No source files found to mutate")
+        return []
+
+    broken_hashes: list[str] = []
+    for i in range(1, n + 1):
+        if i - 1 >= len(source_files):
+            # Reuse files if we have fewer source files than mutations
+            target = source_files[(i - 1) % len(source_files)]
+        else:
+            target = source_files[i - 1]
+
+        branch_name = f"broken-{i}"
+        _run_git(["checkout", "-b", branch_name, "main"], cwd=clone_path)
+
+        # Insert a mutation at the top of the file
+        original = target.read_text()
+        rel_path = target.relative_to(clone_path)
+        if (language and language.lower() in ("python",)) or target.suffix == ".py":
+            mutation = f'raise Exception("mutation {i} in {rel_path}")  # MUTATION\n'
+        elif target.suffix in (".js", ".ts"):
+            mutation = f'throw new Error("mutation {i} in {rel_path}");  // MUTATION\n'
+        elif target.suffix == ".go":
+            mutation = f'panic("mutation {i} in {rel_path}")  // MUTATION\n'
+        elif target.suffix == ".rb":
+            mutation = f'raise "mutation {i} in {rel_path}"  # MUTATION\n'
+        elif target.suffix in (".c", ".cpp"):
+            mutation = f'#error "mutation {i} in {rel_path}"  /* MUTATION */\n'
+        elif target.suffix == ".java":
+            mutation = f'throw new RuntimeException("mutation {i} in {rel_path}");  // MUTATION\n'
+        elif target.suffix == ".rs":
+            mutation = f'panic!("mutation {i} in {rel_path}");  // MUTATION\n'
+        else:
+            mutation = f'raise Exception("mutation {i} in {rel_path}")  # MUTATION\n'
+
+        target.write_text(mutation + original)
+
+        _run_git(["add", "-A"], cwd=clone_path)
+        _run_git(
+            [
+                "-c",
+                "user.name=mutation",
+                "-c",
+                "user.email=m@m",
+                "commit",
+                "-m",
+                f"mutation {i}: {rel_path}",
+            ],
+            cwd=clone_path,
+        )
+
+        # Get commit hash
+        result = _run_git(["rev-parse", "HEAD"], cwd=clone_path)
+        broken_hashes.append(result.stdout.strip())
+        log.info("Created %s: mutated %s", branch_name, rel_path)
+
+        _run_git(["checkout", "main"], cwd=clone_path)
+
+    return broken_hashes
 
 
 def _run_mutation_in_modal(
@@ -234,18 +334,26 @@ def _run_mutation_in_modal(
         sb.exec("git", "-C", "/project", "config", "user.name", "mutation-agent").wait()
         sb.exec("git", "-C", "/project", "config", "user.email", "mutation@eval").wait()
 
+        # Write prompt to file in sandbox (avoids shell quoting issues with long prompts)
+        with sb.open("/tmp/mutation_prompt.txt", "w") as f:
+            f.write(prompt)
+
         # Run Claude Code with the mutation prompt
+        log.info("Running Claude Code in sandbox...")
         proc = sb.exec(
-            "timeout",
-            str(timeout_seconds),
-            "claude",
-            "-p",
-            prompt,
-            "--allowedTools",
-            "Bash,Read,Write,Edit",
-            cwd="/project",
+            "bash",
+            "-c",
+            f"cd /project && timeout {timeout_seconds} "
+            'claude -p "$(cat /tmp/mutation_prompt.txt)" '
+            "--allowedTools Bash,Read,Write,Edit",
         )
-        proc.wait()
+        # Stream output for debugging
+        for chunk in proc.stdout:
+            log.info("[claude] %s", chunk.rstrip())
+        for chunk in proc.stderr:
+            log.warning("[claude-stderr] %s", chunk.rstrip())
+        exit_code = proc.wait()
+        log.info("Claude Code exited with code %d", exit_code)
 
         # Read back branch hashes
         branch_proc = sb.exec("git", "-C", "/project", "branch", "-v")
@@ -256,7 +364,6 @@ def _run_mutation_in_modal(
         broken_hashes: list[str] = []
         for i in range(1, n + 1):
             branch_name = f"broken-{i}"
-            # Get the commit hash for this branch
             hash_proc = sb.exec("git", "-C", "/project", "rev-parse", f"refs/heads/{branch_name}")
             hash_lines: list[str] = []
             for chunk in hash_proc.stdout:
@@ -299,6 +406,7 @@ def mutation_flow(
     n_mutations: int = 5,
     limit: int | None = None,
     modal_timeout_seconds: int = 600,
+    use_claude: bool = True,
 ) -> list[MutationResult]:
     """Run mutation pipeline for all repos, write amended JSONL."""
     repos = _load_repos(repo_list_path, limit)
@@ -307,7 +415,9 @@ def mutation_flow(
     # Run mutations (sequential for now; can be parallelized later)
     results: list[MutationResult] = []
     for repo_entry in repos:
-        result = mutate_repo_task(repo_entry, s3_prefix, n_mutations, modal_timeout_seconds)
+        result = mutate_repo_task(
+            repo_entry, s3_prefix, n_mutations, modal_timeout_seconds, use_claude=use_claude
+        )
         results.append(result)
 
     # Write amended JSONL with broken_commit_hashes
@@ -352,6 +462,9 @@ def run(
     n_mutations: int = typer.Option(5, help="Number of mutations per repo"),
     limit_to_first_n_repos: int | None = typer.Option(None, help="Limit to first N repos"),
     modal_timeout_seconds: int = typer.Option(600, help="Modal sandbox timeout"),
+    use_claude: bool = typer.Option(
+        True, "--use-claude/--no-claude", help="Use Claude Code (Modal) or scripted local mutations"
+    ),
 ) -> None:
     """Run the mutation pipeline."""
     logging.basicConfig(level=logging.INFO)
@@ -361,6 +474,7 @@ def run(
         n_mutations=n_mutations,
         limit=limit_to_first_n_repos,
         modal_timeout_seconds=modal_timeout_seconds,
+        use_claude=use_claude,
     )
 
 

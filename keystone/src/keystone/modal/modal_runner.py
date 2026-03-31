@@ -351,9 +351,7 @@ class ModalAgentRunner(AgentRunner):
                     self._cost_limit_exceeded = True
                     agent.terminate()
                     return
-                logger.info(
-                    "Cost check: $%.4f / $%.4f", cost.cost_usd, max_budget_usd
-                )
+                logger.info("Cost check: $%.4f / $%.4f", cost.cost_usd, max_budget_usd)
             except Exception:
                 logger.warning("Cost monitor: ccusage poll failed, will retry", exc_info=True)
 
@@ -367,9 +365,7 @@ class ModalAgentRunner(AgentRunner):
     ) -> Iterator[StreamEvent]:
         """Run the agent in the Modal sandbox."""
         self.ensure_sandbox()
-        self.upload_project(
-            project_archive, agents_md=agents_md, guardrail=agent_config.guardrail
-        )
+        self.upload_project(project_archive, agents_md=agents_md, guardrail=agent_config.guardrail)
 
         try:
             yield from self._run_agent(prompt, agent_config, provider)
@@ -747,6 +743,161 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
                 error_message=f"Test run failed with return code {test_exit_code}",
                 image_build_seconds=image_build_seconds,
                 test_execution_seconds=test_execution_seconds,
+            )
+
+    # ------------------------------------------------------------------
+    # Broken-commit re-verification (mutation-augmented eval)
+    # ------------------------------------------------------------------
+
+    def run_broken_commit_verifications(
+        self,
+        broken_commit_hashes: list[str],
+        test_timeout_seconds: int,
+    ) -> tuple[dict[str, VerificationResult], VerificationResult | None]:
+        """Run tests against each broken commit, then restore base and re-run.
+
+        Uses a single long-running detached Docker container so compiled
+        build artifacts persist across runs.
+
+        Returns (per-commit verifications dict, restoration verification).
+        """
+        sb = self.ensure_sandbox()
+        image_name = "keystone-verify"
+        container_name = "keystone-broken"
+
+        # Start a long-running detached container from the already-built image
+        logger.info("Starting long-running container for broken-commit verification...")
+        run_modal_command(sb, "docker", "rm", "-f", container_name, name="broken-cleanup").wait()
+        start_proc = run_modal_command(
+            sb,
+            "docker",
+            "run",
+            "-d",
+            "--network=host",
+            "--name",
+            container_name,
+            image_name,
+            "sleep",
+            "infinity",
+            name="broken-start",
+        )
+        if start_proc.wait() != 0:
+            logger.error("Failed to start broken-commit container")
+            return {}, None
+
+        verifications: dict[str, VerificationResult] = {}
+
+        for commit_hash in broken_commit_hashes:
+            logger.info("Testing broken commit %s...", commit_hash[:12])
+            result = self._run_single_broken_commit(
+                sb, commit_hash, container_name, test_timeout_seconds
+            )
+            verifications[commit_hash] = result
+
+        # Restoration check: copy base source back and re-run tests
+        logger.info("Running restoration check (base commit)...")
+        restoration = self._run_single_broken_commit(
+            sb, "HEAD", container_name, test_timeout_seconds
+        )
+
+        # Stop and remove container
+        try:
+            run_modal_command(sb, "docker", "stop", container_name, name="broken-stop").wait()
+            run_modal_command(sb, "docker", "rm", container_name, name="broken-rm").wait()
+        except SandboxCrashedError:
+            self._sandbox = None
+
+        return verifications, restoration
+
+    def _run_single_broken_commit(
+        self,
+        sb: modal.Sandbox,
+        commit_hash: str,
+        container_name: str,
+        test_timeout_seconds: int,
+    ) -> VerificationResult:
+        """Extract source tree at commit_hash, copy into container, run tests."""
+        try:
+            # Extract source tree at the given commit into a temp dir in the sandbox
+            archive_dir = f"/tmp/broken_{commit_hash[:12]}"
+            run_modal_command(
+                sb, "rm", "-rf", archive_dir, name=f"broken-clean-{commit_hash[:8]}"
+            ).wait()
+            run_modal_command(
+                sb, "mkdir", "-p", archive_dir, name=f"broken-mkdir-{commit_hash[:8]}"
+            ).wait()
+
+            # Use git archive to get the source tree at the commit
+            archive_proc = run_modal_command(
+                sb,
+                "bash",
+                "-c",
+                f"cd /project && git archive {commit_hash} | tar -x -C {archive_dir}",
+                name=f"broken-archive-{commit_hash[:8]}",
+            )
+            if archive_proc.wait() != 0:
+                return VerificationResult(
+                    success=False,
+                    error_message=f"Failed to extract source tree for commit {commit_hash}",
+                )
+
+            # Copy source into the running container
+            cp_proc = run_modal_command(
+                sb,
+                "docker",
+                "cp",
+                f"{archive_dir}/.",
+                f"{container_name}:/project/",
+                name=f"broken-cp-{commit_hash[:8]}",
+            )
+            if cp_proc.wait() != 0:
+                return VerificationResult(
+                    success=False,
+                    error_message=f"Failed to copy source for commit {commit_hash}",
+                )
+
+            # Run tests
+            test_start = time.time()
+            test_proc = run_modal_command(
+                sb,
+                "docker",
+                "exec",
+                container_name,
+                "timeout",
+                str(test_timeout_seconds),
+                "/run_all_tests.sh",
+                name=f"broken-test-{commit_hash[:8]}",
+            )
+            test_exit_code = test_proc.wait()
+            test_execution_seconds = time.time() - test_start
+
+            if test_exit_code == TIMEOUT_EXIT_CODE:
+                return VerificationResult(
+                    success=False,
+                    error_message=f"Test execution timed out after {test_timeout_seconds}s",
+                    test_execution_seconds=test_execution_seconds,
+                )
+
+            # Test pass/fail: exit 0 means tests passed, non-zero means failure
+            tests_failed = 0 if test_exit_code == 0 else 1
+            tests_passed = 1 if test_exit_code == 0 else 0
+
+            return VerificationResult(
+                success=(test_exit_code == 0),
+                error_message=None
+                if test_exit_code == 0
+                else f"Tests failed (exit {test_exit_code})",
+                test_execution_seconds=test_execution_seconds,
+                tests_passed=tests_passed,
+                tests_failed=tests_failed,
+            )
+
+        except SandboxCrashedError as e:
+            logger.error("Sandbox crashed during broken-commit verification: %s", e)
+            self._sandbox = None
+            return VerificationResult(
+                success=False,
+                error_message=f"Sandbox crashed: {e}",
             )
 
     # Agent state directories to capture (add new agents here)

@@ -8,6 +8,7 @@ import contextlib
 import datetime
 import json
 import logging
+import shutil
 import subprocess
 import tempfile
 import time
@@ -214,7 +215,14 @@ def archive_repo_task(
             )
         else:
             subprocess.run(
-                ["git", "archive", "--format=tar.gz", "-o", str(clone_path / "archive.tar.gz"), "HEAD"],
+                [
+                    "git",
+                    "archive",
+                    "--format=tar.gz",
+                    "-o",
+                    str(clone_path / "archive.tar.gz"),
+                    "HEAD",
+                ],
                 cwd=clone_path,
                 capture_output=True,
                 text=True,
@@ -293,22 +301,44 @@ def process_repo_task(
                 check=True,
             )
 
-            # TODO: Are the tarballs in S3 not actually git repos?  I thought they were.
-            # Init as git repo (keystone requires it)
-            _run_git(["init"], cwd=work_path)
-            _run_git(["add", "-A"], cwd=work_path)
-            _run_git(
-                [
-                    "-c",
-                    "user.name=eval",
-                    "-c",
-                    "user.email=eval@eval",
-                    "commit",
-                    "-m",
-                    "Initial commit",
-                ],
-                cwd=work_path,
-            )
+            # Detect bare git repo (Phase 1 mutation tarballs) vs flat source archive.
+            # A bare repo tarball extracts to a *.git directory or contains HEAD at top.
+            bare_git_dir = None
+            for child in work_path.iterdir():
+                if child.is_dir() and (child / "HEAD").exists():
+                    bare_git_dir = child
+                    break
+            if bare_git_dir is None and (work_path / "HEAD").exists():
+                bare_git_dir = work_path
+
+            if bare_git_dir is not None:
+                # Clone bare repo into a proper working tree
+                cloned_path = Path(tmp_dir) / f"{repo_id}_clone"
+                subprocess.run(
+                    ["git", "clone", str(bare_git_dir), str(cloned_path)],
+                    check=True,
+                )
+                if repo_entry.commit_hash:
+                    _run_git(["checkout", repo_entry.commit_hash], cwd=cloned_path)
+                # Replace work_path with the cloned working tree
+                shutil.rmtree(work_path)
+                cloned_path.rename(work_path)
+            else:
+                # Flat source archive — init as git repo (keystone requires it)
+                _run_git(["init"], cwd=work_path)
+                _run_git(["add", "-A"], cwd=work_path)
+                _run_git(
+                    [
+                        "-c",
+                        "user.name=eval",
+                        "-c",
+                        "user.email=eval@eval",
+                        "commit",
+                        "-m",
+                        "Initial commit",
+                    ],
+                    cwd=work_path,
+                )
 
             # Step 2: Run keystone CLI
             test_artifacts_dir = work_path / ".keystone_artifacts"
@@ -371,6 +401,15 @@ def process_repo_task(
             if agent.use_agents_md:
                 cmd.append("--use_agents_md")
 
+            # Pass broken commit hashes for mutation-augmented eval
+            if repo_entry.broken_commit_hashes:
+                cmd.extend(
+                    [
+                        "--broken_commit_hashes",
+                        ",".join(repo_entry.broken_commit_hashes),
+                    ]
+                )
+
             log.info(f"[{repo_id}] Running keystone...")
 
             # Stream keystone output: only forward status/summary markers to
@@ -419,6 +458,17 @@ def process_repo_task(
             if not success:
                 log.error(f"[{repo_id}] keystone failed (exit code {proc.returncode})")
 
+            # Extract mutation-augmented eval fields from bootstrap result
+            unexpected_broken_commit_passes = 0
+            restoration_check_failed = False
+            if bootstrap_result and isinstance(bootstrap_result, dict):
+                unexpected_broken_commit_passes = bootstrap_result.get(
+                    "unexpected_broken_commit_passes", 0
+                )
+                post_v = bootstrap_result.get("post_broken_commits_verification")
+                if post_v and isinstance(post_v, dict):
+                    restoration_check_failed = not post_v.get("success", True)
+
             result = KeystoneRepoResult(
                 repo_entry=repo_entry,
                 eval_config=eval_config,
@@ -427,6 +477,8 @@ def process_repo_task(
                 bootstrap_result=bootstrap_result,
                 keystone_config=keystone_config,
                 trial_index=trial,
+                unexpected_broken_commit_passes=unexpected_broken_commit_passes,
+                restoration_check_failed=restoration_check_failed,
             )
 
             # Step 4: Upload result and artifacts to S3 (even on failure, for debugging)

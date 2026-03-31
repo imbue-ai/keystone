@@ -12,9 +12,10 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from eval_schema import EvalConfig
+from eval_schema import EvalConfig, KeystoneRepoResult, RepoEntry
 from flow import eval_flow
 from prefect.task_runners import ThreadPoolTaskRunner
+from viewer.generate_viewer import extract_summary
 
 from keystone.constants import DEFAULT_TESTING_LOG_PATH
 from keystone.schema import AgentConfig, KeystoneConfig, LLMModel
@@ -276,3 +277,27 @@ def test_eval_flow_claude_on_modal(sample_repos: tuple[Path, list[str]], tmp_pat
     assert not failed, f"{len(failed)}/{len(output.results)} repos failed: " + ", ".join(
         f"{r.repo_entry.id}: {r.error_message or 'unknown error'}" for r in failed
     )
+
+
+def test_extract_summary_includes_mutation_fields() -> None:
+    """extract_summary returns unexpected_broken_commit_passes and restoration_check_failed."""
+    result = KeystoneRepoResult(
+        repo_entry=RepoEntry(id="test-repo", repo="https://example.com/test", commit_hash="abc123"),
+        success=True,
+        unexpected_broken_commit_passes=2,
+        restoration_check_failed=True,
+    )
+    summary = extract_summary(result)
+    assert summary["unexpected_broken_commit_passes"] == 2
+    assert summary["restoration_check_failed"] is True
+
+
+def test_extract_summary_defaults_mutation_fields() -> None:
+    """extract_summary defaults mutation fields to 0/False."""
+    result = KeystoneRepoResult(
+        repo_entry=RepoEntry(id="test-repo", repo="https://example.com/test", commit_hash="abc123"),
+        success=True,
+    )
+    summary = extract_summary(result)
+    assert summary["unexpected_broken_commit_passes"] == 0
+    assert summary["restoration_check_failed"] is False

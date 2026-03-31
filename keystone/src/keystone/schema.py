@@ -218,6 +218,11 @@ class BootstrapResult(BaseModel):
     # CLI arguments used to invoke keystone, for reproducibility.
     cli_args: list[str] | None = None
 
+    # Broken-commit re-verification results (mutation-augmented eval).
+    broken_commit_verifications: dict[str, VerificationResult] = {}
+    post_broken_commits_verification: VerificationResult | None = None
+    unexpected_broken_commit_passes: int = 0
+
 
 class VersionInfo(BaseModel):
     """Version information for the current codebase."""

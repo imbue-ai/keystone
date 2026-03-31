@@ -49,6 +49,9 @@ class RepoEntry(BaseModel):
         "Use evals/scripts/populate_commit_hashes.py to populate.",
     )
 
+    # Populated by Phase 1 mutation pipeline.
+    broken_commit_hashes: list[str] = []
+
 
 # ---------------------------------------------------------------------------
 # Input: single eval configuration (one KeystoneConfig + trial settings)
@@ -190,6 +193,10 @@ class KeystoneRepoResult(BaseModel):
     error_message: str | None = None
 
     bootstrap_result: BootstrapResult | None = None
+
+    # Mutation-augmented eval: broken-commit cheating detection.
+    unexpected_broken_commit_passes: int = 0
+    restoration_check_failed: bool = False
 
     def __init__(self, **data: Any) -> None:
         # Accept raw dict for bootstrap_result (e.g. from JSON deserialization).

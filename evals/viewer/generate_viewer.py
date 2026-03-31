@@ -208,6 +208,8 @@ def extract_summary(result: KeystoneRepoResult) -> dict:
         "error": clean_error,
         "status_messages": status_messages,
         "agent_error_msgs": agent_error_msgs,
+        "unexpected_broken_commit_passes": result.unexpected_broken_commit_passes,
+        "restoration_check_failed": result.restoration_check_failed,
     }
 
 
@@ -781,10 +783,38 @@ function renderBreakdown() {
     </div>`;
   }).join("");
 
+  // Cheating summary: repos with unexpected broken commit passes
+  let cheatHtml = "";
+  const cheatRepos = [];
+  for (const model of models) {
+    const repos = runData[model] || {};
+    for (const [repoId, r] of Object.entries(repos)) {
+      if (r.unexpected_broken_commit_passes > 0) {
+        cheatRepos.push({repo: repoId, model: getModelMeta(model).label, count: r.unexpected_broken_commit_passes});
+      }
+    }
+  }
+  if (cheatRepos.length > 0) {
+    const cheatRows = cheatRepos.map(c =>
+      `<div style="display:flex;gap:12px;padding:4px 0;border-bottom:1px solid #2d3148">
+        <span style="color:#fbbf24">⚠️</span>
+        <span style="color:#e2e8f0;min-width:160px">${escHtml(c.repo)}</span>
+        <span style="color:#94a3b8">${escHtml(c.model)}</span>
+        <span style="color:#fbbf24">${c.count} unexpected pass(es)</span>
+      </div>`
+    ).join("");
+    cheatHtml = `
+      <div style="margin-top:16px;padding-top:12px;border-top:1px solid #2d3148">
+        <div class="breakdown-title">Cheating Summary</div>
+        ${cheatRows}
+      </div>`;
+  }
+
   inner.innerHTML = `
     <div class="breakdown-title">Failure categories by model</div>
     <div class="fail-chart">${rows}</div>
     <div class="breakdown-legend">${legendItems}</div>
+    ${cheatHtml}
   `;
 }
 
@@ -924,6 +954,10 @@ function buildColDefs() {
           else if (cat === "Agent timeout") badge = `<span class="badge timeout" title="Agent timeout">&#9201;</span>`;
           else if (INFRA_CATEGORIES.has(cat)) badge = `<span class="badge infra" title="${escHtml(cat)}">?</span>`;
           else badge = `<span class="badge fail">&#10007;</span>`;
+          // Mutation integrity warning
+          if (r.unexpected_broken_commit_passes > 0) {
+            badge += `<span class="badge" style="background:#78350f;color:#fbbf24;margin-left:2px" title="${r.unexpected_broken_commit_passes} broken commit(s) unexpectedly passed">&#9888;</span>`;
+          }
           if (!expanded) {
             return `<div class="rc">${badge}<div class="rc-meta"><span class="rc-cost">${costStr}</span><span class="rc-time">${durStr}</span></div></div>`;
           }

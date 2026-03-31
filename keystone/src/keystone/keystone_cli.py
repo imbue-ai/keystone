@@ -171,6 +171,11 @@ def bootstrap(
         "--codex_reasoning_level",
         help="Reasoning level for Codex provider (e.g. 'low', 'medium', 'high'). Required when provider is 'codex'.",
     ),
+    broken_commit_hashes: str | None = typer.Option(
+        None,
+        "--broken_commit_hashes",
+        help="Comma-separated broken commit hashes for mutation-augmented eval re-verification.",
+    ),
     cost_poll_interval_seconds: int = typer.Option(
         30,
         "--cost_poll_interval_seconds",
@@ -642,6 +647,41 @@ def bootstrap(
         run_all_tests_sh=test_script_path.read_text() if test_script_path.exists() else None,
     )
 
+    # Broken-commit re-verification (mutation-augmented eval)
+    broken_commit_verifications: dict[str, VerificationResult] = {}
+    post_broken_commits_verification: VerificationResult | None = None
+    unexpected_broken_commit_passes = 0
+
+    parsed_broken_hashes = (
+        [h.strip() for h in broken_commit_hashes.split(",") if h.strip()]
+        if broken_commit_hashes
+        else []
+    )
+    # Access the inner runner for broken-commit verification (only ModalAgentRunner supports it)
+    inner_runner = getattr(runner, "_inner", runner)
+    if parsed_broken_hashes and overall_success and isinstance(inner_runner, ModalAgentRunner):
+        logging.info(
+            "Running broken-commit re-verification for %d commits...",
+            len(parsed_broken_hashes),
+        )
+        try:
+            broken_commit_verifications, post_broken_commits_verification = (
+                inner_runner.run_broken_commit_verifications(
+                    parsed_broken_hashes,
+                    test_timeout_seconds,
+                )
+            )
+            unexpected_broken_commit_passes = sum(
+                1 for v in broken_commit_verifications.values() if v.tests_failed == 0
+            )
+            if unexpected_broken_commit_passes > 0:
+                logging.warning(
+                    "⚠️  %d broken commit(s) unexpectedly passed all tests!",
+                    unexpected_broken_commit_passes,
+                )
+        except Exception as e:
+            logging.error("Broken-commit verification failed: %s", e)
+
     output = BootstrapResult(
         success=overall_success,
         error_message=error_message,
@@ -660,6 +700,9 @@ def bootstrap(
         ),
         verification=verification,
         generated_files=generated_files,
+        broken_commit_verifications=broken_commit_verifications,
+        post_broken_commits_verification=post_broken_commits_verification,
+        unexpected_broken_commit_passes=unexpected_broken_commit_passes,
     )
 
     # Log CLI run (with result)

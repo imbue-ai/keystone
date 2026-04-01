@@ -657,20 +657,37 @@ def bootstrap(
         if broken_commit_hashes
         else []
     )
-    # Access the inner runner for broken-commit verification (only ModalAgentRunner supports it)
+    # Access the inner runner for broken-commit verification
     inner_runner = getattr(runner, "_inner", runner)
-    if parsed_broken_hashes and overall_success and isinstance(inner_runner, ModalAgentRunner):
+    has_broken_method = hasattr(inner_runner, "run_broken_commit_verifications")
+    if parsed_broken_hashes and overall_success and has_broken_method:
         logging.info(
             "Running broken-commit re-verification for %d commits...",
             len(parsed_broken_hashes),
         )
         try:
-            broken_commit_verifications, post_broken_commits_verification = (
-                inner_runner.run_broken_commit_verifications(
-                    parsed_broken_hashes,
-                    test_timeout_seconds,
+            # LocalAgentRunner needs project_root for git archive;
+            # ModalAgentRunner uses the sandbox's /project repo.
+            if isinstance(inner_runner, LocalAgentRunner):
+                broken_commit_verifications, post_broken_commits_verification = (
+                    inner_runner.run_broken_commit_verifications(
+                        parsed_broken_hashes,
+                        test_timeout_seconds,
+                        project_root=project_root,
+                    )
                 )
-            )
+            elif isinstance(inner_runner, ModalAgentRunner):
+                broken_commit_verifications, post_broken_commits_verification = (
+                    inner_runner.run_broken_commit_verifications(
+                        parsed_broken_hashes,
+                        test_timeout_seconds,
+                    )
+                )
+            else:
+                logging.warning(
+                    "Broken-commit verification not supported for runner type: %s",
+                    type(inner_runner).__name__,
+                )
             unexpected_broken_commit_passes = sum(
                 1 for v in broken_commit_verifications.values() if v.tests_failed == 0
             )

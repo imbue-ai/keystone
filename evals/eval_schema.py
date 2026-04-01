@@ -51,6 +51,7 @@ class RepoEntry(BaseModel):
 
     # Populated by Phase 1 mutation pipeline.
     broken_commit_hashes: list[str] = []
+    broken_branches: list[str] = []
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +77,14 @@ class EvalConfig(BaseModel):
     trials_per_repo: int = Field(
         default=1,
         description="Number of trials per repo. When >1, caching is automatically disabled.",
+    )
+
+    limit_broken_branch_mutations_testing_to_first_n: int | None = Field(
+        default=None,
+        description=(
+            "If set, only test the first N broken branches from the mutation pipeline "
+            "instead of all of them. Useful for faster iteration during development."
+        ),
     )
 
     # Resolved by EvalRunConfig.resolve_config — not set directly in config files.

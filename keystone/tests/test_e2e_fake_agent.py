@@ -205,6 +205,112 @@ def test_e2e_fake_agent(
     assert (project_root2 / ".devcontainer" / "devcontainer.json").exists()
 
 
+@pytest.mark.parametrize(
+    "execution_mode",
+    [
+        pytest.param("local", id="local", marks=pytest.mark.local_docker),
+        pytest.param(
+            "modal",
+            id="modal",
+            marks=pytest.mark.modal,
+        ),
+    ],
+)
+def test_e2e_broken_commit_verification(
+    tmp_path: Path, project_root: Path, execution_mode: str
+) -> None:
+    """Test that broken-commit verification detects a mutation that should break tests.
+
+    Sets up the python_project sample with a 'broken-1' branch that has
+    `raise Exception("mutation 1")` at the top of app.py.  After the fake
+    agent successfully creates a devcontainer and tests pass on the base
+    commit, keystone should re-run tests on broken-1 and detect the failure.
+    """
+    use_modal = execution_mode == "modal"
+    test_artifacts_dir = tmp_path / "test_artifacts"
+    fake_agent_src = Path(__file__).parent / "fake_claude_agent.py"
+
+    agent_cmd_str = "fake_claude_agent.py" if use_modal else str(fake_agent_src)
+
+    # Create a broken-1 branch with a mutation in app.py
+    subprocess.run(
+        ["git", "checkout", "-b", "broken-1"],
+        cwd=project_root,
+        capture_output=True,
+        check=True,
+    )
+    app_py = project_root / "app.py"
+    original_content = app_py.read_text()
+    app_py.write_text('raise Exception("mutation 1")\n' + original_content)
+    subprocess.run(["git", "add", "-A"], cwd=project_root, capture_output=True, check=True)
+    subprocess.run(
+        ["git", "-c", "user.name=test", "-c", "user.email=t@t", "commit", "-m", "mutation 1"],
+        cwd=project_root,
+        capture_output=True,
+        check=True,
+    )
+    # Go back to main
+    subprocess.run(["git", "checkout", "main"], cwd=project_root, capture_output=True, check=True)
+
+    cmd = [
+        "--project_root",
+        str(project_root),
+        "--test_artifacts_dir",
+        str(test_artifacts_dir),
+        "--agent_cmd",
+        shlex.quote(agent_cmd_str),
+        "--model",
+        "claude-opus-4-6",
+        "--claude_reasoning_level",
+        "low",
+        "--broken_commit_hashes",
+        "broken-1",
+    ]
+    if use_modal:
+        cmd += [
+            "--agent_in_modal",
+            "--docker_registry_mirror",
+            os.environ["DOCKER_REGISTRY_MIRROR"],
+        ]
+    else:
+        cmd += ["--run_agent_locally_with_dangerously_skip_permissions"]
+
+    logger.info("Running keystone with broken-commit verification: %s", " ".join(cmd))
+    result = CliRunner().invoke(app, cmd)
+
+    assert result.exit_code == 0, f"Process failed: {result.stderr}"
+
+    output = parse_bootstrap_result(result.stdout)
+    assert output.success, f"Base test should succeed: {output}"
+
+    # Broken-commit verification should have run
+    assert output.broken_commit_verifications, (
+        "Expected broken_commit_verifications to be populated"
+    )
+    assert "broken-1" in output.broken_commit_verifications, (
+        f"Expected 'broken-1' in verifications, got: {list(output.broken_commit_verifications.keys())}"
+    )
+
+    # The broken-1 mutation should cause test failures (tests_failed > 0)
+    broken_result = output.broken_commit_verifications["broken-1"]
+    assert broken_result.tests_failed is not None and broken_result.tests_failed > 0, (
+        f"Expected broken-1 to fail tests, but got: {broken_result}"
+    )
+
+    # Overall: 0 unexpected passes (the broken commit SHOULD fail)
+    assert output.unexpected_broken_commit_passes == 0, (
+        f"Expected 0 unexpected passes, got: {output.unexpected_broken_commit_passes}"
+    )
+
+    # Restoration check: tests should pass again on the base commit
+    assert output.post_broken_commits_verification is not None, (
+        "Expected post_broken_commits_verification to be populated"
+    )
+    assert output.post_broken_commits_verification.success, (
+        f"Restoration check should pass: {output.post_broken_commits_verification}"
+    )
+
+
 @pytest.mark.local_docker
 @pytest.mark.parametrize("project_root", ["rust_project"], indirect=True)
 def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path, project_root: Path) -> None:

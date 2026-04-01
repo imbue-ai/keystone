@@ -391,6 +391,143 @@ class LocalAgentRunner(AgentRunner):
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
 
+    def run_broken_commit_verifications(
+        self,
+        broken_refs: list[str],
+        test_timeout_seconds: int,
+        project_root: Path | None = None,
+    ) -> tuple[dict[str, VerificationResult], VerificationResult | None]:
+        """Run tests against each broken ref using a persistent Docker container.
+
+        Uses the already-built ``keystone-verify`` image from the verify() step.
+        For each ref, extracts the source tree via ``git archive``, copies it into
+        the container, and runs ``/run_all_tests.sh``. Finishes with a restoration
+        check using HEAD.
+
+        ``project_root`` must be a git repo containing the broken branches/refs.
+        Falls back to ``self._work_dir`` if not provided.
+        """
+        git_dir = project_root or self._work_dir
+        if git_dir is None:
+            raise RuntimeError("No project root available for broken-commit verification")
+
+        image_name = "keystone-verify-local"
+        container_name = "keystone-broken"
+
+        # Start a persistent container from the already-built image
+        logger.info("Starting persistent container for broken-commit verification...")
+        subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
+        start = subprocess.run(
+            ["docker", "run", "-d", "--name", container_name, image_name, "sleep", "infinity"],
+            capture_output=True,
+            text=True,
+        )
+        if start.returncode != 0:
+            logger.error("Failed to start broken-commit container: %s", start.stderr)
+            return {}, None
+
+        verifications: dict[str, VerificationResult] = {}
+
+        try:
+            for ref in broken_refs:
+                logger.info("Testing broken ref %s...", ref)
+                verifications[ref] = self._run_single_broken_ref(
+                    ref, container_name, test_timeout_seconds, git_dir
+                )
+
+            # Restoration check
+            logger.info("Running restoration check (HEAD)...")
+            restoration = self._run_single_broken_ref(
+                "HEAD", container_name, test_timeout_seconds, git_dir
+            )
+        finally:
+            subprocess.run(["docker", "stop", container_name], capture_output=True)
+            subprocess.run(["docker", "rm", container_name], capture_output=True)
+
+        return verifications, restoration
+
+    @staticmethod
+    def _run_single_broken_ref(
+        ref: str,
+        container_name: str,
+        test_timeout_seconds: int,
+        git_dir: Path,
+    ) -> VerificationResult:
+        """Extract source at ref, copy into container, run tests."""
+        try:
+            # Extract source tree at the ref
+            archive_proc = subprocess.run(
+                ["git", "archive", ref],
+                cwd=git_dir,
+                capture_output=True,
+            )
+            if archive_proc.returncode != 0:
+                return VerificationResult(
+                    success=False,
+                    error_message=f"git archive {ref} failed: {archive_proc.stderr.decode()}",
+                )
+
+            # Write to temp tarball and docker cp into container
+            with tempfile.NamedTemporaryFile(suffix=".tar", delete=False) as tmp:
+                tmp.write(archive_proc.stdout)
+                tmp_path = tmp.name
+
+            try:
+                # Extract into a temp dir, then docker cp
+                with tempfile.TemporaryDirectory() as extract_dir:
+                    subprocess.run(
+                        ["tar", "xf", tmp_path, "-C", extract_dir],
+                        check=True,
+                        capture_output=True,
+                    )
+                    cp_proc = subprocess.run(
+                        ["docker", "cp", f"{extract_dir}/.", f"{container_name}:/project_src/"],
+                        capture_output=True,
+                        text=True,
+                    )
+                    if cp_proc.returncode != 0:
+                        return VerificationResult(
+                            success=False,
+                            error_message=f"docker cp failed for {ref}: {cp_proc.stderr}",
+                        )
+            finally:
+                Path(tmp_path).unlink(missing_ok=True)
+
+            # Run tests
+            test_start = time.time()
+            test_proc = subprocess.run(
+                [
+                    "docker",
+                    "exec",
+                    container_name,
+                    "timeout",
+                    str(test_timeout_seconds),
+                    "/run_all_tests.sh",
+                ],
+                capture_output=True,
+                text=True,
+            )
+            test_seconds = time.time() - test_start
+
+            if test_proc.returncode == 0:
+                return VerificationResult(
+                    success=True,
+                    tests_failed=0,
+                    test_execution_seconds=test_seconds,
+                )
+            else:
+                return VerificationResult(
+                    success=False,
+                    tests_failed=1,
+                    error_message=f"Tests failed for {ref} (exit {test_proc.returncode})",
+                    test_execution_seconds=test_seconds,
+                )
+        except Exception as e:
+            return VerificationResult(
+                success=False,
+                error_message=f"Error testing {ref}: {e}",
+            )
+
     def cleanup(self) -> None:
         """Clean up the temporary work directory."""
         if self._work_dir_td is not None:

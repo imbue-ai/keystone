@@ -6,6 +6,7 @@ commits. Each commit is stored as a branch (broken-1…broken-N) in a bare git
 tarball uploaded to S3.
 """
 
+import configparser
 import contextlib
 import json
 import logging
@@ -21,6 +22,9 @@ import fsspec
 import modal
 import typer
 from eval_schema import RepoEntry
+from prefect import flow as prefect_flow
+from prefect import task as prefect_task
+from prefect.futures import wait
 from pydantic import BaseModel, Field
 
 from keystone.modal.image import create_modal_image
@@ -46,7 +50,7 @@ class MutationResult(BaseModel):
     """Result of mutating a single repo."""
 
     repo_id: str
-    broken_commit_hashes: list[str] = Field(default_factory=list)
+    broken_branches: list[str] = Field(default_factory=list)
     s3_tarball_path: str = ""
     warnings: list[str] = Field(default_factory=list)
 
@@ -68,11 +72,15 @@ find . -type f | grep -v '/\\.git/' | grep -v __pycache__ | sed 's/.*\\.//' | so
 find . -type f \\( -name '*.py' -o -name '*.c' -o -name '*.cpp' -o -name '*.f90' -o -name '*.f' -o -name '*.go' -o -name '*.rs' -o -name '*.js' -o -name '*.ts' -o -name '*.rb' -o -name '*.java' \\) | grep -v test | grep -v __pycache__ | grep -v vendor | grep -v third.party | grep -v node_modules | head -30
 ```
 
-Step 2: Pick {n} files to mutate.
+Step 2: Pick EXACTLY {n} files to mutate. You MUST create exactly {n} broken branches
+  named broken-1, broken-2, ... broken-{n}. No more, no fewer.
   CRITICAL: Look at the file extension counts from Step 1. If the project has multiple
-  languages (e.g. .py AND .c AND .f90), you MUST spread mutations across ALL languages
-  present. For example, if a project has 1000 .py, 200 .c, and 10 .f90 files, create
-  mutations in Python, C, AND Fortran — not just the most common language.
+  languages (e.g. .py AND .c AND .f90), you MUST spread mutations across ALL source
+  languages present. Distribute mutations roughly proportional to file counts, but ensure
+  every source language with >5 files gets at least one mutation. In particular, if the
+  project contains Fortran files (.f, .f90, .f77), at least 2 mutations MUST target
+  Fortran source files. Similarly for C/C++ — if .c/.cpp/.h files exist, at least 2
+  mutations MUST target C/C++ files.
   Also spread across different directories/modules within each language.
   Pick core library files that are likely imported/compiled by tests, not scripts or docs.
 
@@ -153,11 +161,25 @@ def _s3_write_bytes(path: str, data: bytes) -> None:
         f.write(data)
 
 
+def _s3_exists(path: str) -> bool:
+    """Check if an S3 object exists."""
+    try:
+        fs = fsspec.filesystem("s3")
+        return fs.exists(path)  # type: ignore[no-any-return]
+    except Exception:
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Core mutation task
 # ---------------------------------------------------------------------------
 
 
+@prefect_task(
+    name="mutate_repo",
+    retries=1,
+    retry_delay_seconds=30,
+)
 def mutate_repo_task(
     repo_entry: RepoEntry,
     s3_prefix: str,
@@ -165,69 +187,101 @@ def mutate_repo_task(
     modal_timeout_seconds: int,
     use_claude: bool = True,
 ) -> MutationResult:
-    """Clone a repo, run Claude Code to create broken branches, package and upload."""
+    """Create broken branches for a repo and upload to S3.
+
+    When use_claude=True, cloning, mutation, packaging, and S3 upload all happen inside
+    the Modal sandbox (no local clone needed). When use_claude=False, clones locally and
+    runs scripted mutations.
+    """
     repo_id = repo_entry.id
     result = MutationResult(repo_id=repo_id)
+    s3_tarball_path = f"{s3_prefix.rstrip('/')}/{repo_id}.tar.gz"
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        clone_path = Path(tmp_dir) / repo_id
-        log.info("[%s] Cloning %s at %s...", repo_id, repo_entry.repo, repo_entry.commit_hash[:12])
+    # Skip if tarball already exists in S3 (enables progressive re-runs)
+    if _s3_exists(s3_tarball_path):
+        log.info("[%s] Tarball already exists at %s — skipping", repo_id, s3_tarball_path)
+        result.s3_tarball_path = s3_tarball_path
+        result.broken_branches = [f"broken-{i}" for i in range(1, n + 1)]
+        result.warnings.append("Skipped: tarball already exists in S3")
+        return result
 
-        # Clone and checkout pinned commit
-        _run_git(["clone", "--recurse-submodules", repo_entry.repo, str(clone_path)])
-        _run_git(["checkout", repo_entry.commit_hash], cwd=clone_path)
-        _run_git(["submodule", "update", "--recursive"], cwd=clone_path)
+    prompt = MUTATION_PROMPT_TEMPLATE.format(
+        n=n,
+        language=repo_entry.language or "unknown",
+        build_system=repo_entry.build_system or "unknown",
+        tests=repo_entry.tests or "unknown",
+        notes=repo_entry.notes or "",
+    )
 
-        # Ensure we're on a 'main' branch at the base commit
-        # Delete existing main if it points elsewhere, then create at HEAD
-        subprocess.run(
-            ["git", "branch", "-D", "main"],
-            cwd=clone_path,
-            capture_output=True,
-        )  # ignore errors
-        _run_git(["checkout", "-b", "main"], cwd=clone_path)
-
-        # Create Modal sandbox and run Claude Code
-        prompt = MUTATION_PROMPT_TEMPLATE.format(
-            n=n,
-            language=repo_entry.language or "unknown",
-            build_system=repo_entry.build_system or "unknown",
-            tests=repo_entry.tests or "unknown",
-            notes=repo_entry.notes or "",
-        )
-
+    if use_claude:
+        # Everything happens inside the Modal sandbox — no local clone needed
         try:
-            if use_claude:
-                broken_hashes = _run_mutation_in_modal(clone_path, prompt, n, modal_timeout_seconds)
-            else:
-                broken_hashes = _run_mutation_locally(clone_path, n, repo_entry.language)
-            result.broken_commit_hashes = broken_hashes
+            broken_hashes = _run_mutation_in_modal(
+                repo_url=repo_entry.repo,
+                commit_hash=repo_entry.commit_hash,
+                prompt=prompt,
+                n=n,
+                timeout_seconds=modal_timeout_seconds,
+                s3_tarball_path=s3_tarball_path,
+            )
+            result.broken_branches = [f"broken-{i}" for i in range(1, len(broken_hashes) + 1)]
+            result.s3_tarball_path = s3_tarball_path
             if len(broken_hashes) < n:
                 result.warnings.append(f"Only {len(broken_hashes)}/{n} broken branches created")
         except Exception as e:
             log.error("[%s] Mutation failed: %s", repo_id, e)
             result.warnings.append(f"Mutation failed: {e}")
             return result
+    else:
+        # Local scripted mutations — still needs local clone
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            clone_path = Path(tmp_dir) / repo_id
+            log.info(
+                "[%s] Cloning %s at %s...", repo_id, repo_entry.repo, repo_entry.commit_hash[:12]
+            )
 
-        if not result.broken_commit_hashes:
-            result.warnings.append("No broken commits produced")
-            return result
+            _run_git(["clone", "--recurse-submodules", repo_entry.repo, str(clone_path)])
+            _run_git(["checkout", repo_entry.commit_hash], cwd=clone_path)
+            _run_git(["submodule", "update", "--recursive"], cwd=clone_path)
 
-        # Package as bare git tarball
-        bare_path = Path(tmp_dir) / f"{repo_id}.git"
-        _run_git(["clone", "--bare", str(clone_path), str(bare_path)])
+            subprocess.run(
+                ["git", "branch", "-D", "main"],
+                cwd=clone_path,
+                capture_output=True,
+            )  # ignore errors
+            _run_git(["checkout", "-b", "main"], cwd=clone_path)
 
-        tarball_path = Path(tmp_dir) / f"{repo_id}.tar.gz"
-        subprocess.run(
-            ["tar", "-czf", str(tarball_path), "-C", str(bare_path.parent), bare_path.name],
-            check=True,
-        )
+            try:
+                broken_hashes = _run_mutation_locally(clone_path, n, repo_entry.language)
+                result.broken_branches = [f"broken-{i}" for i in range(1, len(broken_hashes) + 1)]
+                if len(broken_hashes) < n:
+                    result.warnings.append(f"Only {len(broken_hashes)}/{n} broken branches created")
+            except Exception as e:
+                log.error("[%s] Mutation failed: %s", repo_id, e)
+                result.warnings.append(f"Mutation failed: {e}")
+                return result
 
-        # Upload to S3
-        s3_tarball_path = f"{s3_prefix.rstrip('/')}/{repo_id}.tar.gz"
-        log.info("[%s] Uploading tarball to %s", repo_id, s3_tarball_path)
-        _s3_write_bytes(s3_tarball_path, tarball_path.read_bytes())
-        result.s3_tarball_path = s3_tarball_path
+            if not result.broken_branches:
+                result.warnings.append("No broken commits produced")
+                return result
+
+            # Package as bare git tarball
+            bare_path = Path(tmp_dir) / f"{repo_id}.git"
+            _run_git(["clone", "--bare", str(clone_path), str(bare_path)])
+
+            tarball_path = Path(tmp_dir) / f"{repo_id}.tar.gz"
+            subprocess.run(
+                ["tar", "-czf", str(tarball_path), "-C", str(bare_path.parent), bare_path.name],
+                check=True,
+                env={**os.environ, "COPYFILE_DISABLE": "1"},
+            )
+
+            log.info("[%s] Uploading tarball to %s", repo_id, s3_tarball_path)
+            _s3_write_bytes(s3_tarball_path, tarball_path.read_bytes())
+            result.s3_tarball_path = s3_tarball_path
+
+    if not result.broken_branches:
+        result.warnings.append("No broken commits produced")
 
     return result
 
@@ -329,16 +383,20 @@ def _run_mutation_locally(
 
 
 def _run_mutation_in_modal(
-    clone_path: Path,
+    repo_url: str,
+    commit_hash: str,
     prompt: str,
     n: int,
     timeout_seconds: int,
+    s3_tarball_path: str,
 ) -> list[str]:
-    """Upload repo to Modal sandbox, run Claude Code, extract broken branch hashes.
+    """Clone repo inside Modal sandbox, run Claude Code, package bare tarball and upload to S3.
 
-    Uses the same streaming pattern as keystone's ModalAgentRunner: a bash wrapper
-    script executed via run_modal_command(capture=True) so stdout/stderr are logged
-    in real time through Python's logging system.
+    Clones directly from GitHub inside the sandbox (fast datacenter networking) instead
+    of cloning locally and uploading. Creates a bare git tarball with the broken branches
+    and uploads it to S3 from within the sandbox using awscli.
+
+    Returns a list of broken commit hashes.
     """
     modal.enable_output()
     app = modal.App.lookup("keystone-mutation", create_if_missing=True)
@@ -347,33 +405,11 @@ def _run_mutation_in_modal(
     sb = modal.Sandbox.create(
         app=app,
         image=image,
-        timeout=timeout_seconds + 120,  # buffer for setup
+        timeout=timeout_seconds + 300,  # buffer for clone + setup + upload
     )
 
     try:
-        # Upload repo as tarball
-        tarball_data = subprocess.run(
-            ["tar", "-czf", "-", "-C", str(clone_path), "."],
-            capture_output=True,
-            check=True,
-        ).stdout
-
-        with sb.open("/tmp/project.tar.gz", "wb") as f:
-            f.write(tarball_data)
-
-        run_modal_command(sb, "mkdir", "-p", "/project", name="mutation-setup").wait()
-        run_modal_command(
-            sb,
-            "tar",
-            "-xzf",
-            "/tmp/project.tar.gz",
-            "-C",
-            "/project",
-            name="mutation-extract",
-        ).wait()
-
-        # Init git repo in sandbox (the tarball is a working tree, not a git repo)
-        # Mark /project as safe to avoid "dubious ownership" errors (different UID in container)
+        # Mark /project as safe to avoid "dubious ownership" errors
         run_modal_command(
             sb,
             "git",
@@ -384,7 +420,44 @@ def _run_mutation_in_modal(
             "/project",
             name="git-safe",
         ).wait()
-        run_modal_command(sb, "git", "-C", "/project", "init", name="git-init").wait()
+
+        # Clone repo directly inside the sandbox (fast datacenter networking)
+        log.info("Cloning %s at %s inside Modal sandbox...", repo_url, commit_hash[:12])
+        run_modal_command(
+            sb,
+            "git",
+            "clone",
+            "--depth",
+            "1",
+            "--no-recurse-submodules",
+            repo_url,
+            "/project",
+            name="git-clone",
+        ).wait()
+        # Fetch the specific commit (shallow clone only has default branch HEAD)
+        run_modal_command(
+            sb,
+            "git",
+            "-C",
+            "/project",
+            "fetch",
+            "--depth",
+            "1",
+            "origin",
+            commit_hash,
+            name="git-fetch-commit",
+        ).wait()
+        run_modal_command(
+            sb,
+            "git",
+            "-C",
+            "/project",
+            "checkout",
+            commit_hash,
+            name="git-checkout",
+        ).wait()
+
+        # Set up git identity and create 'main' branch at the pinned commit
         run_modal_command(
             sb,
             "git",
@@ -393,7 +466,7 @@ def _run_mutation_in_modal(
             "config",
             "user.name",
             "mutation-agent",
-            name="git-config",
+            name="git-config-name",
         ).wait()
         run_modal_command(
             sb,
@@ -403,38 +476,22 @@ def _run_mutation_in_modal(
             "config",
             "user.email",
             "mutation@eval",
-            name="git-config",
+            name="git-config-email",
         ).wait()
-        run_modal_command(sb, "git", "-C", "/project", "add", "-A", name="git-add").wait()
+        # Delete existing main if it exists, then create at HEAD
         run_modal_command(
             sb,
-            "git",
-            "-C",
-            "/project",
-            "commit",
-            "-m",
-            "base",
-            name="git-commit",
-        ).wait()
-        run_modal_command(
-            sb,
-            "git",
-            "-C",
-            "/project",
-            "branch",
-            "-M",
-            "main",
-            name="git-branch",
+            "bash",
+            "-c",
+            "cd /project && git branch -D main 2>/dev/null; git checkout -b main",
+            name="git-branch-main",
         ).wait()
 
         # Write prompt to file in sandbox (avoids shell quoting issues)
         with sb.open("/tmp/mutation_prompt.txt", "w") as f:
             f.write(prompt)
 
-        # Write a runner script (same pattern as keystone's /run_agent.sh)
-        # --dangerously-skip-permissions prevents Claude from hanging on interactive prompts
-        # --output-format stream-json gives us machine-readable output
-        # Must export ANTHROPIC_API_KEY so claude can authenticate
+        # Write a runner script
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")
         if not api_key:
             log.warning("ANTHROPIC_API_KEY not set — Claude Code will likely fail")
@@ -454,18 +511,7 @@ def _run_mutation_in_modal(
             f.write(runner_script)
         run_modal_command(sb, "chmod", "+x", "/tmp/run_mutation.sh", name="mutation-chmod").wait()
 
-        # Diagnostic: verify claude is available and key will be set in the script
-        run_modal_command(
-            sb,
-            "bash",
-            "-c",
-            "which claude && claude --version && cat /tmp/run_mutation.sh | head -5",
-            name="claude-diag",
-        ).wait()
-
-        # Run Claude Code — capture=True streams stdout/stderr to Python logging in real time
-        # (ManagedProcess._stream_reader daemon threads handle this, same as keystone's agent)
-        # Make project writable by the agent user (keystone's Modal image creates 'agent')
+        # Make project writable by the agent user
         run_modal_command(sb, "chown", "-R", "agent:agent", "/project", name="chown-project").wait()
         run_modal_command(
             sb,
@@ -476,7 +522,7 @@ def _run_mutation_in_modal(
             name="chown-scripts",
         ).wait()
 
-        # Run as 'agent' user — Claude Code refuses --dangerously-skip-permissions as root
+        # Run Claude Code as 'agent' user
         log.info("Running Claude Code in sandbox (timeout=%ds)...", timeout_seconds)
         agent_proc = run_modal_command(
             sb,
@@ -527,52 +573,62 @@ def _run_mutation_in_modal(
             else:
                 log.warning("Branch %s not found", branch_name)
 
-        # Pull patches from sandbox — much smaller than the full .git or working tree.
-        # For each broken branch, get the diff as a patch and apply locally.
-        log.info("Downloading patches from sandbox...")
-        for i, _commit_hash in enumerate(broken_hashes, 1):
-            branch_name = f"broken-{i}"
-            patch_file = f"/tmp/patch-{i}.diff"
-            run_modal_command(
-                sb,
-                "bash",
-                "-c",
-                f"cd /project && git diff main {branch_name} > {patch_file}",
-                name=f"patch-{branch_name}",
-            ).wait()
-            with sb.open(patch_file, "r") as f:
-                patch_data = f.read()
-            log.info("Patch %s: %d bytes", branch_name, len(patch_data))
+        if not broken_hashes:
+            return broken_hashes
 
-            # Apply patch to local clone
-            _run_git(["checkout", "-b", branch_name, "main"], cwd=clone_path)
-            proc = subprocess.run(
-                ["git", "apply", "--allow-empty"],
-                input=patch_data,
-                cwd=clone_path,
-                capture_output=True,
-                text=True,
+        # Package as bare git tarball and upload to S3 — all inside the sandbox
+        # Re-add safe.directory (agent user changed ownership during Claude run)
+        log.info("Packaging bare git tarball inside sandbox...")
+        run_modal_command(
+            sb,
+            "bash",
+            "-c",
+            "git config --global --add safe.directory /project"
+            " && git config --global --add safe.directory /project/.git"
+            " && git clone --bare /project /tmp/repo.git"
+            " && tar -czf /tmp/repo.tar.gz -C /tmp repo.git",
+            name="bare-clone-and-tar",
+        ).wait()
+
+        # Install awscli and upload to S3 from within the sandbox
+        aws_access_key = os.environ.get("AWS_ACCESS_KEY_ID", "")
+        aws_secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
+        aws_region = os.environ.get("AWS_DEFAULT_REGION", "us-east-1")
+        # Also check for credentials file-based config
+        aws_profile = os.environ.get("AWS_PROFILE", "")
+
+        # Read AWS credentials from ~/.aws/credentials if env vars not set
+        if not aws_access_key:
+            creds_path = Path.home() / ".aws" / "credentials"
+            if creds_path.exists():
+                config = configparser.ConfigParser()
+                config.read(creds_path)
+                profile = aws_profile or "default"
+                if profile in config:
+                    aws_access_key = config[profile].get("aws_access_key_id", "")
+                    aws_secret_key = config[profile].get("aws_secret_access_key", "")
+                    aws_region = config[profile].get("region", aws_region)
+
+        if not aws_access_key:
+            raise RuntimeError(
+                "AWS credentials not found. Set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY "
+                "env vars or configure ~/.aws/credentials"
             )
-            if proc.returncode != 0:
-                log.warning("Failed to apply patch for %s: %s", branch_name, proc.stderr)
-            _run_git(["add", "-A"], cwd=clone_path)
-            _run_git(
-                [
-                    "-c",
-                    "user.name=mutation",
-                    "-c",
-                    "user.email=m@m",
-                    "commit",
-                    "--allow-empty",
-                    "-m",
-                    f"mutation {i}",
-                ],
-                cwd=clone_path,
-            )
-            # Update the hash to the local commit
-            result = _run_git(["rev-parse", "HEAD"], cwd=clone_path)
-            broken_hashes[i - 1] = result.stdout.strip()
-            _run_git(["checkout", "main"], cwd=clone_path)
+
+        log.info("Uploading tarball to %s from sandbox...", s3_tarball_path)
+        upload_script = (
+            "#!/bin/bash\n"
+            "set -e\n"
+            "pip install -q awscli 2>/dev/null\n"
+            f"export AWS_ACCESS_KEY_ID={shlex.quote(aws_access_key)}\n"
+            f"export AWS_SECRET_ACCESS_KEY={shlex.quote(aws_secret_key)}\n"
+            f"export AWS_DEFAULT_REGION={shlex.quote(aws_region)}\n"
+            f"aws s3 cp /tmp/repo.tar.gz {shlex.quote(s3_tarball_path)}\n"
+        )
+        with sb.open("/tmp/upload_s3.sh", "w") as f:
+            f.write(upload_script)
+        run_modal_command(sb, "chmod", "+x", "/tmp/upload_s3.sh", name="upload-chmod").wait()
+        run_modal_command(sb, "bash", "/tmp/upload_s3.sh", name="s3-upload").wait()
 
         return broken_hashes
 
@@ -586,43 +642,62 @@ def _run_mutation_in_modal(
 # ---------------------------------------------------------------------------
 
 
+@prefect_flow(name="mutation_pipeline")
 def mutation_flow(
     repo_list_path: str,
     s3_prefix: str,
-    n_mutations: int = 5,
+    n_mutations: int = 20,
     limit: int | None = None,
     modal_timeout_seconds: int = 600,
     use_claude: bool = True,
 ) -> list[MutationResult]:
-    """Run mutation pipeline for all repos, write amended JSONL."""
+    """Run mutation pipeline for all repos in parallel, write amended JSONL."""
     repos = _load_repos(repo_list_path, limit)
     log.info("Loaded %d repos from %s", len(repos), repo_list_path)
 
-    # Run mutations (sequential for now; can be parallelized later)
-    results: list[MutationResult] = []
+    # Submit all repos in parallel — Prefect manages concurrency and monitoring
+    futures = []
     for repo_entry in repos:
-        result = mutate_repo_task(
-            repo_entry, s3_prefix, n_mutations, modal_timeout_seconds, use_claude=use_claude
+        future = mutate_repo_task.submit(
+            repo_entry=repo_entry,
+            s3_prefix=s3_prefix,
+            n=n_mutations,
+            modal_timeout_seconds=modal_timeout_seconds,
+            use_claude=use_claude,
         )
-        results.append(result)
+        futures.append((repo_entry, future))
 
-    # Write amended JSONL with broken_commit_hashes
+    # Wait for all to complete
+    wait([f for _, f in futures])
+
+    # Collect results in original repo order
+    result_map: dict[str, MutationResult] = {}
+    for repo_entry, future in futures:
+        try:
+            result = future.result()
+        except Exception as e:
+            log.error("[%s] Unexpected error: %s", repo_entry.id, e)
+            result = MutationResult(repo_id=repo_entry.id, warnings=[f"Unexpected error: {e}"])
+        result_map[repo_entry.id] = result
+
+    results = [result_map[r.id] for r in repos]
+
+    # Write amended JSONL with broken_branches
     output_path = Path("evals/examples/repos_with_mutations.jsonl")
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    result_map: dict[str, MutationResult] = {r.repo_id: r for r in results}
     with output_path.open("w") as f:
         for repo_entry in repos:
             data: dict[str, Any] = repo_entry.model_dump()
             mutation = result_map.get(repo_entry.id)
             if mutation:
-                data["broken_commit_hashes"] = mutation.broken_commit_hashes
+                data["broken_branches"] = mutation.broken_branches
             f.write(json.dumps(data) + "\n")
 
     log.info("Wrote %s with %d entries", output_path, len(repos))
 
     # Print summary
-    total_mutations = sum(len(r.broken_commit_hashes) for r in results)
+    total_mutations = sum(len(r.broken_branches) for r in results)
     total_warnings = sum(len(r.warnings) for r in results)
     log.info(
         "Mutation complete: %d repos, %d total broken commits, %d warnings",
@@ -645,7 +720,7 @@ cli_app = typer.Typer(help="Mutation pipeline for eval integrity checking.")
 def run(
     repo_list: str = typer.Option(..., help="Path to repos.jsonl"),
     s3_prefix: str = typer.Option(..., help="S3 prefix for mutation tarballs"),
-    n_mutations: int = typer.Option(5, help="Number of mutations per repo"),
+    n_mutations: int = typer.Option(20, help="Number of mutations per repo"),
     limit_to_first_n_repos: int | None = typer.Option(None, help="Limit to first N repos"),
     modal_timeout_seconds: int = typer.Option(600, help="Modal sandbox timeout"),
     use_claude: bool = typer.Option(

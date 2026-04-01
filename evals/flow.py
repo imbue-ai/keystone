@@ -401,12 +401,16 @@ def process_repo_task(
             if agent.use_agents_md:
                 cmd.append("--use_agents_md")
 
-            # Pass broken commit hashes for mutation-augmented eval
-            if repo_entry.broken_commit_hashes:
+            # Pass broken branches for mutation-augmented eval
+            broken = repo_entry.broken_branches or repo_entry.broken_commit_hashes
+            if broken:
+                limit_n = eval_config.limit_broken_branch_mutations_testing_to_first_n
+                if limit_n is not None:
+                    broken = broken[:limit_n]
                 cmd.extend(
                     [
                         "--broken_commit_hashes",
-                        ",".join(repo_entry.broken_commit_hashes),
+                        ",".join(broken),
                     ]
                 )
 

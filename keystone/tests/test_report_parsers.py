@@ -124,4 +124,3 @@ class TestJUnitXMLParser:
         assert by_name["tests.test_math::test_add"].passed
         assert by_name["tests.test_math::test_sub"].passed
         assert by_name["tests.test_math::test_mul"].passed
-

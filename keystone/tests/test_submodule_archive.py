@@ -74,9 +74,7 @@ class TestArchiveWithSubmodules:
         assert (out / "submod" / "hello.txt").read_text() == "hello from submodule\n"
         assert (out / "submod" / "nested_dir" / "deep.txt").exists()
 
-    def test_archive_rejects_dirty_tree_with_submodules(
-        self, repo_with_submodule: Path
-    ) -> None:
+    def test_archive_rejects_dirty_tree_with_submodules(self, repo_with_submodule: Path) -> None:
         # Dirty the working tree
         (repo_with_submodule / "untracked.txt").write_text("dirty\n")
         _run_git(["add", "untracked.txt"], cwd=repo_with_submodule)
@@ -84,9 +82,7 @@ class TestArchiveWithSubmodules:
         with pytest.raises(GitError, match="dirty working tree"):
             create_git_archive_bytes(repo_with_submodule)
 
-    def test_archive_without_submodules(
-        self, simple_repo: Path, tmp_path: Path
-    ) -> None:
+    def test_archive_without_submodules(self, simple_repo: Path, tmp_path: Path) -> None:
         archive_bytes = create_git_archive_bytes(simple_repo)
 
         out = tmp_path / "extracted"
@@ -98,9 +94,7 @@ class TestArchiveWithSubmodules:
         # No .gitmodules should exist
         assert not (out / ".gitmodules").exists()
 
-    def test_dirty_tree_allowed_without_submodules(
-        self, simple_repo: Path, tmp_path: Path
-    ) -> None:
+    def test_dirty_tree_allowed_without_submodules(self, simple_repo: Path, tmp_path: Path) -> None:
         """git archive archives committed state, so dirty tree is fine."""
         (simple_repo / "untracked.txt").write_text("dirty\n")
         _run_git(["add", "untracked.txt"], cwd=simple_repo)

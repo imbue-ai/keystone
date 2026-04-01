@@ -27,7 +27,9 @@ def _run_in_sandbox(sb: modal.Sandbox, cmd: str, *, name: str) -> tuple[int, str
     """
     proc = run_modal_command(
         sb,
-        "su", "agent", "-c",
+        "su",
+        "agent",
+        "-c",
         f"source /env.sh && {cmd}",
         capture=True,
         name=name,
@@ -76,12 +78,16 @@ export AGENT_TIME_DEADLINE={deadline}
         # 1. Check budget BEFORE — ccusage has no session yet, so budget
         #    reports "unknown" while time should be positive.
         logger.info("Running budget check (before)...")
-        rc, before_output = _run_in_sandbox(sb, "bash /project/keystone_budget.sh", name="budget-before")
+        rc, before_output = _run_in_sandbox(
+            sb, "bash /project/keystone_budget.sh", name="budget-before"
+        )
         logger.info(f"Before output:\n{before_output}")
         assert rc == 0, f"budget script failed (before):\n{before_output}"
 
         before_time = TIME_RE.search(before_output)
-        assert before_time and int(before_time.group(1)) > 0, f"No positive time before:\n{before_output}"
+        assert before_time and int(before_time.group(1)) > 0, (
+            f"No positive time before:\n{before_output}"
+        )
         # No ccusage session exists yet, so the script can't report a dollar amount
         assert "ccusage failed" in before_output, (
             f"Expected 'ccusage failed' before any claude session:\n{before_output}"
@@ -91,7 +97,10 @@ export AGENT_TIME_DEADLINE={deadline}
         #    Don't capture output — we just need it to finish.
         logger.info("Running claude -p 'say hello'...")
         claude_proc = run_modal_command(
-            sb, "su", "agent", "-c",
+            sb,
+            "su",
+            "agent",
+            "-c",
             "source /env.sh && claude -p 'say hello' --max-turns 1 --dangerously-skip-permissions",
             name="claude",
             pty=True,
@@ -102,7 +111,9 @@ export AGENT_TIME_DEADLINE={deadline}
 
         # 3. Check budget AFTER — now ccusage has session data
         logger.info("Running budget check (after)...")
-        rc, after_output = _run_in_sandbox(sb, "bash /project/keystone_budget.sh", name="budget-after")
+        rc, after_output = _run_in_sandbox(
+            sb, "bash /project/keystone_budget.sh", name="budget-after"
+        )
         logger.info(f"After output:\n{after_output}")
         assert rc == 0, f"budget script failed (after):\n{after_output}"
 
@@ -115,11 +126,15 @@ export AGENT_TIME_DEADLINE={deadline}
         )
         # Claude consumed some budget, so remaining should be less than the cap.
         # With %.4f precision, even sub-cent costs are visible.
-        assert after_budget < 10.0, f"Expected budget < $10.00 after claude call, got ${after_budget}"
+        assert after_budget < 10.0, (
+            f"Expected budget < $10.00 after claude call, got ${after_budget}"
+        )
         assert after_budget > 0.0, f"Budget should still be positive, got ${after_budget}"
 
         after_time = TIME_RE.search(after_output)
-        assert after_time and int(after_time.group(1)) > 0, f"No positive time after:\n{after_output}"
+        assert after_time and int(after_time.group(1)) > 0, (
+            f"No positive time after:\n{after_output}"
+        )
         assert int(after_time.group(1)) < int(before_time.group(1)), (
             f"Expected time to decrease after claude call: before={before_time.group(1)}s, after={after_time.group(1)}s"
         )
@@ -134,7 +149,9 @@ export AGENT_TIME_DEADLINE={deadline}
         with sb.open("/env.sh", "w") as f:
             f.write(zero_env)
 
-        rc, over_output = _run_in_sandbox(sb, "bash /project/keystone_budget.sh", name="budget-over")
+        rc, over_output = _run_in_sandbox(
+            sb, "bash /project/keystone_budget.sh", name="budget-over"
+        )
         logger.info(f"Over-budget output (rc={rc}):\n{over_output}")
         assert rc == 1, f"Expected exit code 1 for over-budget, got {rc}:\n{over_output}"
         assert "OVER BUDGET" in over_output, f"Expected 'OVER BUDGET' in output:\n{over_output}"

@@ -158,7 +158,7 @@ def _load_repos(repo_list_path: str, limit: int | None = None) -> list[RepoEntry
 
 def _s3_write_bytes(path: str, data: bytes) -> None:
     with fsspec.open(path, "wb") as f:
-        f.write(data)
+        f.write(data)  # type: ignore[union-attr]  # fsspec file-like
 
 
 def _s3_exists(path: str) -> bool:

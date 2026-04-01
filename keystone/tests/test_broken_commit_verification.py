@@ -5,22 +5,27 @@ Unit tests run without Modal. Integration tests marked @pytest.mark.modal.
 
 import json
 
-from keystone.schema import BootstrapResult, InferenceCost, VerificationResult
+from keystone.schema import (
+    AgentExecution,
+    BootstrapResult,
+    InferenceCost,
+    VerificationResult,
+)
 
-_AGENT_DICT = {
-    "start_time": "2024-01-01T00:00:00",
-    "end_time": "2024-01-01T00:01:00",
-    "duration_seconds": 60,
-    "exit_code": 0,
-    "timed_out": False,
-    "cost_limit_exceeded": False,
-    "cost": InferenceCost().model_dump(),
-}
+_AGENT = AgentExecution(
+    start_time="2024-01-01T00:00:00",
+    end_time="2024-01-01T00:01:00",
+    duration_seconds=60,
+    exit_code=0,
+    timed_out=False,
+    cost_limit_exceeded=False,
+    cost=InferenceCost(),
+)
 
 
 def test_bootstrap_result_new_fields_default() -> None:
     """New broken-commit fields have sensible defaults."""
-    result = BootstrapResult(success=True, agent=_AGENT_DICT)
+    result = BootstrapResult(success=True, agent=_AGENT)
     assert result.broken_commit_verifications == {}
     assert result.post_broken_commits_verification is None
     assert result.unexpected_broken_commit_passes == 0
@@ -38,7 +43,7 @@ def test_bootstrap_result_serialization_with_broken_commits() -> None:
 
     result = BootstrapResult(
         success=True,
-        agent=_AGENT_DICT,
+        agent=_AGENT,
         broken_commit_verifications={
             "abc123": vr_fail,
             "def456": vr_pass,
@@ -72,7 +77,7 @@ def test_unexpected_broken_commit_passes_computation() -> None:
 
 def test_bootstrap_result_skipped_on_failure() -> None:
     """When bootstrap fails, broken_commit_verifications should be empty."""
-    agent_failed = {**_AGENT_DICT, "exit_code": 1}
+    agent_failed = _AGENT.model_copy(update={"exit_code": 1})
     result = BootstrapResult(
         success=False,
         error_message="Build failed",

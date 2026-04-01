@@ -76,7 +76,8 @@ class TestCostMonitor:
         agent = MagicMock()
 
         def failing_ccusage(
-            provider_name: str, timeout_secs: int | None = None  # noqa: ARG001
+            provider_name: str,  # noqa: ARG001
+            timeout_secs: int | None = None,  # noqa: ARG001
         ) -> InferenceCost:
             raise RuntimeError("ccusage crashed")
 
@@ -100,9 +101,7 @@ class TestCostMonitor:
         """Monitor should exit promptly when _agent_done is set."""
         agent = MagicMock()
 
-        with patch.object(
-            runner, "run_ccusage", return_value=InferenceCost(cost_usd=0.0)
-        ):
+        with patch.object(runner, "run_ccusage", return_value=InferenceCost(cost_usd=0.0)):
             runner._agent_done.clear()
             runner._cost_limit_exceeded = False
 

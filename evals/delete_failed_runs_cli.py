@@ -44,7 +44,7 @@ def _find_failed_dirs(fs: fsspec.AbstractFileSystem, root: str) -> list[str]:
 def _protocol_prefix(path: str) -> str:
     """Return the protocol prefix (e.g. 's3://') from the original path, or '' for local."""
     if "://" in path:
-        return path.split("://")[0] + "://"
+        return path.split("://", maxsplit=1)[0] + "://"
     return ""
 
 

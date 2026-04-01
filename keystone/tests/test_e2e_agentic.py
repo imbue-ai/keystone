@@ -356,10 +356,7 @@ def test_e2e_codex_cost_limit_on_modal(tmp_path: Path, project_root: Path) -> No
     assert result.exit_code != 0, "Expected non-zero exit code when cost limit exceeded"
     assert output.agent.cost_limit_exceeded, "Expected cost_limit_exceeded=True"
     assert output.agent.exit_code == 1, "Expected agent exit_code=1"
-    assert output.agent.cost.cost_usd > 0, (
-        "Agent should have incurred some cost before termination"
-    )
+    assert output.agent.cost.cost_usd > 0, "Agent should have incurred some cost before termination"
     assert output.agent.cost.token_spending.input > 0, "Input tokens should be recorded"
     assert output.agent.cost.token_spending.output > 0, "Output tokens should be recorded"
     assert output.agent.cost.ccusage_raw is not None, "Raw ccusage data should be present"
-

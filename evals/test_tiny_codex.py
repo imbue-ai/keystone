@@ -53,6 +53,7 @@ def test_tiny_codex_eval(tmp_path: Path) -> None:
                         provider="codex",
                         model=LLMModel.CODEX_MINI,
                         codex_reasoning_level="high",
+                        cost_poll_interval_seconds=0,
                         guardrail=False,
                         use_agents_md=True,
                     ),

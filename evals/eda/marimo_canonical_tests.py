@@ -69,10 +69,7 @@ def _(mo):
         _key = f"{row['config_name']} t{row['trial_index']}"
         repo_tests[row["repo_id"]][_key] |= _names
 
-    mo.md(
-        f"Extracted test names for **{len(repo_tests)}** repos "
-        f"from **{len(raw_df)}** rows."
-    )
+    mo.md(f"Extracted test names for **{len(repo_tests)}** repos from **{len(raw_df)}** rows.")
     return (repo_tests,)
 
 
@@ -268,9 +265,7 @@ def _(mo, repo_dropdown, repo_tests: dict[str, dict[str, set[str]]]):
 
             # Active dots (dark) and vertical lines connecting them
             for _i, (_pattern, _count) in enumerate(_top_patterns):
-                _active_indices = sorted(
-                    [_configs.index(_c) for _c in _pattern if _c in _configs]
-                )
+                _active_indices = sorted([_configs.index(_c) for _c in _pattern if _c in _configs])
                 if _active_indices:
                     _fig.add_trace(
                         go.Scatter(
@@ -349,17 +344,17 @@ def _(mo, repo_dropdown, repo_tests: dict[str, dict[str, set[str]]]):
             }
             for _name, _cfgs in _test_configs.items()
         ]
-        _detail_df = _pd.DataFrame(_detail_records).sort_values(
-            "n_configs", ascending=False
-        )
+        _detail_df = _pd.DataFrame(_detail_records).sort_values("n_configs", ascending=False)
 
-        _output = mo.vstack([
-            mo.md(
-                f"## Test Names — {_selected_repo}\n\n"
-                f"**{len(_detail_df)}** unique tests across **{_n_configs}** configs"
-            ),
-            mo.ui.table(_detail_df, page_size=20),
-        ])
+        _output = mo.vstack(
+            [
+                mo.md(
+                    f"## Test Names — {_selected_repo}\n\n"
+                    f"**{len(_detail_df)}** unique tests across **{_n_configs}** configs"
+                ),
+                mo.ui.table(_detail_df, page_size=20),
+            ]
+        )
     _output
     return
 
@@ -403,9 +398,7 @@ def _(
                     _test_configs[_name] = set()
                 _test_configs[_name].add(_cfg)
 
-        _canonical = {
-            _name for _name, _cfgs in _test_configs.items() if len(_cfgs) >= _threshold
-        }
+        _canonical = {_name for _name, _cfgs in _test_configs.items() if len(_cfgs) >= _threshold}
         _total = len(_test_configs)
 
         _output = mo.md(

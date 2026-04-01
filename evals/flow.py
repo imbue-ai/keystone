@@ -312,12 +312,35 @@ def process_repo_task(
                 bare_git_dir = work_path
 
             if bare_git_dir is not None:
-                # Clone bare repo into a proper working tree
+                # Clone bare repo into a proper working tree, fetching all branches
+                # (broken-* branches from the mutation pipeline need to be available
+                # for broken-commit verification via git archive)
                 cloned_path = Path(tmp_dir) / f"{repo_id}_clone"
                 subprocess.run(
                     ["git", "clone", str(bare_git_dir), str(cloned_path)],
                     check=True,
                 )
+                # Fetch all remote branches as local branches
+                for line in (
+                    subprocess.run(
+                        ["git", "branch", "-r"],
+                        cwd=cloned_path,
+                        capture_output=True,
+                        text=True,
+                        check=True,
+                    )
+                    .stdout.strip()
+                    .splitlines()
+                ):
+                    branch = line.strip()
+                    if branch.startswith("origin/") and "HEAD" not in branch:
+                        local_name = branch.removeprefix("origin/")
+                        subprocess.run(
+                            ["git", "branch", "--track", local_name, branch],
+                            cwd=cloned_path,
+                            capture_output=True,
+                            check=False,  # may already exist (e.g. main)
+                        )
                 if repo_entry.commit_hash:
                     _run_git(["checkout", repo_entry.commit_hash], cwd=cloned_path)
                 # Replace work_path with the cloned working tree

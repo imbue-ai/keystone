@@ -23,6 +23,7 @@ from eval_schema import RepoEntry
 from pydantic import BaseModel, Field
 
 from keystone.modal.image import create_modal_image
+from keystone.modal.modal_runner import run_modal_command
 
 log = logging.getLogger(__name__)
 
@@ -54,21 +55,30 @@ class MutationResult(BaseModel):
 # ---------------------------------------------------------------------------
 
 MUTATION_PROMPT_TEMPLATE = """\
-You have about 60 seconds. Be fast. Do NOT explore extensively — just act.
+You have about 90 seconds. Be fast — don't explore extensively.
 
 Your job: introduce {n} small test-breaking changes to source code in /project.
 Language: {language}. Build system: {build_system}. Tests: {tests}. {notes}
 
+IMPORTANT for polyglot projects: if this repo has multiple languages (e.g. Python +
+C/C++/Fortran), spread your mutations across different languages. For scipy, that
+means Python, C, C++, and Fortran files. Target source files that are likely
+exercised by tests — core library code, not build scripts or vendored deps.
+
 For EACH mutation (i=1 to {n}):
   git checkout -b broken-{{i}} main
   # Edit ONE source file (NOT test files) — e.g. insert `raise Exception("mutation")`
-  # at the top of an important function, or change `return x` to `return None`
+  # at the top of an important function, or change `return x` to `return None`,
+  # or for C: add `#error "mutation"`, or for Fortran: `STOP "mutation"`
   git add -A && git commit -m "mutation {{i}}"
   git checkout main
 
-Each broken-{{i}} branch must diverge from main independently. Keep changes tiny.
-Pick obvious core source files (e.g. the main module's __init__.py or core.py).
-Do NOT run tests. Do NOT install anything. Just edit, commit, move on.
+Rules:
+- Each broken-{{i}} branch diverges from main independently (not chained).
+- Only modify SOURCE files, never test files.
+- Keep changes tiny — one line per mutation.
+- Do NOT run tests or install anything.
+- Skip vendored/submodule/third-party directories.
 
 When done: `git branch -v`
 """
@@ -305,7 +315,12 @@ def _run_mutation_in_modal(
     n: int,
     timeout_seconds: int,
 ) -> list[str]:
-    """Upload repo to Modal sandbox, run Claude Code, extract broken branch hashes."""
+    """Upload repo to Modal sandbox, run Claude Code, extract broken branch hashes.
+
+    Uses the same streaming pattern as keystone's ModalAgentRunner: a bash wrapper
+    script executed via run_modal_command(capture=True) so stdout/stderr are logged
+    in real time through Python's logging system.
+    """
     modal.enable_output()
     app = modal.App.lookup("keystone-mutation", create_if_missing=True)
     image = create_modal_image()
@@ -327,61 +342,158 @@ def _run_mutation_in_modal(
         with sb.open("/tmp/project.tar.gz", "wb") as f:
             f.write(tarball_data)
 
-        sb.exec("mkdir", "-p", "/project").wait()
-        sb.exec("tar", "-xzf", "/tmp/project.tar.gz", "-C", "/project").wait()
+        run_modal_command(sb, "mkdir", "-p", "/project", name="mutation-setup").wait()
+        run_modal_command(
+            sb,
+            "tar",
+            "-xzf",
+            "/tmp/project.tar.gz",
+            "-C",
+            "/project",
+            name="mutation-extract",
+        ).wait()
 
-        # Configure git
-        sb.exec("git", "-C", "/project", "config", "user.name", "mutation-agent").wait()
-        sb.exec("git", "-C", "/project", "config", "user.email", "mutation@eval").wait()
+        # Init git repo in sandbox (the tarball is a working tree, not a git repo)
+        # Mark /project as safe to avoid "dubious ownership" errors (different UID in container)
+        run_modal_command(
+            sb,
+            "git",
+            "config",
+            "--global",
+            "--add",
+            "safe.directory",
+            "/project",
+            name="git-safe",
+        ).wait()
+        run_modal_command(sb, "git", "-C", "/project", "init", name="git-init").wait()
+        run_modal_command(
+            sb,
+            "git",
+            "-C",
+            "/project",
+            "config",
+            "user.name",
+            "mutation-agent",
+            name="git-config",
+        ).wait()
+        run_modal_command(
+            sb,
+            "git",
+            "-C",
+            "/project",
+            "config",
+            "user.email",
+            "mutation@eval",
+            name="git-config",
+        ).wait()
+        run_modal_command(sb, "git", "-C", "/project", "add", "-A", name="git-add").wait()
+        run_modal_command(
+            sb,
+            "git",
+            "-C",
+            "/project",
+            "commit",
+            "-m",
+            "base",
+            name="git-commit",
+        ).wait()
+        run_modal_command(
+            sb,
+            "git",
+            "-C",
+            "/project",
+            "branch",
+            "-M",
+            "main",
+            name="git-branch",
+        ).wait()
 
-        # Write prompt to file in sandbox (avoids shell quoting issues with long prompts)
+        # Write prompt to file in sandbox (avoids shell quoting issues)
         with sb.open("/tmp/mutation_prompt.txt", "w") as f:
             f.write(prompt)
 
-        # Run Claude Code with the mutation prompt
-        log.info("Running Claude Code in sandbox...")
-        proc = sb.exec(
-            "bash",
-            "-c",
-            f"cd /project && timeout {timeout_seconds} "
-            'claude -p "$(cat /tmp/mutation_prompt.txt)" '
-            "--allowedTools Bash,Read,Write,Edit",
+        # Write a runner script (same pattern as keystone's /run_agent.sh)
+        # --dangerously-skip-permissions prevents Claude from hanging on interactive prompts
+        # --output-format stream-json gives us machine-readable output
+        runner_script = (
+            "#!/bin/bash\n"
+            "set -e\n"
+            "cd /project\n"
+            f"exec timeout {timeout_seconds} claude "
+            "--dangerously-skip-permissions "
+            "--output-format stream-json "
+            "--verbose "
+            '-p "$(cat /tmp/mutation_prompt.txt)" '
+            "--allowedTools Bash,Read,Write,Edit\n"
         )
-        # Stream output for debugging
-        for chunk in proc.stdout:
-            log.info("[claude] %s", chunk.rstrip())
-        for chunk in proc.stderr:
-            log.warning("[claude-stderr] %s", chunk.rstrip())
-        exit_code = proc.wait()
+        with sb.open("/tmp/run_mutation.sh", "w") as f:
+            f.write(runner_script)
+        run_modal_command(sb, "chmod", "+x", "/tmp/run_mutation.sh", name="mutation-chmod").wait()
+
+        # Run Claude Code — capture=True streams stdout/stderr to Python logging in real time
+        # (ManagedProcess._stream_reader daemon threads handle this, same as keystone's agent)
+        log.info("Running Claude Code in sandbox (timeout=%ds)...", timeout_seconds)
+        agent_proc = run_modal_command(
+            sb,
+            "bash",
+            "/tmp/run_mutation.sh",
+            name="claude-mutation",
+            capture=True,
+        )
+        for _event in agent_proc.stream():
+            pass  # All output logged by ManagedProcess._stream_reader
+        exit_code = agent_proc.wait()
         log.info("Claude Code exited with code %d", exit_code)
 
         # Read back branch hashes
-        branch_proc = sb.exec("git", "-C", "/project", "branch", "-v")
-        branch_output_lines: list[str] = []
-        for chunk in branch_proc.stdout:
-            branch_output_lines.append(chunk)
-        branch_proc.wait()
+        log.info("Reading broken branch hashes...")
+        run_modal_command(
+            sb,
+            "git",
+            "-C",
+            "/project",
+            "branch",
+            "-v",
+            name="branches",
+        ).wait()
+
         broken_hashes: list[str] = []
         for i in range(1, n + 1):
             branch_name = f"broken-{i}"
-            hash_proc = sb.exec("git", "-C", "/project", "rev-parse", f"refs/heads/{branch_name}")
-            hash_lines: list[str] = []
-            for chunk in hash_proc.stdout:
-                hash_lines.append(chunk)
+            hash_proc = run_modal_command(
+                sb,
+                "git",
+                "-C",
+                "/project",
+                "rev-parse",
+                f"refs/heads/{branch_name}",
+                name=f"hash-{branch_name}",
+                capture=True,
+            )
+            captured_hash = ""
+            for event in hash_proc.stream():
+                captured_hash += event.line
             exit_code = hash_proc.wait()
-            if exit_code == 0:
-                commit_hash = "".join(hash_lines).strip()
-                if commit_hash:
-                    broken_hashes.append(commit_hash)
+            if exit_code == 0 and captured_hash.strip():
+                broken_hashes.append(captured_hash.strip())
             else:
                 log.warning("Branch %s not found", branch_name)
 
-        # Pull the mutated repo back
-        sb.exec("tar", "-czf", "/tmp/mutated.tar.gz", "-C", "/project", ".").wait()
+        # Pull the mutated repo back to the local clone
+        log.info("Downloading mutated repo from sandbox...")
+        run_modal_command(
+            sb,
+            "tar",
+            "-czf",
+            "/tmp/mutated.tar.gz",
+            "-C",
+            "/project",
+            ".",
+            name="mutation-tar",
+        ).wait()
         with sb.open("/tmp/mutated.tar.gz", "rb") as f:
             mutated_data = f.read()
 
-        # Extract mutated repo over the clone to get the branches locally
         subprocess.run(
             ["tar", "-xzf", "-", "-C", str(clone_path)],
             input=mutated_data,

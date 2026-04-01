@@ -768,6 +768,77 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
 
         return verifications, restoration
 
+    def _upload_and_copy_files(
+        self,
+        sb: modal.Sandbox,
+        source_ref: str,
+        files: list[str],
+        container_name: str,
+        project_root: Path,
+        project_dir_in_container: str,
+        label: str,
+    ) -> str | None:
+        """Extract specific files from source_ref, upload to sandbox, copy into container.
+
+        Returns an error message on failure, or None on success.
+        """
+        if not files:
+            return None
+
+        archive_proc = subprocess.run(
+            ["git", "archive", source_ref, "--", *files],
+            cwd=project_root,
+            capture_output=True,
+        )
+        if archive_proc.returncode != 0:
+            return f"git archive {source_ref} failed: {archive_proc.stderr.decode()}"
+
+        archive_dir = f"/tmp/broken_{label}"
+        run_modal_command(sb, "rm", "-rf", archive_dir, name=f"clean-{label}").wait()
+        run_modal_command(sb, "mkdir", "-p", archive_dir, name=f"mkdir-{label}").wait()
+
+        sandbox_tar = f"/tmp/broken_{label}.tar"
+        with sb.open(sandbox_tar, "wb") as f:
+            f.write(archive_proc.stdout)
+        extract_proc = run_modal_command(
+            sb,
+            "tar",
+            "xf",
+            sandbox_tar,
+            "-C",
+            archive_dir,
+            name=f"extract-{label}",
+        )
+        if extract_proc.wait() != 0:
+            return f"Failed to extract source for {source_ref}"
+
+        # Touch so incremental builds detect changes
+        run_modal_command(
+            sb,
+            "find",
+            archive_dir,
+            "-type",
+            "f",
+            "-exec",
+            "touch",
+            "{}",
+            "+",
+            name=f"touch-{label}",
+        ).wait()
+
+        cp_proc = run_modal_command(
+            sb,
+            "docker",
+            "cp",
+            f"{archive_dir}/.",
+            f"{container_name}:{project_dir_in_container}/",
+            name=f"cp-{label}",
+        )
+        if cp_proc.wait() != 0:
+            return f"Failed to copy source for {source_ref}"
+
+        return None
+
     def _run_single_broken_ref(
         self,
         sb: modal.Sandbox,
@@ -777,84 +848,47 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
         project_root: Path,
         project_dir_in_container: str = "/project",
     ) -> VerificationResult:
-        """Extract source tree at ref locally, upload to sandbox, copy into container, run tests."""
+        """Apply mutation, run tests, then reverse mutation.
+
+        Only copies files that differ between HEAD and ``ref``, preserving any
+        files the agent patched during the Docker build.  After tests, restores
+        the HEAD versions of changed files so each ref is tested in isolation.
+        """
+        ref_short = ref[:12]
         try:
-            # git archive locally — the sandbox doesn't have the full git repo
-            archive_proc = subprocess.run(
-                ["git", "archive", ref],
+            # Find which files this ref changes vs HEAD
+            diff_proc = subprocess.run(
+                ["git", "diff", "--name-only", "HEAD", ref],
                 cwd=project_root,
                 capture_output=True,
+                text=True,
             )
-            if archive_proc.returncode != 0:
+            if diff_proc.returncode != 0:
                 return VerificationResult(
                     success=False,
-                    error_message=f"git archive {ref} failed: {archive_proc.stderr.decode()}",
+                    error_message=f"git diff failed for {ref}: {diff_proc.stderr}",
                 )
+            changed_files = [f for f in diff_proc.stdout.strip().split("\n") if f]
 
-            # Upload tarball to sandbox and extract
-            ref_short = ref[:12]
-            archive_dir = f"/tmp/broken_{ref_short}"
-            run_modal_command(sb, "rm", "-rf", archive_dir, name=f"broken-clean-{ref_short}").wait()
-            run_modal_command(
-                sb, "mkdir", "-p", archive_dir, name=f"broken-mkdir-{ref_short}"
-            ).wait()
-
-            # Write tar to sandbox and extract
-            sandbox_tar = f"/tmp/broken_{ref_short}.tar"
-            with sb.open(sandbox_tar, "wb") as f:
-                f.write(archive_proc.stdout)
-            extract_proc = run_modal_command(
-                sb,
-                "tar",
-                "xf",
-                sandbox_tar,
-                "-C",
-                archive_dir,
-                name=f"broken-extract-{ref_short}",
-            )
-            if extract_proc.wait() != 0:
-                return VerificationResult(
-                    success=False,
-                    error_message=f"Failed to extract source for {ref}",
+            # Apply: copy ref's versions of changed files into container
+            if changed_files:
+                err = self._upload_and_copy_files(
+                    sb,
+                    ref,
+                    changed_files,
+                    container_name,
+                    project_root,
+                    project_dir_in_container,
+                    f"apply-{ref_short}",
                 )
+                if err:
+                    return VerificationResult(success=False, error_message=err)
 
-            # Touch extracted files so they have fresh timestamps before
-            # docker cp.  Archive timestamps are often older than pre-built
-            # object files in the image, causing incremental build tools to
-            # skip recompilation.
-            run_modal_command(
-                sb,
-                "find",
-                archive_dir,
-                "-type",
-                "f",
-                "-exec",
-                "touch",
-                "{}",
-                "+",
-                name=f"broken-touch-{ref_short}",
-            ).wait()
-
-            # Copy source into the running container
-            cp_proc = run_modal_command(
-                sb,
-                "docker",
-                "cp",
-                f"{archive_dir}/.",
-                f"{container_name}:{project_dir_in_container}/",
-                name=f"broken-cp-{ref_short}",
-            )
-            if cp_proc.wait() != 0:
-                return VerificationResult(
-                    success=False,
-                    error_message=f"Failed to copy source for {ref}",
-                )
-
-            # Run tests via shared helper (clears junit, extracts artifacts, parses)
+            # Run tests
             with tempfile.TemporaryDirectory(
                 prefix=f"broken-artifacts-{ref_short}-"
             ) as artifacts_dir:
-                return self._run_tests_in_container(
+                result = self._run_tests_in_container(
                     sb=sb,
                     container_name=container_name,
                     test_timeout_seconds=test_timeout_seconds,
@@ -863,6 +897,22 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
                     cleanup_container=False,
                     ref_short=ref_short,
                 )
+
+            # Reverse: restore HEAD versions of changed files
+            if changed_files:
+                err = self._upload_and_copy_files(
+                    sb,
+                    "HEAD",
+                    changed_files,
+                    container_name,
+                    project_root,
+                    project_dir_in_container,
+                    f"restore-{ref_short}",
+                )
+                if err:
+                    logger.warning("Failed to restore HEAD after %s: %s", ref, err)
+
+            return result
 
         except SandboxCrashedError as e:
             logger.error("Sandbox crashed during broken-commit verification: %s", e)

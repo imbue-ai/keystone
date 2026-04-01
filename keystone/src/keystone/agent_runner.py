@@ -432,6 +432,62 @@ class LocalAgentRunner(AgentRunner):
         return verifications, restoration
 
     @staticmethod
+    def _copy_files_from_ref(
+        source_ref: str,
+        files: list[str],
+        container_name: str,
+        git_dir: Path,
+        project_dir_in_container: str,
+    ) -> str | None:
+        """Extract specific files from source_ref and copy into the container.
+
+        Returns an error message on failure, or None on success.
+        """
+        if not files:
+            return None
+
+        archive_proc = subprocess.run(
+            ["git", "archive", source_ref, "--", *files],
+            cwd=git_dir,
+            capture_output=True,
+        )
+        if archive_proc.returncode != 0:
+            return f"git archive {source_ref} failed: {archive_proc.stderr.decode()}"
+
+        with tempfile.NamedTemporaryFile(suffix=".tar", delete=False) as tmp:
+            tmp.write(archive_proc.stdout)
+            tmp_path = tmp.name
+
+        try:
+            with tempfile.TemporaryDirectory() as extract_dir:
+                subprocess.run(
+                    ["tar", "xf", tmp_path, "-C", extract_dir],
+                    check=True,
+                    capture_output=True,
+                )
+                # Touch so incremental builds detect changes
+                subprocess.run(
+                    ["find", extract_dir, "-type", "f", "-exec", "touch", "{}", "+"],
+                    capture_output=True,
+                )
+                cp_proc = subprocess.run(
+                    [
+                        "docker",
+                        "cp",
+                        f"{extract_dir}/.",
+                        f"{container_name}:{project_dir_in_container}/",
+                    ],
+                    capture_output=True,
+                    text=True,
+                )
+                if cp_proc.returncode != 0:
+                    return f"docker cp failed: {cp_proc.stderr}"
+        finally:
+            Path(tmp_path).unlink(missing_ok=True)
+
+        return None
+
+    @staticmethod
     def _run_single_broken_ref(
         ref: str,
         container_name: str,
@@ -439,69 +495,64 @@ class LocalAgentRunner(AgentRunner):
         git_dir: Path,
         project_dir_in_container: str = "/project",
     ) -> VerificationResult:
-        """Extract source at ref, copy into container, run tests."""
+        """Apply mutation, run tests, then reverse mutation.
+
+        Only copies files that differ between HEAD and ``ref``, preserving any
+        files the agent patched during the Docker build (e.g. custom test
+        harnesses, sed-patched headers).  After tests, restores the HEAD
+        versions of changed files so each ref is tested in isolation.
+        """
         try:
-            # Extract source tree at the ref
-            archive_proc = subprocess.run(
-                ["git", "archive", ref],
+            # Find which files this ref changes vs HEAD
+            diff_proc = subprocess.run(
+                ["git", "diff", "--name-only", "HEAD", ref],
                 cwd=git_dir,
                 capture_output=True,
+                text=True,
             )
-            if archive_proc.returncode != 0:
+            if diff_proc.returncode != 0:
                 return VerificationResult(
                     success=False,
-                    error_message=f"git archive {ref} failed: {archive_proc.stderr.decode()}",
+                    error_message=f"git diff failed for {ref}: {diff_proc.stderr}",
                 )
+            changed_files = [f for f in diff_proc.stdout.strip().split("\n") if f]
 
-            # Write to temp tarball and docker cp into container
-            with tempfile.NamedTemporaryFile(suffix=".tar", delete=False) as tmp:
-                tmp.write(archive_proc.stdout)
-                tmp_path = tmp.name
+            # Apply: copy ref's versions of changed files into container
+            if changed_files:
+                err = LocalAgentRunner._copy_files_from_ref(
+                    ref,
+                    changed_files,
+                    container_name,
+                    git_dir,
+                    project_dir_in_container,
+                )
+                if err:
+                    return VerificationResult(success=False, error_message=err)
 
-            try:
-                # Extract into a temp dir, then docker cp
-                with tempfile.TemporaryDirectory() as extract_dir:
-                    subprocess.run(
-                        ["tar", "xf", tmp_path, "-C", extract_dir],
-                        check=True,
-                        capture_output=True,
-                    )
-                    # Touch extracted files so they have fresh timestamps.
-                    # docker cp preserves archive timestamps which are often
-                    # older than pre-built object files in the image, causing
-                    # incremental build tools to skip recompilation.
-                    subprocess.run(
-                        ["find", extract_dir, "-type", "f", "-exec", "touch", "{}", "+"],
-                        capture_output=True,
-                    )
-                    cp_proc = subprocess.run(
-                        [
-                            "docker",
-                            "cp",
-                            f"{extract_dir}/.",
-                            f"{container_name}:{project_dir_in_container}/",
-                        ],
-                        capture_output=True,
-                        text=True,
-                    )
-                    if cp_proc.returncode != 0:
-                        return VerificationResult(
-                            success=False,
-                            error_message=f"docker cp failed for {ref}: {cp_proc.stderr}",
-                        )
-            finally:
-                Path(tmp_path).unlink(missing_ok=True)
-
-            # Run tests via the shared helper (extracts artifacts + parses JUnit)
+            # Run tests
             with tempfile.TemporaryDirectory(
                 prefix=f"broken-artifacts-{ref[:12]}-"
             ) as artifacts_dir:
-                return LocalAgentRunner._run_tests_in_container(
+                result = LocalAgentRunner._run_tests_in_container(
                     container_name=container_name,
                     test_timeout_seconds=test_timeout_seconds,
                     test_artifacts_dir=Path(artifacts_dir),
                     use_docker_exec=True,
                 )
+
+            # Reverse: restore HEAD versions of the changed files
+            if changed_files:
+                err = LocalAgentRunner._copy_files_from_ref(
+                    "HEAD",
+                    changed_files,
+                    container_name,
+                    git_dir,
+                    project_dir_in_container,
+                )
+                if err:
+                    logger.warning("Failed to restore HEAD after %s: %s", ref, err)
+
+            return result
         except Exception as e:
             return VerificationResult(
                 success=False,

@@ -329,128 +329,95 @@ def main() -> None:
                 print("⚠️  --no-touch mode: skipping file touch after docker cp")
 
             unexpected_passes = 0
+
+            def _copy_files_from_ref(source_ref: str, files: list[str]) -> None:
+                """Extract specific files from source_ref and copy into container."""
+                if not files:
+                    return
+                archive_proc = subprocess.run(
+                    ["git", "archive", source_ref, "--", *files],
+                    cwd=project_dir,
+                    capture_output=True,
+                    check=True,
+                )
+                with tempfile.NamedTemporaryFile(suffix=".tar", delete=False) as tmp:
+                    tmp.write(archive_proc.stdout)
+                    tmp_path = tmp.name
+                try:
+                    with tempfile.TemporaryDirectory() as extract_dir:
+                        subprocess.run(
+                            ["tar", "xf", tmp_path, "-C", extract_dir],
+                            check=True,
+                            capture_output=True,
+                        )
+                        if not args.no_touch:
+                            subprocess.run(
+                                ["find", extract_dir, "-type", "f", "-exec", "touch", "{}", "+"],
+                                capture_output=True,
+                            )
+                        subprocess.run(
+                            [
+                                "docker",
+                                "cp",
+                                f"{extract_dir}/.",
+                                f"{broken_container}:{project_dir_in_container}/",
+                            ],
+                            check=True,
+                            capture_output=True,
+                        )
+                finally:
+                    Path(tmp_path).unlink(missing_ok=True)
+
             try:
                 for ref in broken_refs:
-                    # git archive the broken ref
-                    archive_proc = subprocess.run(
-                        [
-                            "git",
-                            "archive",
-                            f"remotes/origin/{ref}" if not ref.startswith("remotes/") else ref,
-                        ],
+                    full_ref = f"remotes/origin/{ref}" if not ref.startswith("remotes/") else ref
+                    # Find changed files
+                    diff_proc = subprocess.run(
+                        ["git", "diff", "--name-only", "HEAD", full_ref],
                         cwd=project_dir,
                         capture_output=True,
+                        text=True,
                     )
-                    if archive_proc.returncode != 0:
-                        print(f"  {ref}: ⚠️  git archive failed")
+                    if diff_proc.returncode != 0:
+                        print(f"  {ref}: ⚠️  git diff failed")
+                        continue
+                    changed = [f for f in diff_proc.stdout.strip().split("\n") if f]
+
+                    # Apply mutation (only changed files)
+                    try:
+                        _copy_files_from_ref(full_ref, changed)
+                    except Exception as e:
+                        print(f"  {ref}: ⚠️  apply failed: {e}")
                         continue
 
-                    # Extract and docker cp
-                    with tempfile.TemporaryDirectory() as extract_dir:
-                        with tempfile.NamedTemporaryFile(suffix=".tar", delete=False) as tmp:
-                            tmp.write(archive_proc.stdout)
-                            tmp_path = tmp.name
-                        try:
-                            subprocess.run(
-                                ["tar", "xf", tmp_path, "-C", extract_dir],
-                                check=True,
-                                capture_output=True,
-                            )
-                            # Touch extracted files before docker cp so they
-                            # have fresh timestamps — only touches the changed
-                            # source files, not build artifacts in the container.
-                            if not args.no_touch:
-                                subprocess.run(
-                                    [
-                                        "find",
-                                        extract_dir,
-                                        "-type",
-                                        "f",
-                                        "-exec",
-                                        "touch",
-                                        "{}",
-                                        "+",
-                                    ],
-                                    capture_output=True,
-                                )
-                            subprocess.run(
-                                [
-                                    "docker",
-                                    "cp",
-                                    f"{extract_dir}/.",
-                                    f"{broken_container}:{project_dir_in_container}/",
-                                ],
-                                check=True,
-                                capture_output=True,
-                            )
-                        finally:
-                            Path(tmp_path).unlink(missing_ok=True)
-
                     # Run tests
-                    with tempfile.TemporaryDirectory(prefix=f"broken-{ref}-") as artifacts_dir:
+                    with tempfile.TemporaryDirectory(prefix=f"broken-{ref}-") as ad:
                         result = _run_tests_in_container(
                             container_name=broken_container,
                             test_timeout_seconds=args.test_timeout,
-                            test_artifacts_dir=Path(artifacts_dir),
+                            test_artifacts_dir=Path(ad),
                             use_docker_exec=True,
                         )
                     _print_result(ref, result)
                     if result.success:
                         unexpected_passes += 1
 
-                # Restoration check
-                print("\n--- Restoration check (HEAD) ---")
-                archive_proc = subprocess.run(
-                    ["git", "archive", "HEAD"],
-                    cwd=project_dir,
-                    capture_output=True,
-                )
-                if archive_proc.returncode == 0:
-                    with tempfile.TemporaryDirectory() as extract_dir:
-                        with tempfile.NamedTemporaryFile(suffix=".tar", delete=False) as tmp:
-                            tmp.write(archive_proc.stdout)
-                            tmp_path = tmp.name
-                        try:
-                            subprocess.run(
-                                ["tar", "xf", tmp_path, "-C", extract_dir],
-                                check=True,
-                                capture_output=True,
-                            )
-                            if not args.no_touch:
-                                subprocess.run(
-                                    [
-                                        "find",
-                                        extract_dir,
-                                        "-type",
-                                        "f",
-                                        "-exec",
-                                        "touch",
-                                        "{}",
-                                        "+",
-                                    ],
-                                    capture_output=True,
-                                )
-                            subprocess.run(
-                                [
-                                    "docker",
-                                    "cp",
-                                    f"{extract_dir}/.",
-                                    f"{broken_container}:{project_dir_in_container}/",
-                                ],
-                                check=True,
-                                capture_output=True,
-                            )
-                        finally:
-                            Path(tmp_path).unlink(missing_ok=True)
+                    # Reverse mutation (restore HEAD versions)
+                    try:
+                        _copy_files_from_ref("HEAD", changed)
+                    except Exception:
+                        print(f"  ⚠️  Failed to restore HEAD after {ref}")
 
-                    with tempfile.TemporaryDirectory(prefix="restoration-") as artifacts_dir:
-                        restore_result = _run_tests_in_container(
-                            container_name=broken_container,
-                            test_timeout_seconds=args.test_timeout,
-                            test_artifacts_dir=Path(artifacts_dir),
-                            use_docker_exec=True,
-                        )
-                    _print_result("HEAD (restoration)", restore_result)
+                # Restoration check (container should already be clean)
+                print("\n--- Restoration check (HEAD) ---")
+                with tempfile.TemporaryDirectory(prefix="restoration-") as ad:
+                    restore_result = _run_tests_in_container(
+                        container_name=broken_container,
+                        test_timeout_seconds=args.test_timeout,
+                        test_artifacts_dir=Path(ad),
+                        use_docker_exec=True,
+                    )
+                _print_result("HEAD (restoration)", restore_result)
 
             finally:
                 subprocess.run(["docker", "stop", broken_container], capture_output=True)

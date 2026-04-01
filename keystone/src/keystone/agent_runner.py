@@ -13,6 +13,7 @@ from logging import getLogger
 from pathlib import Path
 
 from keystone.agent_log import create_devcontainer_tarball
+from keystone.junit_report_parser import enrich_verification_with_junit
 from keystone.llm_provider import AgentProvider
 from keystone.modal.image import TIMESTAMP_SCRIPT_PATH
 from keystone.process_runner import run_process
@@ -344,54 +345,17 @@ class LocalAgentRunner(AgentRunner):
                     image_build_seconds=image_build_seconds,
                 )
 
-            # 2. Run tests
-            test_start = time.time()
-            # Remove any existing container
+            # 2. Run tests, extract artifacts, parse JUnit
             subprocess.run(["docker", "rm", "-f", container_name], capture_output=True)
-            test_cmd = self._with_timeout(
-                test_timeout_seconds,
-                [
-                    "docker",
-                    "run",
-                    "--name",
-                    container_name,
-                    image_name,
-                    "/run_all_tests.sh",
-                ],
+            result = self._run_tests_in_container(
+                container_name=container_name,
+                test_timeout_seconds=test_timeout_seconds,
+                test_artifacts_dir=test_artifacts_dir,
+                image_name=image_name,
+                use_docker_exec=False,
+                image_build_seconds=image_build_seconds,
             )
-            test_run = subprocess.run(test_cmd, capture_output=True, text=True)
-            test_execution_seconds = time.time() - test_start
-
-            # 3. Extract artifacts
-            test_artifacts_dir.mkdir(parents=True, exist_ok=True)
-            subprocess.run(
-                ["docker", "cp", f"{container_name}:/test_artifacts/.", str(test_artifacts_dir)],
-                capture_output=True,
-            )
-
-            # 4. Clean up container
-            subprocess.run(["docker", "rm", container_name], capture_output=True)
-
-            if test_run.returncode == TIMEOUT_EXIT_CODE:
-                return VerificationResult(
-                    success=False,
-                    error_message=f"Test execution timed out after {test_timeout_seconds} seconds",
-                    image_build_seconds=image_build_seconds,
-                    test_execution_seconds=test_execution_seconds,
-                )
-            if test_run.returncode == 0:
-                return VerificationResult(
-                    success=True,
-                    image_build_seconds=image_build_seconds,
-                    test_execution_seconds=test_execution_seconds,
-                )
-            else:
-                return VerificationResult(
-                    success=False,
-                    error_message=f"Test run failed with return code {test_run.returncode}",
-                    image_build_seconds=image_build_seconds,
-                    test_execution_seconds=test_execution_seconds,
-                )
+            return result
         finally:
             shutil.rmtree(work_dir, ignore_errors=True)
 
@@ -520,40 +484,128 @@ class LocalAgentRunner(AgentRunner):
             finally:
                 Path(tmp_path).unlink(missing_ok=True)
 
-            # Run tests
-            test_start = time.time()
-            test_proc = subprocess.run(
-                [
-                    "docker",
-                    "exec",
-                    container_name,
-                    "timeout",
-                    str(test_timeout_seconds),
-                    "/run_all_tests.sh",
-                ],
-                capture_output=True,
-                text=True,
-            )
-            test_seconds = time.time() - test_start
-
-            if test_proc.returncode == 0:
-                return VerificationResult(
-                    success=True,
-                    tests_failed=0,
-                    test_execution_seconds=test_seconds,
-                )
-            else:
-                return VerificationResult(
-                    success=False,
-                    tests_failed=1,
-                    error_message=f"Tests failed for {ref} (exit {test_proc.returncode})",
-                    test_execution_seconds=test_seconds,
+            # Run tests via the shared helper (extracts artifacts + parses JUnit)
+            with tempfile.TemporaryDirectory(
+                prefix=f"broken-artifacts-{ref[:12]}-"
+            ) as artifacts_dir:
+                return LocalAgentRunner._run_tests_in_container(
+                    container_name=container_name,
+                    test_timeout_seconds=test_timeout_seconds,
+                    test_artifacts_dir=Path(artifacts_dir),
+                    use_docker_exec=True,
                 )
         except Exception as e:
             return VerificationResult(
                 success=False,
                 error_message=f"Error testing {ref}: {e}",
             )
+
+    @staticmethod
+    def _run_tests_in_container(
+        container_name: str,
+        test_timeout_seconds: int,
+        test_artifacts_dir: Path,
+        image_name: str | None = None,
+        use_docker_exec: bool = False,
+        image_build_seconds: float | None = None,
+    ) -> VerificationResult:
+        """Run /run_all_tests.sh in a container, extract artifacts, parse JUnit XML.
+
+        When ``use_docker_exec`` is False (clean verification), runs via
+        ``docker run --name {container_name} {image_name} /run_all_tests.sh``.
+        When True (broken-branch verification), runs via
+        ``docker exec {container_name} /run_all_tests.sh`` on an already-running
+        container.
+
+        In both cases, clears ``/test_artifacts/junit/`` before running to avoid
+        stale results, extracts artifacts afterward, parses JUnit XML, and returns
+        an enriched ``VerificationResult``.
+        """
+        # Clear stale JUnit artifacts inside the container
+        subprocess.run(
+            [
+                "docker",
+                "exec",
+                container_name,
+                "sh",
+                "-c",
+                "rm -rf /test_artifacts/junit && mkdir -p /test_artifacts/junit",
+            ]
+            if use_docker_exec
+            else [
+                "docker",
+                "run",
+                "--rm",
+                image_name or "",
+                "sh",
+                "-c",
+                "true",
+            ],  # no-op for docker run (fresh container)
+            capture_output=True,
+        )
+
+        # Run tests
+        test_start = time.time()
+        if use_docker_exec:
+            test_cmd = [
+                "docker",
+                "exec",
+                container_name,
+                "timeout",
+                str(test_timeout_seconds),
+                "/run_all_tests.sh",
+            ]
+        else:
+            if image_name is None:
+                raise ValueError("image_name is required when use_docker_exec=False")
+            test_cmd = [
+                "timeout",
+                str(test_timeout_seconds),
+                "docker",
+                "run",
+                "--name",
+                container_name,
+                image_name,
+                "/run_all_tests.sh",
+            ]
+        test_proc = subprocess.run(test_cmd, capture_output=True, text=True)
+        test_execution_seconds = time.time() - test_start
+
+        # Extract artifacts
+        test_artifacts_dir.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            ["docker", "cp", f"{container_name}:/test_artifacts/.", str(test_artifacts_dir)],
+            capture_output=True,
+        )
+
+        # Clean up container only for docker-run mode (broken-branch reuses container)
+        if not use_docker_exec:
+            subprocess.run(["docker", "rm", container_name], capture_output=True)
+
+        # Build base result from exit code
+        if test_proc.returncode == TIMEOUT_EXIT_CODE:
+            result = VerificationResult(
+                success=False,
+                error_message=f"Test execution timed out after {test_timeout_seconds} seconds",
+                image_build_seconds=image_build_seconds,
+                test_execution_seconds=test_execution_seconds,
+            )
+        elif test_proc.returncode == 0:
+            result = VerificationResult(
+                success=True,
+                image_build_seconds=image_build_seconds,
+                test_execution_seconds=test_execution_seconds,
+            )
+        else:
+            result = VerificationResult(
+                success=False,
+                error_message=f"Tests failed (exit {test_proc.returncode})",
+                image_build_seconds=image_build_seconds,
+                test_execution_seconds=test_execution_seconds,
+            )
+
+        # Enrich with JUnit XML results
+        return enrich_verification_with_junit(result, test_artifacts_dir)
 
     def cleanup(self) -> None:
         """Clean up the temporary work directory."""

@@ -11,6 +11,7 @@ import shlex
 import subprocess
 import sys
 import tarfile
+import tempfile
 import threading
 import time
 from collections.abc import Iterable, Iterator
@@ -25,6 +26,7 @@ from keystone.agent_runner import (
     TIMEOUT_EXIT_CODE,
     AgentRunner,
 )
+from keystone.junit_report_parser import enrich_verification_with_junit
 from keystone.llm_provider import AgentProvider
 from keystone.modal.image import create_modal_image
 from keystone.prompts import generate_devcontainer_json
@@ -650,107 +652,20 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
                 image_build_seconds=image_build_seconds,
             )
 
-        # 2. Run tests
+        # 2. Run tests, extract artifacts, parse JUnit
         logger.info("Running tests in container...")
-        test_start = time.time()
-        try:
-            run_modal_command(sb, "docker", "rm", "-f", container_name, name="cleanup").wait()
-            test_proc = run_modal_command(
-                sb,
-                "timeout",
-                str(test_timeout_seconds),
-                "docker",
-                "run",
-                "--network=host",
-                "--name",
-                container_name,
-                image_name,
-                "/run_all_tests.sh",
-                name="docker-test",
-            )
-            test_exit_code = test_proc.wait()
-        except SandboxCrashedError as e:
-            test_execution_seconds = time.time() - test_start
-            logger.error("Sandbox crashed during test execution: %s", e)
-            self._sandbox = None
-            return VerificationResult(
-                success=False,
-                error_message=f"Sandbox crashed during test execution: {e}",
-                image_build_seconds=image_build_seconds,
-                test_execution_seconds=test_execution_seconds,
-            )
-        test_execution_seconds = time.time() - test_start
-
-        # 3. Extract test artifacts
-        # Clean up any pre-existing /tmp/test_artifacts (the agent may have
-        # created it during its run, e.g. by running `docker cp` itself).
-        # Without this, `docker cp` would nest the directory inside the
-        # existing one even with the trailing "/." fix.
-        logger.info("Extracting test artifacts...")
-        try:
-            run_modal_command(
-                sb, "rm", "-rf", "/tmp/test_artifacts", name="cleanup_artifacts"
-            ).wait()
-            run_modal_command(
-                sb,
-                "docker",
-                "cp",
-                f"{container_name}:/test_artifacts/.",
-                "/tmp/test_artifacts",
-                name="cp_test_artifacts",
-            ).wait()
-            run_modal_command(
-                sb,
-                "tar",
-                "-czf",
-                "/tmp/test_artifacts.tar.gz",
-                "-C",
-                "/tmp/test_artifacts",
-                ".",
-                name="extract",
-            ).wait()
-
-            with sb.open("/tmp/test_artifacts.tar.gz", "rb") as f:
-                tarball = f.read()
-            test_artifacts_dir.mkdir(parents=True, exist_ok=True)
-            with tarfile.open(fileobj=io.BytesIO(tarball), mode="r:gz") as tar:
-                tar.extractall(test_artifacts_dir, filter="data")
-            logger.info(f"Test artifacts extracted to {test_artifacts_dir}")
-        except SandboxCrashedError as e:
-            logger.warning("Sandbox crashed during artifact extraction: %s", e)
-            self._sandbox = None
-            # Still return the test result - we already have it
-        except Exception as e:
-            logger.exception("Error extracting artifacts: %s", e)
-
-        # 4. Clean up container
-        try:
-            run_modal_command(sb, "docker", "rm", container_name, name="cleanup").wait()
-        except SandboxCrashedError:
-            self._sandbox = None
-
-        if test_exit_code == TIMEOUT_EXIT_CODE:
-            return VerificationResult(
-                success=False,
-                error_message=f"Test execution timed out after {test_timeout_seconds} seconds",
-                image_build_seconds=image_build_seconds,
-                test_execution_seconds=test_execution_seconds,
-            )
-        if test_exit_code == 0:
-            logger.info("Verification successful!")
-            return VerificationResult(
-                success=True,
-                image_build_seconds=image_build_seconds,
-                test_execution_seconds=test_execution_seconds,
-            )
-        else:
-            logger.error(f"Test run failed with return code {test_exit_code}")
-            return VerificationResult(
-                success=False,
-                error_message=f"Test run failed with return code {test_exit_code}",
-                image_build_seconds=image_build_seconds,
-                test_execution_seconds=test_execution_seconds,
-            )
+        run_modal_command(sb, "docker", "rm", "-f", container_name, name="cleanup").wait()
+        result = self._run_tests_in_container(
+            sb=sb,
+            container_name=container_name,
+            test_timeout_seconds=test_timeout_seconds,
+            test_artifacts_dir=test_artifacts_dir,
+            image_name=image_name,
+            use_docker_exec=False,
+            image_build_seconds=image_build_seconds,
+            cleanup_container=True,
+        )
+        return result
 
     # ------------------------------------------------------------------
     # Broken-commit re-verification (mutation-augmented eval)
@@ -918,41 +833,19 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
                     error_message=f"Failed to copy source for {ref}",
                 )
 
-            # Run tests
-            test_start = time.time()
-            test_proc = run_modal_command(
-                sb,
-                "docker",
-                "exec",
-                container_name,
-                "timeout",
-                str(test_timeout_seconds),
-                "/run_all_tests.sh",
-                name=f"broken-test-{ref_short}",
-            )
-            test_exit_code = test_proc.wait()
-            test_execution_seconds = time.time() - test_start
-
-            if test_exit_code == TIMEOUT_EXIT_CODE:
-                return VerificationResult(
-                    success=False,
-                    error_message=f"Test execution timed out after {test_timeout_seconds}s",
-                    test_execution_seconds=test_execution_seconds,
+            # Run tests via shared helper (clears junit, extracts artifacts, parses)
+            with tempfile.TemporaryDirectory(
+                prefix=f"broken-artifacts-{ref_short}-"
+            ) as artifacts_dir:
+                return self._run_tests_in_container(
+                    sb=sb,
+                    container_name=container_name,
+                    test_timeout_seconds=test_timeout_seconds,
+                    test_artifacts_dir=Path(artifacts_dir),
+                    use_docker_exec=True,
+                    cleanup_container=False,
+                    ref_short=ref_short,
                 )
-
-            # Test pass/fail: exit 0 means tests passed, non-zero means failure
-            tests_failed = 0 if test_exit_code == 0 else 1
-            tests_passed = 1 if test_exit_code == 0 else 0
-
-            return VerificationResult(
-                success=(test_exit_code == 0),
-                error_message=None
-                if test_exit_code == 0
-                else f"Tests failed (exit {test_exit_code})",
-                test_execution_seconds=test_execution_seconds,
-                tests_passed=tests_passed,
-                tests_failed=tests_failed,
-            )
 
         except SandboxCrashedError as e:
             logger.error("Sandbox crashed during broken-commit verification: %s", e)
@@ -961,6 +854,151 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
                 success=False,
                 error_message=f"Sandbox crashed: {e}",
             )
+
+    def _run_tests_in_container(
+        self,
+        sb: modal.Sandbox,
+        container_name: str,
+        test_timeout_seconds: int,
+        test_artifacts_dir: Path,
+        image_name: str | None = None,
+        use_docker_exec: bool = False,
+        image_build_seconds: float | None = None,
+        cleanup_container: bool = False,
+        ref_short: str = "test",
+    ) -> VerificationResult:
+        """Run /run_all_tests.sh in a container, extract artifacts, parse JUnit XML.
+
+        When ``use_docker_exec`` is False (clean verification), runs via
+        ``docker run``.  When True (broken-branch verification), runs via
+        ``docker exec`` on an already-running container.
+
+        Clears ``/test_artifacts/junit/`` before running (to avoid stale results),
+        extracts artifacts afterward, parses JUnit XML, and returns an enriched
+        ``VerificationResult``.
+        """
+        # Clear stale JUnit artifacts inside the container
+        if use_docker_exec:
+            run_modal_command(
+                sb,
+                "docker",
+                "exec",
+                container_name,
+                "sh",
+                "-c",
+                "rm -rf /test_artifacts/junit && mkdir -p /test_artifacts/junit",
+                name=f"clear-junit-{ref_short}",
+            ).wait()
+
+        # Run tests
+        test_start = time.time()
+        try:
+            if use_docker_exec:
+                test_proc = run_modal_command(
+                    sb,
+                    "docker",
+                    "exec",
+                    container_name,
+                    "timeout",
+                    str(test_timeout_seconds),
+                    "/run_all_tests.sh",
+                    name=f"test-{ref_short}",
+                )
+            else:
+                test_proc = run_modal_command(
+                    sb,
+                    "timeout",
+                    str(test_timeout_seconds),
+                    "docker",
+                    "run",
+                    "--network=host",
+                    "--name",
+                    container_name,
+                    image_name or "",
+                    "/run_all_tests.sh",
+                    name=f"test-{ref_short}",
+                )
+            test_exit_code = test_proc.wait()
+        except SandboxCrashedError as e:
+            test_execution_seconds = time.time() - test_start
+            logger.error("Sandbox crashed during test execution: %s", e)
+            self._sandbox = None
+            return VerificationResult(
+                success=False,
+                error_message=f"Sandbox crashed during test execution: {e}",
+                image_build_seconds=image_build_seconds,
+                test_execution_seconds=test_execution_seconds,
+            )
+        test_execution_seconds = time.time() - test_start
+
+        # Extract test artifacts from container → sandbox → local
+        logger.info("Extracting test artifacts...")
+        try:
+            run_modal_command(
+                sb, "rm", "-rf", "/tmp/test_artifacts", name=f"cleanup-artifacts-{ref_short}"
+            ).wait()
+            run_modal_command(
+                sb,
+                "docker",
+                "cp",
+                f"{container_name}:/test_artifacts/.",
+                "/tmp/test_artifacts",
+                name=f"cp-artifacts-{ref_short}",
+            ).wait()
+            run_modal_command(
+                sb,
+                "tar",
+                "-czf",
+                "/tmp/test_artifacts.tar.gz",
+                "-C",
+                "/tmp/test_artifacts",
+                ".",
+                name=f"tar-artifacts-{ref_short}",
+            ).wait()
+
+            with sb.open("/tmp/test_artifacts.tar.gz", "rb") as f:
+                tarball_bytes = f.read()
+            test_artifacts_dir.mkdir(parents=True, exist_ok=True)
+            with tarfile.open(fileobj=io.BytesIO(tarball_bytes), mode="r:gz") as tar:
+                tar.extractall(test_artifacts_dir, filter="data")
+            logger.info("Test artifacts extracted to %s", test_artifacts_dir)
+        except SandboxCrashedError as e:
+            logger.warning("Sandbox crashed during artifact extraction: %s", e)
+            self._sandbox = None
+        except Exception as e:
+            logger.exception("Error extracting artifacts: %s", e)
+
+        # Clean up container if requested (clean verification path)
+        if cleanup_container:
+            try:
+                run_modal_command(sb, "docker", "rm", container_name, name=f"rm-{ref_short}").wait()
+            except SandboxCrashedError:
+                self._sandbox = None
+
+        # Build base result from exit code
+        if test_exit_code == TIMEOUT_EXIT_CODE:
+            result = VerificationResult(
+                success=False,
+                error_message=f"Test execution timed out after {test_timeout_seconds} seconds",
+                image_build_seconds=image_build_seconds,
+                test_execution_seconds=test_execution_seconds,
+            )
+        elif test_exit_code == 0:
+            result = VerificationResult(
+                success=True,
+                image_build_seconds=image_build_seconds,
+                test_execution_seconds=test_execution_seconds,
+            )
+        else:
+            result = VerificationResult(
+                success=False,
+                error_message=f"Tests failed (exit {test_exit_code})",
+                image_build_seconds=image_build_seconds,
+                test_execution_seconds=test_execution_seconds,
+            )
+
+        # Enrich with JUnit XML results
+        return enrich_verification_with_junit(result, test_artifacts_dir)
 
     # Agent state directories to capture (add new agents here)
     _AGENT_DIRS: ClassVar[list[str]] = [".claude", ".codex", ".gemini"]

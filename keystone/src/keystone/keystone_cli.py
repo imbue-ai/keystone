@@ -32,7 +32,6 @@ from keystone.git_utils import (
     is_git_dirty,
     is_git_repo,
 )
-from keystone.junit_report_parser import parse_junit_xml
 from keystone.llm_provider import (
     AgentCostEvent,
     AgentErrorEvent,
@@ -546,6 +545,7 @@ def bootstrap(
         )
         broken_commit_verifications: dict[str, VerificationResult] = {}
         post_broken_commits_verification: VerificationResult | None = None
+        verify_result: VerificationResult | None = None
 
         def _run_verification(tarball: bytes) -> VerificationResult:
             return runner.verify(
@@ -599,43 +599,32 @@ def bootstrap(
     finally:
         runner.cleanup()
 
-    # Parse all JUnit XML test reports from junit/ subdirectory
-    test_results = []
-    for xml_file in test_artifacts_dir.glob("junit/*.xml"):
-        if not xml_file.is_file():
-            print(f"Skipping non-file: {xml_file}", file=sys.stderr)
-            continue
-        try:
-            test_results.extend(parse_junit_xml(xml_file))
-        except Exception as e:
-            print(
-                f"Warning: failed to parse JUnit XML {xml_file.name}: {e}",
-                file=sys.stderr,
-            )
-
-    # Build verification result
-    n_passed = sum(1 for t in test_results if t.passed and not t.skipped)
-    n_failed = sum(1 for t in test_results if not t.passed and not t.skipped)
-    n_skipped = sum(1 for t in test_results if t.skipped)
-
-    if test_results:
-        console.print(
-            f"[bold]Test summary:[/bold] "
-            f"[green]{n_passed} passed[/green], "
-            f"[red]{n_failed} failed[/red], "
-            f"[yellow]{n_skipped} skipped[/yellow] "
-            f"({len(test_results)} total)"
-        )
+    # The runner's verify() now returns an enriched VerificationResult with
+    # JUnit XML already parsed.  Build the final result, preferring the runner's
+    # enriched data but overriding success/error if the CLI-level try/except
+    # caught something different (e.g. an exception wrapping the runner call).
     verification = VerificationResult(
         success=verification_success,
         error_message=verification_error,
         image_build_seconds=image_build_seconds,
         test_execution_seconds=test_execution_seconds,
-        tests_passed=n_passed,
-        tests_failed=n_failed,
-        tests_skipped=n_skipped,
-        test_results=test_results,
+        tests_passed=verify_result.tests_passed if verify_result else 0,
+        tests_failed=verify_result.tests_failed if verify_result else 0,
+        tests_skipped=verify_result.tests_skipped if verify_result else 0,
+        test_results=verify_result.test_results if verify_result else [],
     )
+
+    if verification.test_results:
+        n_passed = verification.tests_passed
+        n_failed = verification.tests_failed
+        n_skipped = verification.tests_skipped
+        console.print(
+            f"[bold]Test summary:[/bold] "
+            f"[green]{n_passed} passed[/green], "
+            f"[red]{n_failed} failed[/red], "
+            f"[yellow]{n_skipped} skipped[/yellow] "
+            f"({len(verification.test_results)} total)"
+        )
 
     # Verification passing is the source of truth for success — the agent may
     # exit non-zero (e.g. timeout code 124) yet still produce correct output.

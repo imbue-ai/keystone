@@ -15,6 +15,7 @@ from keystone.agent_log import (
     CLIRunRecord,
     compute_cache_key,
     extract_devcontainer_tarball,
+    stamp_generated_files,
 )
 from keystone.agent_runner import LocalAgentRunner
 from keystone.cached_runner import CachedAgentRunner, CacheMissError
@@ -453,6 +454,7 @@ def bootstrap(
         # Extract .devcontainer to project_root so files are available on the host
         # (for generated_files in the result, and for callers that inspect project_root).
         extract_devcontainer_tarball(devcontainer_tarball, project_root)
+        stamp_generated_files(project_root)
 
         # Write agent state directory tarball (e.g. ~/.claude, ~/.codex) to disk if available
         agent_dir_tarball = runner.get_agent_dir_tarball()

@@ -56,30 +56,45 @@ class MutationResult(BaseModel):
 # ---------------------------------------------------------------------------
 
 MUTATION_PROMPT_TEMPLATE = """\
-DO NOT OVERTHINK THIS. Act immediately. No planning, no exploration beyond a quick `find`.
+DO NOT OVERTHINK THIS. Act immediately.
 
 Your job: introduce {n} small test-breaking changes to source code in /project.
 Language: {language}. Build system: {build_system}. Tests: {tests}. {notes}
 
-Step 1: Run `find /project -name '*.py' -o -name '*.c' -o -name '*.cpp' -o -name '*.f90' -o -name '*.go' -o -name '*.rs' -o -name '*.js' -o -name '*.rb' -o -name '*.java' | grep -v test | grep -v __pycache__ | head -20` to find source files.
+Step 1: Discover what languages are in the project and find source files to mutate:
+```bash
+cd /project
+find . -type f | grep -v '/\\.git/' | grep -v __pycache__ | sed 's/.*\\.//' | sort | uniq -c | sort -rn | head -15
+find . -type f \\( -name '*.py' -o -name '*.c' -o -name '*.cpp' -o -name '*.f90' -o -name '*.f' -o -name '*.go' -o -name '*.rs' -o -name '*.js' -o -name '*.ts' -o -name '*.rb' -o -name '*.java' \\) | grep -v test | grep -v __pycache__ | grep -v vendor | grep -v third.party | grep -v node_modules | head -30
+```
 
-Step 2: For EACH i from 1 to {n}, immediately do:
+Step 2: Pick {n} files to mutate. SPREAD your mutations across:
+  - Different parts of the codebase (different directories/modules)
+  - Different languages if the project is polyglot (e.g. for scipy: some Python, some C, some Fortran)
+  Pick core library files that are likely imported/compiled by tests, not scripts or docs.
+
+Step 3: For EACH i from 1 to {n}, immediately do:
 ```bash
 git checkout -b broken-{{i}} main
-# Pick a different source file each time. Insert ONE broken line near the top:
+# Insert ONE broken line at the top of the file:
 #   Python: raise Exception("mutation")
-#   C/C++: #error "mutation"
-#   Fortran: STOP "mutation"
+#   C/C++:  #error "mutation"
+#   Fortran: STOP "mutation"  (or for .f90: ERROR STOP "mutation")
 #   Go: panic("mutation")
 #   JS/TS: throw new Error("mutation")
-sed -i '1i raise Exception("mutation {{i}}")' /project/path/to/file.py  # example for Python
+#   Rust: panic!("mutation");
+#   Ruby: raise "mutation"
+#   Java: throw new RuntimeException("mutation");
+sed -i '1i raise Exception("mutation {{i}}")' path/to/file.py  # adjust for language
 git add -A && git commit -m "mutation {{i}}"
 git checkout main
 ```
 
-For polyglot projects (e.g. Python + C + Fortran), spread mutations across languages.
-Only modify SOURCE files, never test files. Skip vendored/third-party directories.
-Do NOT run tests. Do NOT install anything. Do NOT read file contents. Just mutate and commit.
+Rules:
+- Only modify SOURCE files, never test files.
+- Skip vendored/third-party/submodule directories.
+- Do NOT run tests. Do NOT install anything. Do NOT read file contents beyond the find.
+- Just mutate, commit, move on. Be fast.
 
 When done: `git branch -v`
 """

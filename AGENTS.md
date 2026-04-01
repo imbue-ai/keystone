@@ -80,6 +80,17 @@ uv run pytest -k "not manual and not modal and not agentic"  # Skip slow/externa
 - `local_docker` — Tests that expect a local Docker daemon
 - `agentic` — Tests that run a real coding agent (non-deterministic, slow)
 
+### Running Modal/Agentic Tests
+
+Modal credentials are configured in `~/.modal.toml` (profile `imbue`, marked `active = true`). No `MODAL_PROFILE=` prefix is needed — just run:
+
+```bash
+uv run pytest -x -k "not manual"      # All tests including modal/agentic (slow, uses real Modal sandboxes)
+uv run pytest -x -m "modal"           # Modal tests only
+```
+
+These tests spin up real Modal sandboxes and may take several minutes. They require `ANTHROPIC_API_KEY` and/or `OPENAI_API_KEY` in the environment for agentic tests.
+
 ### Run Keystone
 ```bash
 uv run keystone --help        # Show CLI usage

@@ -411,6 +411,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
                line-height: 1.2; white-space: nowrap; min-height: 13px; }
   .cell-meta .cm-cost { color: #a78bfa; font-weight: 600; }
   .cell-meta .cm-time { color: #475569; font-size: 10px; }
+  .rc-ubc { font-size: 11px; color: #fbbf24; font-weight: 600; }
 
   .detail-row td { padding: 0; }
   .detail-panel { padding: 16px 20px 20px; background: #12151f;
@@ -832,6 +833,18 @@ function buildRowData() {
     for (const m of models) {
       row[m] = (runData[m] || {})[repo] || null;
     }
+    // Compute row-best values for bolding
+    const vals = models.map(m => row[m]).filter(Boolean);
+    const costs = vals.map(v => v.cost_usd).filter(v => v > 0);
+    const times = vals.map(v => v.duration_s).filter(v => v > 0);
+    const tests_passing = vals.map(v => v.tests_passed).filter(v => v != null);
+    const incorrect_passes = vals.map(v => v.unexpected_broken_commit_passes).filter(v => v != null);
+    row._best = {
+      minCost: costs.length >= 2 ? Math.min(...costs) : null,
+      minTime: times.length >= 2 ? Math.min(...times) : null,
+      maxTestsPassed: tests_passing.length >= 2 ? Math.max(...tests_passing) : null,
+      minIncorrectPasses: incorrect_passes.length >= 2 ? Math.min(...incorrect_passes) : null,
+    };
     rows.push(row);
   });
   return rows;
@@ -946,8 +959,16 @@ function buildColDefs() {
           const r = params.value;
           const expanded = expandedRepo === params.data.repo;
           if (!r) return `<div class="rc"><span class="badge missing">&#8212;</span></div>`;
+          const best = params.data._best || {};
           const durStr = r.duration_s ? fmtDuration(r.duration_s) : "";
           const costStr = r.cost_usd ? "$" + r.cost_usd.toFixed(2) : "";
+          const isBestCost = (best.minCost != null && r.cost_usd > 0 && r.cost_usd === best.minCost);
+          const isBestTime = (best.minTime != null && r.duration_s > 0 && r.duration_s === best.minTime);
+          const costHtml = costStr ? (isBestCost ? `<b>${costStr}</b>` : costStr) : "";
+          const timeHtml = durStr ? (isBestTime ? `<b>${durStr}</b>` : durStr) : "";
+          const ubcVal = r.unexpected_broken_commit_passes;
+          const isBestUbc = (best.minIncorrectPasses != null && ubcVal != null && ubcVal === best.minIncorrectPasses);
+          const ubcHtml = (ubcVal > 0) ? `<span class="rc-ubc">${isBestUbc ? `<b>${ubcVal}</b>` : ubcVal}&#9760;</span>` : "";
           const cat = categorizeError(r.error || "");
           let badge;
           if (r.success) badge = `<span class="badge pass">&#10003;</span>`;
@@ -959,17 +980,20 @@ function buildColDefs() {
             badge += `<span class="badge" style="background:#78350f;color:#fbbf24;margin-left:2px" title="${r.unexpected_broken_commit_passes} broken commit(s) unexpectedly passed">&#9888;</span>`;
           }
           if (!expanded) {
-            return `<div class="rc">${badge}<div class="rc-meta"><span class="rc-cost">${costStr}</span><span class="rc-time">${durStr}</span></div></div>`;
+            return `<div class="rc">${badge}<div class="rc-meta"><span class="rc-cost">${costHtml}</span><span class="rc-time">${timeHtml}</span>${ubcHtml}</div></div>`;
           }
           // Expanded: show full detail in-cell
-          const tests = (r.tests_passed != null) ? `${r.tests_passed}\\u2713 ${r.tests_failed||0}\\u2717` : "";
+          const isBestTests = (best.maxTestsPassed != null && r.tests_passed != null && r.tests_passed === best.maxTestsPassed);
+          const tpStr = r.tests_passed != null ? `${r.tests_passed}` : "";
+          const tpHtml = tpStr ? (isBestTests ? `<b>${tpStr}</b>` : tpStr) : "";
+          const tests = (r.tests_passed != null) ? `${tpHtml}\\u2713 ${r.tests_failed||0}\\u2717` : "";
           const errHtml = r.error ? `<div class="rc-err">\\u2717 ${escHtml(r.error.slice(0,200))}</div>` : "";
           const summaryHtml = r.summary ? `<div class="rc-summary">${escHtml(r.summary.slice(0,300))}</div>` : "";
           const steps = r.status_messages || [];
           const lastSteps = steps.slice(-3).map(s => `<div class="rc-step">${escHtml(s)}</div>`).join("");
           const stepsHtml = lastSteps ? `<div class="rc-steps"><div style="font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Agent steps</div>${lastSteps}</div>` : "";
           return `<div class="rc-expanded">
-            <div class="rc-expanded-header">${badge}<span class="rc-cost">${costStr}</span><span class="rc-time">${durStr}</span>${tests ? `<span class="rc-tests">${tests}</span>` : ""}</div>
+            <div class="rc-expanded-header">${badge}<span class="rc-cost">${costHtml}</span><span class="rc-time">${timeHtml}</span>${tests ? `<span class="rc-tests">${tests}</span>` : ""}${ubcHtml}</div>
             ${errHtml}${stepsHtml}${summaryHtml}
           </div>`;
         },
@@ -1285,7 +1309,7 @@ def main():
     parser.add_argument(
         "--out",
         default=str(EVALS_DIR / "viewer" / "viewer.html"),
-        help="Output HTML file path",
+        help="Output path (local or any fsspec URI, e.g. s3://bucket/path.html)",
     )
     parser.add_argument(
         "--blog",
@@ -1325,15 +1349,19 @@ def main():
         RUN_NAMES, use_s3=use_s3, s3_prefix=args.s3_prefix, use_cache=not args.no_cache
     )
 
-    out_path = BLOG_STATIC / "eval_viewer.html" if args.blog else Path(args.out)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_uri = str(BLOG_STATIC / "eval_viewer.html") if args.blog else args.out
 
     html = HTML_TEMPLATE.replace("__DATA__", json.dumps(data, indent=None))
-    out_path.write_text(html)
+
+    out_fs, out_path = fsspec.core.url_to_fs(out_uri)
+    parent = out_fs._parent(out_path)
+    if parent:
+        out_fs.mkdirs(parent, exist_ok=True)
+    with out_fs.open(out_path, "w") as f:
+        f.write(html)
 
     total = sum(len(repos) for run in data["runs"].values() for repos in run.values())
-    print(f"Written {total} results to {out_path}")
-    print(f"Open with: open '{out_path}'")
+    print(f"Written {total} results to {out_uri}")
 
 
 if __name__ == "__main__":

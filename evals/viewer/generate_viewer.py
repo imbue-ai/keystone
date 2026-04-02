@@ -1340,13 +1340,19 @@ def main():
         default=False,
         help=f"Skip local parquet cache and fetch from S3 (cache dir: {VIEWER_CACHE_DIR})",
     )
+    parser.add_argument(
+        "runs",
+        nargs="*",
+        help="Run names to include (overrides built-in RUN_NAMES list). Can be any run name, not just those in RUN_NAMES.",
+    )
     args = parser.parse_args()
 
     use_s3 = not args.local
+    run_names = args.runs if args.runs else RUN_NAMES
 
     print("Loading eval data...")
     data = build_data(
-        RUN_NAMES, use_s3=use_s3, s3_prefix=args.s3_prefix, use_cache=not args.no_cache
+        run_names, use_s3=use_s3, s3_prefix=args.s3_prefix, use_cache=not args.no_cache
     )
 
     out_uri = str(BLOG_STATIC / "eval_viewer.html") if args.blog else args.out

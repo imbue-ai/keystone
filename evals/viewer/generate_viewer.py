@@ -1363,7 +1363,10 @@ def main():
     parent = out_fs._parent(out_path)
     if parent:
         out_fs.mkdirs(parent, exist_ok=True)
-    with out_fs.open(out_path, "w") as f:
+    open_kwargs: dict[str, str] = {}
+    if out_uri.startswith("s3://"):
+        open_kwargs["ContentType"] = "text/html"
+    with out_fs.open(out_path, "w", **open_kwargs) as f:
         f.write(html)
 
     total = sum(len(repos) for run in data["runs"].values() for repos in run.values())

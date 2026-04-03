@@ -370,5 +370,22 @@ def _(mo, gpt_only_repos, wdf, pl):
         mo.output.append(stats_df)
 
 
+@app.cell
+def _(mo, gpt_only_repos):
+    """List repo names where gpt-5.4 is a test winner but claude-opus is not."""
+    if gpt_only_repos.is_empty():
+        mo.md("_No gpt-5.4-only winner repos._")
+    else:
+        names = sorted(gpt_only_repos["repo_id"].to_list())
+        bullet_list = "\n".join(f"- `{n}`" for n in names)
+        mo.md(
+            f"""
+            ### Repos where gpt-5.4 wins but claude-opus does not ({len(names)})
+
+            {bullet_list}
+            """
+        )
+
+
 if __name__ == "__main__":
     app.run()

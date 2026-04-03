@@ -176,7 +176,7 @@ def _(mo, wdf, pl):
     fig = go.Figure()
     fig.add_trace(
         go.Bar(
-            name="Success %",
+            name="Completed %",
             x=models,
             y=success_pcts,
             marker_color="#22c55e",
@@ -198,7 +198,7 @@ def _(mo, wdf, pl):
     )
     fig.update_layout(
         barmode="group",
-        title="Success Rate & Test Winner Rate per Model",
+        title="Completed Rate & Test Winner Rate per Model",
         yaxis_title="Percentage",
         yaxis_range=[0, 105],
         template="plotly_white",

@@ -179,10 +179,10 @@ def _(mo, wdf, pl):
             name="Success %",
             x=models,
             y=success_pcts,
-            marker_color="#4ade80",
+            marker_color="#22c55e",
             text=[f"{v:.0f}%" for v in success_pcts],
             textposition="outside",
-            textfont={"size": 12, "color": "#4ade80"},
+            textfont={"size": 12, "color": "#16a34a"},
         )
     )
     fig.add_trace(
@@ -190,10 +190,10 @@ def _(mo, wdf, pl):
             name="Test Winner %",
             x=models,
             y=winner_pcts,
-            marker_color="#6366f1",
+            marker_color="#4f46e5",
             text=[f"{v:.0f}%" for v in winner_pcts],
             textposition="outside",
-            textfont={"size": 12, "color": "#6366f1"},
+            textfont={"size": 12, "color": "#4338ca"},
         )
     )
     fig.update_layout(
@@ -201,7 +201,7 @@ def _(mo, wdf, pl):
         title="Success Rate & Test Winner Rate per Model",
         yaxis_title="Percentage",
         yaxis_range=[0, 105],
-        template="plotly_dark",
+        template="plotly_white",
         legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "center", "x": 0.5},
         height=400,
     )
@@ -386,6 +386,69 @@ def _(mo, gpt_only_repos):
             """
         )
     _out
+
+
+@app.cell
+def _(mo, df, pl):
+    """Box plots for agent wall-clock time and inference cost."""
+    import plotly.express as px
+
+    # Prepare pandas df with successful runs only, for box plots
+    box_df = df.filter(pl.col("success")).to_pandas()
+
+    configs = sorted(box_df["config_name"].unique())
+    import pandas as pd
+
+    box_df["config_name"] = pd.Categorical(box_df["config_name"], categories=configs, ordered=True)
+
+    # Count non-null values per config for N= labels
+    def make_box(
+        data: pd.DataFrame,
+        y: str,
+        title: str,
+        y_label: str,
+        y_tickformat: str | None = None,
+    ) -> "plotly.graph_objects.Figure":  # noqa: F821
+        counts = data.dropna(subset=[y]).groupby("config_name", observed=True).size()
+        label_map = {c: f"{c}\n(N={int(counts.get(c, 0))})" for c in configs}
+        plot_df = data.copy()
+        plot_df["config_label"] = plot_df["config_name"].map(label_map)
+        ordered_labels = [label_map[c] for c in configs]
+
+        fig = px.box(
+            plot_df,
+            x="config_label",
+            y=y,
+            color="config_label",
+            points="all",
+            hover_data=["repo_id"],
+            category_orders={"config_label": ordered_labels},
+            title=title,
+            labels={"config_label": "Config", y: y_label},
+        )
+        fig.update_layout(showlegend=False, template="plotly_white", height=450)
+        if y_tickformat:
+            fig.update_layout(yaxis_tickformat=y_tickformat)
+        return fig
+
+    fig_time = make_box(
+        box_df,
+        y="agent_walltime_seconds",
+        title="Agent Wall-clock Time by Config",
+        y_label="Wall-clock Time (s)",
+    )
+
+    fig_cost = make_box(
+        box_df,
+        y="cost_usd",
+        title="Inference Cost by Config",
+        y_label="Cost (USD)",
+        y_tickformat="$.2f",
+    )
+
+    mo.md("## Box Plots")
+    mo.output.append(mo.ui.plotly(fig_time))
+    mo.output.append(mo.ui.plotly(fig_cost))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,305 @@
+"""Test Winner Analysis — marimo notebook.
+
+Computes the "test winner" flag per (config, repo) using the same logic as
+the HTML eval viewer, then compares gpt-5.4 vs claude-opus to find repos
+where gpt-5.4 wins but claude-opus does not.
+
+Run interactively::
+
+    uv run marimo edit evals/eda/marimo_test_winners.py
+"""
+
+import marimo
+
+__generated_with = "0.21.1"
+app = marimo.App(width="medium")
+
+
+@app.cell
+def _():
+    import marimo as mo
+
+    mo.md(
+        """
+        # Test Winner Analysis
+
+        Replicates the "test winner" badge logic from the HTML eval viewer
+        and investigates repos where **gpt-5.4** is a test winner but
+        **claude-opus** is not.
+
+        **Test winner criteria** (per repo, across configs):
+        1. `success == True`
+        2. `num_broken_branches > 0`
+        3. `unexpected_broken_commit_passes < num_broken_branches` (caught at least one mutation)
+        4. `restoration_check_failed == False`
+        5. Among eligible configs, has the minimum `unexpected_broken_commit_passes` (ties allowed)
+        """
+    )
+    return (mo,)
+
+
+@app.cell
+def _(mo):
+    """Load parquet and extract mutation-testing fields from raw_json."""
+    import json
+    import sys
+    from pathlib import Path
+
+    import polars as pl
+
+    _evals_root = str(Path(__file__).resolve().parents[1])
+    if _evals_root not in sys.path:
+        sys.path.insert(0, _evals_root)
+
+    from eval_schema import KeystoneRepoResult
+
+    PARQUET_PATH = Path("/tmp/2026-04-01_thad_eval_v1.parquet")
+    if not PARQUET_PATH.exists():
+        mo.md(
+            f"""
+            ⚠️ **Parquet not found** at `{PARQUET_PATH}`.
+
+            Generate it first:
+            ```bash
+            uv run python evals/eda/eval_to_parquet_cli.py \\
+                s3://int8-datasets/keystone/evals/2026-04-01_thad_eval_v1 \\
+                {PARQUET_PATH}
+            ```
+            """
+        )
+        raise FileNotFoundError(str(PARQUET_PATH))
+
+    raw_df = pl.read_parquet(PARQUET_PATH)
+
+    # Extract fields not in flat parquet columns by deserializing raw_json
+    rows: list[dict] = []
+    for row in raw_df.iter_rows(named=True):
+        r = KeystoneRepoResult.model_validate_json(row["raw_json"])
+        rows.append(
+            {
+                "config_name": row["config_name"],
+                "repo_id": row["repo_id"],
+                "trial_index": row["trial_index"],
+                "success": row["success"],
+                "cost_usd": row["cost_usd"],
+                "agent_walltime_seconds": row["agent_walltime_seconds"],
+                "tests_passed": row["tests_passed"],
+                "tests_failed": row["tests_failed"],
+                "error_message": row["error_message"],
+                "summary": row["summary"],
+                "language": r.repo_entry.language or "unknown",
+                "unexpected_broken_commit_passes": r.unexpected_broken_commit_passes,
+                "restoration_check_failed": r.restoration_check_failed,
+                "num_broken_branches": len(r.repo_entry.broken_branches),
+            }
+        )
+
+    df = pl.DataFrame(rows)
+
+    mo.md(
+        f"""
+        **Loaded** `{PARQUET_PATH.name}`: **{len(df)}** rows,
+        **{df["config_name"].n_unique()}** configs,
+        **{df["repo_id"].n_unique()}** repos.
+        """
+    )
+    return (df, json, pl)
+
+
+@app.cell
+def _(df, pl):
+    """Compute the test-winner flag for each (config, repo)."""
+
+    # Mark eligible rows
+    eligible = df.with_columns(
+        (
+            pl.col("success")
+            & (pl.col("num_broken_branches") > 0)
+            & (pl.col("unexpected_broken_commit_passes") < pl.col("num_broken_branches"))
+            & (~pl.col("restoration_check_failed"))
+        ).alias("eligible")
+    )
+
+    # Per-repo minimum ubc among eligible rows
+    min_ubc = (
+        eligible.filter(pl.col("eligible"))
+        .group_by("repo_id")
+        .agg(pl.col("unexpected_broken_commit_passes").min().alias("min_ubc"))
+    )
+
+    # Join back and compute test_winner
+    wdf = eligible.join(min_ubc, on="repo_id", how="left").with_columns(
+        (
+            pl.col("eligible") & (pl.col("unexpected_broken_commit_passes") == pl.col("min_ubc"))
+        ).alias("test_winner")
+    )
+
+    # Summary stats
+    winner_counts = (
+        wdf.filter(pl.col("test_winner"))
+        .group_by("config_name")
+        .len()
+        .sort("len", descending=True)
+        .rename({"len": "winner_repos"})
+    )
+
+    total_eligible_repos = min_ubc.height
+
+    return (total_eligible_repos, wdf, winner_counts)
+
+
+@app.cell
+def _(mo, total_eligible_repos, wdf, winner_counts, pl):
+    """Show overall winner stats and identify gpt-5.4-only wins."""
+
+    mo.md(
+        f"""
+        ## Test Winner Summary
+
+        **{total_eligible_repos}** repos have at least one eligible config
+        (success + caught ≥1 mutation + restoration passed).
+        """
+    )
+
+    mo.output.append(winner_counts)
+
+    # Pivot: repo x config -> test_winner bool
+    pivot = (
+        wdf.select("repo_id", "config_name", "test_winner", "language")
+        .pivot(on="config_name", index=["repo_id", "language"], values="test_winner")
+        .fill_null(False)
+    )
+
+    gpt_col = "gpt-5.4"
+    opus_col = "claude-opus"
+
+    available_configs = set(pivot.columns)
+    if gpt_col not in available_configs or opus_col not in available_configs:
+        mo.md(
+            f"⚠️ Need both `{gpt_col}` and `{opus_col}` in configs. "
+            f"Available: {sorted(available_configs - {'repo_id', 'language'})}"
+        )
+        gpt_only_repos = pl.DataFrame()
+    else:
+        gpt_only_repos = pivot.filter(pl.col(gpt_col) & ~pl.col(opus_col)).select(
+            "repo_id", "language"
+        )
+
+        mo.md(
+            f"""
+            ### gpt-5.4 winner but NOT claude-opus
+
+            **{len(gpt_only_repos)}** repos where gpt-5.4 is a test winner
+            but claude-opus is not.
+            """
+        )
+
+    return (gpt_only_repos, opus_col, gpt_col)
+
+
+@app.cell
+def _(mo, gpt_only_repos, wdf, pl, gpt_col, opus_col):
+    """Deep dive into the gpt-5.4-only winner repos."""
+    if gpt_only_repos.is_empty():
+        mo.md("_No gpt-5.4-only winner repos to analyze._")
+    else:
+        repo_ids = gpt_only_repos["repo_id"].to_list()
+
+        # Get full data for these repos, both configs
+        detail = wdf.filter(
+            pl.col("repo_id").is_in(repo_ids) & pl.col("config_name").is_in([gpt_col, opus_col])
+        ).select(
+            "repo_id",
+            "config_name",
+            "language",
+            "success",
+            "cost_usd",
+            "agent_walltime_seconds",
+            "tests_passed",
+            "tests_failed",
+            "unexpected_broken_commit_passes",
+            "num_broken_branches",
+            "restoration_check_failed",
+            "test_winner",
+            "error_message",
+        )
+
+        mo.md("### Detailed comparison for gpt-5.4-only winner repos")
+        mo.output.append(detail.sort("repo_id", "config_name"))
+
+        # Why did claude-opus lose?
+        opus_detail = detail.filter(pl.col("config_name") == opus_col)
+        opus_not_success = opus_detail.filter(~pl.col("success")).height
+        opus_restoration_fail = opus_detail.filter(
+            pl.col("success") & pl.col("restoration_check_failed")
+        ).height
+        opus_no_mutations = opus_detail.filter(
+            pl.col("success")
+            & ~pl.col("restoration_check_failed")
+            & (pl.col("unexpected_broken_commit_passes") >= pl.col("num_broken_branches"))
+        ).height
+        opus_higher_ubc = opus_detail.filter(
+            pl.col("success")
+            & ~pl.col("restoration_check_failed")
+            & (pl.col("unexpected_broken_commit_passes") < pl.col("num_broken_branches"))
+            & ~pl.col("test_winner")
+        ).height
+
+        mo.md(
+            f"""
+            ### Why claude-opus lost in these repos
+
+            | Reason | Count |
+            |--------|-------|
+            | Run failed (success=False) | {opus_not_success} |
+            | Restoration check failed | {opus_restoration_fail} |
+            | All mutations slipped through | {opus_no_mutations} |
+            | Caught fewer mutations than gpt-5.4 | {opus_higher_ubc} |
+            """
+        )
+
+
+@app.cell
+def _(mo, gpt_only_repos, wdf, pl):
+    """Pattern analysis: language distribution & aggregate stats."""
+    if gpt_only_repos.is_empty():
+        mo.md("_No gpt-5.4-only winner repos to analyze._")
+    else:
+        # Language distribution of gpt-5.4-only winner repos
+        lang_dist = (
+            gpt_only_repos.group_by("language")
+            .len()
+            .sort("len", descending=True)
+            .rename({"len": "count"})
+        )
+        mo.md("### Language distribution (gpt-5.4-only winner repos)")
+        mo.output.append(lang_dist)
+
+        # Compare aggregate stats: gpt-5.4-only-winner repos vs all other repos
+        gpt_only_ids = set(gpt_only_repos["repo_id"].to_list())
+        all_repos = set(wdf["repo_id"].unique().to_list())
+        other_ids = all_repos - gpt_only_ids
+
+        def agg_stats(repo_set: set[str], label: str) -> dict:
+            subset = wdf.filter(pl.col("repo_id").is_in(list(repo_set)) & pl.col("success"))
+            return {
+                "group": label,
+                "n_repos": len(repo_set),
+                "median_cost_usd": round(subset["cost_usd"].median() or 0, 3),
+                "median_duration_s": round(subset["agent_walltime_seconds"].median() or 0, 0),
+                "median_tests_passed": subset["tests_passed"].median(),
+                "median_tests_failed": subset["tests_failed"].median(),
+            }
+
+        stats_df = pl.DataFrame(
+            [
+                agg_stats(gpt_only_ids, "gpt-5.4-only winners"),
+                agg_stats(other_ids, "all other repos"),
+            ]
+        )
+        mo.md("### Aggregate stats comparison (successful runs only)")
+        mo.output.append(stats_df)
+
+
+if __name__ == "__main__":
+    app.run()

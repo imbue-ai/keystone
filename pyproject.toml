@@ -48,6 +48,7 @@ extend-exclude = ["*.ipynb"]
 "evals/eda/marimo_cdfs_for_blog.py" = ["PLC0415", "B018", "ARG001", "I001"]
 "evals/eda/marimo_box_plots_for_blog.py" = ["PLC0415", "B018", "ARG001", "I001"]
 "evals/eda/marimo_canonical_tests.py" = ["PLC0415", "B018", "ARG001", "I001"]
+"evals/eda/marimo_test_winners.py" = ["PLC0415", "B018", "ARG001", "I001"]
 
 [tool.ruff.lint]
 select = [

@@ -721,10 +721,9 @@ function renderStats() {
            onclick="showRerun(event,'${currentRun}','${model}')">&#x21ba;</button>`
       : "";
     const winN = winCounts[model] || 0;
-    const winTotal = winEligibleRows._total || 0;
-    const winPct = winTotal ? Math.round(100 * winN / winTotal) : 0;
-    const winChip = winTotal
-      ? `<span class="win-pct" title="Test winner: fraction of eligible repos where this config caught the most mutations (${winN}/${winTotal})">&#9733;${winPct}%</span>`
+    const winPct = total ? Math.round(100 * winN / total) : 0;
+    const winChip = total
+      ? `<span class="win-pct" title="Test winner: fraction of repos where this config caught the most mutations (${winN}/${total})">&#9733;${winPct}%</span>`
       : "";
     return `<div class="stat-chip">
       <div class="dot" style="background:${meta.color}"></div>

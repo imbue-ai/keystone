@@ -181,10 +181,10 @@ def _(mo, wdf, pl):
             name="Completed %",
             x=models,
             y=success_pcts,
-            marker_color="#22c55e",
+            marker_color="#4f46e5",
             text=[f"{v:.0f}%" for v in success_pcts],
             textposition="outside",
-            textfont={"size": 12, "color": "#16a34a"},
+            textfont={"size": 12, "color": "#4338ca"},
         )
     )
     fig.add_trace(
@@ -192,10 +192,10 @@ def _(mo, wdf, pl):
             name="Test Winner %",
             x=models,
             y=winner_pcts,
-            marker_color="#4f46e5",
+            marker_color="#22c55e",
             text=[f"{v:.0f}%" for v in winner_pcts],
             textposition="outside",
-            textfont={"size": 12, "color": "#4338ca"},
+            textfont={"size": 12, "color": "#16a34a"},
         )
     )
     fig.update_layout(

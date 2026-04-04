@@ -408,10 +408,10 @@ def _(mo, df, pl):
     # Prepare pandas df with all runs for box plots
     box_df = df.to_pandas()
 
-    # Order: claude models, then gpt, then codex models
+    # Order: haiku first, then opus, gpt in center, codex models on right
     configs = [
-        "claude-opus",
         "claude-haiku",
+        "claude-opus",
         "gpt-5.4",
         "codex-gpt-5.3",
         "codex-mini-gpt-5.1",

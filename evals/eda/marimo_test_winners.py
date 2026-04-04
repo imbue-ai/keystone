@@ -408,7 +408,15 @@ def _(mo, df, pl):
     # Prepare pandas df with all runs for box plots
     box_df = df.to_pandas()
 
-    configs = sorted(box_df["config_name"].unique())
+    # Order: claude models, then gpt, then codex models
+    configs = [
+        "claude-opus",
+        "claude-haiku",
+        "gpt-5.4",
+        "codex-gpt-5.3",
+        "codex-mini-gpt-5.1",
+    ]
+    configs = [c for c in configs if c in box_df["config_name"].unique()]
     import pandas as pd
 
     box_df["config_name"] = pd.Categorical(box_df["config_name"], categories=configs, ordered=True)

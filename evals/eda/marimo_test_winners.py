@@ -220,7 +220,7 @@ def _(mo, wdf, pl):
         template="plotly_white",
         legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "center", "x": 0.5},
         height=400,
-        xaxis_tickangle=-45,
+        xaxis_tickangle=-30,
     )
 
     # Save plots

@@ -461,7 +461,9 @@ def _(mo, df, pl):
             title=title,
             labels={"config_label": "Config", y: y_label},
         )
-        fig.update_layout(showlegend=False, template="plotly_white", height=450)
+        fig.update_layout(
+            showlegend=False, template="plotly_white", height=450, xaxis_tickangle=-30
+        )
         if y_tickformat:
             fig.update_layout(yaxis_tickformat=y_tickformat)
         return fig

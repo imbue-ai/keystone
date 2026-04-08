@@ -2,11 +2,13 @@
 # keystone_budget.sh — Check remaining time and budget for this agent session.
 # Exits non-zero if time or budget is exhausted.
 
+set -uo pipefail
+
 OVER_BUDGET=0
 NOW=$(date +%s)
 
 # Time remaining
-if [ -n "$AGENT_TIME_DEADLINE" ]; then
+if [ -n "${AGENT_TIME_DEADLINE:-}" ]; then
   REMAINING_SECS=$((AGENT_TIME_DEADLINE - NOW))
   if [ "$REMAINING_SECS" -le 0 ]; then
     echo "Remaining time: 0 seconds (OVER TIME)"
@@ -19,7 +21,7 @@ else
 fi
 
 # Budget remaining
-if [ -n "$AGENT_BUDGET_CAP_USD" ] && [ -n "$CCUSAGE_COMMAND" ]; then
+if [ -n "${AGENT_BUDGET_CAP_USD:-}" ] && [ -n "${CCUSAGE_COMMAND:-}" ]; then
   CURRENT_COST=$($CCUSAGE_COMMAND session --json --offline 2>/dev/null \
     | jq -r '(.sessions[0].totalCost // 0)')
   if [ $? -eq 0 ] && [ -n "$CURRENT_COST" ]; then

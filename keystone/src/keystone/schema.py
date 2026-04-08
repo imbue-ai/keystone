@@ -39,6 +39,7 @@ class LLMModel(StrEnum):
     # Claude models
     HAIKU = "claude-haiku-4-5-20251001"
     OPUS = "claude-opus-4-6"
+    SONNET = "claude-sonnet-4-5-20250929"
     # Codex models
     CODEX_MINI = "gpt-5.1-codex-mini"
     CODEX = "gpt-5.2-codex"

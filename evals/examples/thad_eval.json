@@ -2,22 +2,40 @@
   "description": "Trying to get things working again!",
   "repo_list_path": "evals/examples/repos_with_mutations.jsonl",
   "s3_output_prefix": "s3://int8-datasets/keystone/evals/2026-04-01_thad_eval_v1/",
+  // "s3_output_prefix": "s3://int8-datasets/keystone/evals/2026-04-06_thad_eval_variants/",
   "s3_repo_cache_prefix": "s3://int8-datasets/keystone/evals/repo-tarballs-with-mutations/",
-  // "limit_to_first_n_repos": 10,
+  "limit_to_first_n_repos": 2,
   "max_concurrent": 200,
   "task_start_stagger_seconds": 1,
   "configs": [
     // --------------------------------------------------
     // Baseline
+    // {
+    //   "name": "claude-opus",
+    //   "keystone_config": {
+    //     "agent_config": {
+    //       "guardrail": true, 
+    //       "use_agents_md": true,
+    //       "agent_in_modal": true,
+    //       "provider": "claude",
+    //       "model": "claude-opus-4-6",
+    //       "claude_reasoning_level": "high",
+    //       "max_budget_usd": 10.0,
+    //       "agent_time_limit_seconds": 3600,
+    //       "cost_poll_interval_seconds": 30,
+    //     }
+    //   },
+    //   "trials_per_repo": 1
+    // },
     {
-      "name": "claude-opus",
+      "name": "claude-sonnet",
       "keystone_config": {
         "agent_config": {
           "guardrail": true, 
           "use_agents_md": true,
           "agent_in_modal": true,
           "provider": "claude",
-          "model": "claude-opus-4-6",
+          "model": "claude-sonnet-4-5-20250929",
           "claude_reasoning_level": "high",
           "max_budget_usd": 10.0,
           "agent_time_limit_seconds": 3600,
@@ -114,7 +132,8 @@
     //       "model": "claude-opus-4-6",
     //       "claude_reasoning_level": "high",
     //       "max_budget_usd": 10.0,
-    //       "agent_time_limit_seconds": 3600
+    //       "agent_time_limit_seconds": 3600,
+    //       "cost_poll_interval_seconds": 30,
     //     }
     //   },
     //   "trials_per_repo": 1
@@ -151,7 +170,8 @@
     //       "model": "claude-opus-4-6",
     //       "claude_reasoning_level": "high",
     //       "max_budget_usd": 10.0,
-    //       "agent_time_limit_seconds": 3600
+    //       "agent_time_limit_seconds": 3600,
+    //       "cost_poll_interval_seconds": 30,
     //     }
     //   },
     //   "trials_per_repo": 1
@@ -187,7 +207,8 @@
     //       "model": "claude-opus-4-6",
     //       "claude_reasoning_level": "max",
     //       "max_budget_usd": 10.0,
-    //       "agent_time_limit_seconds": 3600
+    //       "agent_time_limit_seconds": 3600,
+    //       "cost_poll_interval_seconds": 30,
     //     }
     //   },
     //   "trials_per_repo": 1

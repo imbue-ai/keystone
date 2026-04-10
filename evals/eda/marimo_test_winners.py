@@ -1,8 +1,7 @@
-"""Test Winner Analysis — marimo notebook.
+"""Mutation Winner Analysis — marimo notebook.
 
-Computes the "test winner" flag per (config, repo) using the same logic as
-the HTML eval viewer, then compares gpt-5.4 vs claude-opus to find repos
-where gpt-5.4 wins but claude-opus does not.
+Computes the "mutation winner" flag per (config, repo) and compares model
+performance across languages and cost/time dimensions.
 
 Run interactively::
 
@@ -21,17 +20,21 @@ def _():
 
     mo.md(
         """
-        # Test Winner Analysis
+        # Mutation Winner Analysis
 
-        Replicates the "test winner" badge logic from the HTML eval viewer
-        and investigates repos where **gpt-5.4** is a test winner but
-        **claude-opus** is not.
+        Computes the "mutation winner" flag per (config, repo) and compares
+        model performance across languages and cost/time dimensions.
 
-        **Test winner criteria** (per repo, across configs):
+        **Mutation winner criteria** (per repo, across configs):
         1. `success == True`
         2. `num_broken_branches > 0`
         3. `unexpected_broken_commit_passes < num_broken_branches` (caught at least one mutation)
-        4. `restoration_check_failed == False`
+        4. **Restoration verified** — the post-broken-commits verification must
+           exist *and* succeed. If the restoration check was never run (e.g. the
+           runner crashed) or explicitly failed, the run is ineligible. Without a
+           successful restoration, mutation counts are unreliable because the first
+           broken commit may have left residual damage that cascades through all
+           subsequent mutations.
         5. Among eligible configs, has the minimum `unexpected_broken_commit_passes` (ties allowed)
         """
     )
@@ -53,7 +56,7 @@ def _(mo):
 
     from eval_schema import KeystoneRepoResult
 
-    PARQUET_PATH = Path("/tmp/2026-04-01_thad_eval_v1.parquet")
+    PARQUET_PATH = Path(__file__).resolve().parent / "2026-04-01_thad_eval_v1.parquet"
     if not PARQUET_PATH.exists():
         mo.md(
             f"""
@@ -63,7 +66,7 @@ def _(mo):
             ```bash
             uv run python evals/eda/eval_to_parquet_cli.py \\
                 s3://int8-datasets/keystone/evals/2026-04-01_thad_eval_v1 \\
-                {PARQUET_PATH}
+                evals/eda/2026-04-01_thad_eval_v1.parquet
             ```
             """
         )
@@ -89,12 +92,49 @@ def _(mo):
                 "summary": row["summary"],
                 "language": r.repo_entry.language or "unknown",
                 "unexpected_broken_commit_passes": r.unexpected_broken_commit_passes,
-                "restoration_check_failed": r.restoration_check_failed,
+                # Treat missing post-restoration verification as a restoration failure:
+                # without evidence tests still pass after running broken commits,
+                # mutation counts are unreliable (first breakage may cascade).
+                "restoration_check_failed": (
+                    r.restoration_check_failed
+                    or r.bootstrap_result is None
+                    or r.bootstrap_result.post_broken_commits_verification is None
+                ),
                 "num_broken_branches": len(r.repo_entry.broken_branches),
             }
         )
 
     df = pl.DataFrame(rows)
+
+    # Display names: pretty labels with version numbers and proper capitalization
+    DISPLAY_NAMES: dict[str, str] = {
+        "claude-opus": "Claude Opus 4.6",
+        "gpt-5.4": "GPT-5.4",
+        "claude-sonnet": "Claude Sonnet 4.5",
+        "codex-gpt-5.3": "Codex GPT-5.3",
+        "claude-haiku": "Claude Haiku 4.5",
+        "codex-mini-gpt-5.1": "Codex Mini GPT-5.1",
+    }
+
+    # Per-model colors (matches default plotly sequence in MODEL_ORDER)
+    MODEL_COLORS: dict[str, str] = {
+        "claude-opus": "#636EFA",
+        "gpt-5.4": "#EF553B",
+        "claude-sonnet": "#00CC96",
+        "codex-gpt-5.3": "#AB63FA",
+        "claude-haiku": "#FFA15A",
+        "codex-mini-gpt-5.1": "#19D3F3",
+    }
+
+    # Canonical display order (best first, cheapest last)
+    MODEL_ORDER: list[str] = [
+        "claude-opus",
+        "gpt-5.4",
+        "claude-sonnet",
+        "codex-gpt-5.3",
+        "claude-haiku",
+        "codex-mini-gpt-5.1",
+    ]
 
     mo.md(
         f"""
@@ -103,7 +143,7 @@ def _(mo):
         **{df["repo_id"].n_unique()}** repos.
         """
     )
-    return (df, json, pl)
+    return (DISPLAY_NAMES, MODEL_COLORS, MODEL_ORDER, df, json, pl)
 
 
 @app.cell
@@ -149,7 +189,7 @@ def _(df, pl):
 
 
 @app.cell
-def _(mo, wdf, pl):
+def _(mo, wdf, pl, DISPLAY_NAMES, MODEL_ORDER):
     """Bar chart: success rate and test-winner rate per model."""
     import pathlib
 
@@ -170,16 +210,9 @@ def _(mo, wdf, pl):
         )
     )
 
-    # Fixed display order: haiku, opus, gpt center, codex right
-    _model_order = [
-        "claude-haiku",
-        "claude-opus",
-        "gpt-5.4",
-        "codex-gpt-5.3",
-        "codex-mini-gpt-5.1",
-    ]
     available = set(stats["config_name"].to_list())
-    models = [m for m in _model_order if m in available]
+    models = [m for m in MODEL_ORDER if m in available]
+    display_labels = [DISPLAY_NAMES.get(m, m) for m in models]
     # Reorder stats to match
     stats = (
         stats.filter(pl.col("config_name").is_in(models))
@@ -193,7 +226,7 @@ def _(mo, wdf, pl):
     fig.add_trace(
         go.Bar(
             name="Completed %",
-            x=models,
+            x=display_labels,
             y=success_pcts,
             marker_color="#4f46e5",
             text=[f"{v:.0f}%" for v in success_pcts],
@@ -203,8 +236,8 @@ def _(mo, wdf, pl):
     )
     fig.add_trace(
         go.Bar(
-            name="Test Winner %",
-            x=models,
+            name="Mutation Win %",
+            x=display_labels,
             y=winner_pcts,
             marker_color="#22c55e",
             text=[f"{v:.0f}%" for v in winner_pcts],
@@ -214,7 +247,7 @@ def _(mo, wdf, pl):
     )
     fig.update_layout(
         barmode="group",
-        title="Completed Rate & Test Winner Rate per Model",
+        title="Completed Rate & Mutation Win Rate per Model",
         yaxis_title="Percentage",
         yaxis_range=[0, 105],
         template="plotly_white",
@@ -243,19 +276,131 @@ def _(mo, wdf, pl):
 
 
 @app.cell
-def _(mo, total_eligible_repos, wdf, winner_counts, pl):
-    """Show overall winner stats and identify gpt-5.4-only wins."""
+def _(mo, wdf, pl, DISPLAY_NAMES, MODEL_COLORS, MODEL_ORDER):
+    """Stacked bar chart: completed & test-winner rate per language, top 4 models."""
+    import pathlib as _pathlib
 
-    mo.md(
-        f"""
-        ## Test Winner Summary
+    import plotly.graph_objects as _go2
 
-        **{total_eligible_repos}** repos have at least one eligible config
-        (success + caught ≥1 mutation + restoration passed).
-        """
+    # Top 4 models only
+    _top4 = MODEL_ORDER[:4]
+
+    # Compute per (language, config) stats
+    _lang_stats = (
+        wdf.filter(pl.col("config_name").is_in(_top4))
+        .group_by("language", "config_name")
+        .agg(
+            pl.col("success").sum().alias("n_success"),
+            pl.col("test_winner").sum().alias("n_winner"),
+            pl.len().alias("n_total"),
+        )
+        .with_columns(
+            (100.0 * pl.col("n_success") / pl.col("n_total")).round(1).alias("success_pct"),
+            (100.0 * pl.col("n_winner") / pl.col("n_total")).round(1).alias("winner_pct"),
+        )
     )
 
-    mo.output.append(winner_counts)
+    # Only keep languages with enough repos; order by avg success rate (descending)
+    _lang_agg = (
+        wdf.filter(pl.col("config_name").is_in(_top4))
+        .group_by("language")
+        .agg(
+            pl.col("repo_id").n_unique().alias("n_repos"),
+            pl.col("success").mean().alias("avg_success"),
+        )
+        .filter(pl.col("n_repos") >= 5)
+        .sort("avg_success", descending=True)
+    )
+    _languages = _lang_agg["language"].to_list()
+    _lang_n_repos = dict(
+        zip(_lang_agg["language"].to_list(), _lang_agg["n_repos"].to_list(), strict=True)
+    )
+    _lang_labels = [f"{lang}\n(N={_lang_n_repos[lang]})" for lang in _languages]
+
+    fig_lang = _go2.Figure()
+
+    def _hex_to_rgba(hex_color: str, alpha: float) -> str:
+        """Convert #RRGGBB to rgba(r, g, b, a)."""
+        _h = hex_color.lstrip("#")
+        _r, _g, _b = int(_h[0:2], 16), int(_h[2:4], 16), int(_h[4:6], 16)
+        return f"rgba({_r}, {_g}, {_b}, {alpha})"
+
+    for _cfg in _top4:
+        _display = DISPLAY_NAMES.get(_cfg, _cfg)
+        _color_hex = MODEL_COLORS.get(_cfg, "#888888")
+        _color_solid = _hex_to_rgba(_color_hex, 1.0)
+        _color_faded = _hex_to_rgba(_color_hex, 0.3)
+        _cfg_data = _lang_stats.filter(pl.col("config_name") == _cfg)
+
+        # Build per-language values in display order
+        _winner_vals: list[float] = []
+        _completed_extra_vals: list[float] = []
+        for _lang in _languages:
+            _row = _cfg_data.filter(pl.col("language") == _lang)
+            if _row.height == 0:
+                _winner_vals.append(0.0)
+                _completed_extra_vals.append(0.0)
+            else:
+                _w = _row["winner_pct"][0]
+                _s = _row["success_pct"][0]
+                _winner_vals.append(_w)
+                _completed_extra_vals.append(_s - _w)
+
+        # Bottom bar: test winner (solid color)
+        fig_lang.add_trace(
+            _go2.Bar(
+                name=f"{_display} Mutation Win %",
+                x=_lang_labels,
+                y=_winner_vals,
+                marker_color=_color_solid,
+                legendgroup=_cfg,
+                offsetgroup=_cfg,
+            )
+        )
+        # Top bar: completed minus winner (faded via RGBA alpha)
+        fig_lang.add_trace(
+            _go2.Bar(
+                name=f"{_display} Completed %",
+                x=_lang_labels,
+                y=_completed_extra_vals,
+                marker_color=_color_faded,
+                legendgroup=_cfg,
+                offsetgroup=_cfg,
+            )
+        )
+
+    fig_lang.update_layout(
+        barmode="stack",
+        title="Completed & Mutation Win Rate by Language (Top 4 Models)",
+        yaxis_title="Percentage",
+        yaxis_range=[0, 105],
+        template="plotly_white",
+        legend={
+            "orientation": "h",
+            "yanchor": "bottom",
+            "y": 1.02,
+            "xanchor": "center",
+            "x": 0.5,
+            "font": {"size": 10},
+        },
+        height=500,
+        xaxis_tickangle=-30,
+    )
+
+    # Save
+    _plot_dir2 = _pathlib.Path(__file__).parent / "blog_plots"
+    _plot_dir2.mkdir(parents=True, exist_ok=True)
+    _cdn3 = "https://cdn.plot.ly/plotly-2.35.2.min.js"
+    fig_lang.write_html(str(_plot_dir2 / "lang_completed_and_winner.html"), include_plotlyjs=_cdn3)
+    fig_lang.write_image(str(_plot_dir2 / "lang_completed_and_winner.png"), scale=2)
+
+    mo.md("## Completed & Mutation Win by Language")
+    fig_lang
+
+
+@app.cell
+def _(total_eligible_repos, wdf, winner_counts, pl):
+    """Compute pivot and gpt-5.4-only winner repos (hidden cell)."""
 
     # Pivot: repo x config -> test_winner bool
     pivot = (
@@ -269,171 +414,28 @@ def _(mo, total_eligible_repos, wdf, winner_counts, pl):
 
     available_configs = set(pivot.columns)
     if gpt_col not in available_configs or opus_col not in available_configs:
-        mo.md(
-            f"⚠️ Need both `{gpt_col}` and `{opus_col}` in configs. "
-            f"Available: {sorted(available_configs - {'repo_id', 'language'})}"
-        )
-        gpt_only_repos = pl.DataFrame()
+        _gpt_only_repos = pl.DataFrame()
     else:
-        gpt_only_repos = pivot.filter(pl.col(gpt_col) & ~pl.col(opus_col)).select(
+        _gpt_only_repos = pivot.filter(pl.col(gpt_col) & ~pl.col(opus_col)).select(
             "repo_id", "language"
         )
 
-        mo.md(
-            f"""
-            ### gpt-5.4 winner but NOT claude-opus
-
-            **{len(gpt_only_repos)}** repos where gpt-5.4 is a test winner
-            but claude-opus is not.
-            """
-        )
-
-    return (gpt_only_repos, opus_col, gpt_col)
-
 
 @app.cell
-def _(mo, gpt_only_repos, wdf, pl, gpt_col, opus_col):
-    """Deep dive into the gpt-5.4-only winner repos."""
-    if gpt_only_repos.is_empty():
-        mo.md("_No gpt-5.4-only winner repos to analyze._")
-    else:
-        repo_ids = gpt_only_repos["repo_id"].to_list()
-
-        # Get full data for these repos, both configs
-        detail = wdf.filter(
-            pl.col("repo_id").is_in(repo_ids) & pl.col("config_name").is_in([gpt_col, opus_col])
-        ).select(
-            "repo_id",
-            "config_name",
-            "language",
-            "success",
-            "cost_usd",
-            "agent_walltime_seconds",
-            "tests_passed",
-            "tests_failed",
-            "unexpected_broken_commit_passes",
-            "num_broken_branches",
-            "restoration_check_failed",
-            "test_winner",
-            "error_message",
-        )
-
-        mo.md("### Detailed comparison for gpt-5.4-only winner repos")
-        mo.output.append(detail.sort("repo_id", "config_name"))
-
-        # Why did claude-opus lose?
-        opus_detail = detail.filter(pl.col("config_name") == opus_col)
-        opus_not_success = opus_detail.filter(~pl.col("success")).height
-        opus_restoration_fail = opus_detail.filter(
-            pl.col("success") & pl.col("restoration_check_failed")
-        ).height
-        opus_no_mutations = opus_detail.filter(
-            pl.col("success")
-            & ~pl.col("restoration_check_failed")
-            & (pl.col("unexpected_broken_commit_passes") >= pl.col("num_broken_branches"))
-        ).height
-        opus_higher_ubc = opus_detail.filter(
-            pl.col("success")
-            & ~pl.col("restoration_check_failed")
-            & (pl.col("unexpected_broken_commit_passes") < pl.col("num_broken_branches"))
-            & ~pl.col("test_winner")
-        ).height
-
-        mo.md(
-            f"""
-            ### Why claude-opus lost in these repos
-
-            | Reason | Count |
-            |--------|-------|
-            | Run failed (success=False) | {opus_not_success} |
-            | Restoration check failed | {opus_restoration_fail} |
-            | All mutations slipped through | {opus_no_mutations} |
-            | Caught fewer mutations than gpt-5.4 | {opus_higher_ubc} |
-            """
-        )
-
-
-@app.cell
-def _(mo, gpt_only_repos, wdf, pl):
-    """Pattern analysis: language distribution & aggregate stats."""
-    if gpt_only_repos.is_empty():
-        mo.md("_No gpt-5.4-only winner repos to analyze._")
-    else:
-        # Language distribution of gpt-5.4-only winner repos
-        lang_dist = (
-            gpt_only_repos.group_by("language")
-            .len()
-            .sort("len", descending=True)
-            .rename({"len": "count"})
-        )
-        mo.md("### Language distribution (gpt-5.4-only winner repos)")
-        mo.output.append(lang_dist)
-
-        # Compare aggregate stats: gpt-5.4-only-winner repos vs all other repos
-        gpt_only_ids = set(gpt_only_repos["repo_id"].to_list())
-        all_repos = set(wdf["repo_id"].unique().to_list())
-        other_ids = all_repos - gpt_only_ids
-
-        def agg_stats(repo_set: set[str], label: str) -> dict:
-            subset = wdf.filter(pl.col("repo_id").is_in(list(repo_set)) & pl.col("success"))
-            return {
-                "group": label,
-                "n_repos": len(repo_set),
-                "median_cost_usd": round(subset["cost_usd"].median() or 0, 3),
-                "median_duration_s": round(subset["agent_walltime_seconds"].median() or 0, 0),
-                "median_tests_passed": subset["tests_passed"].median(),
-                "median_tests_failed": subset["tests_failed"].median(),
-            }
-
-        stats_df = pl.DataFrame(
-            [
-                agg_stats(gpt_only_ids, "gpt-5.4-only winners"),
-                agg_stats(other_ids, "all other repos"),
-            ]
-        )
-        mo.md("### Aggregate stats comparison (successful runs only)")
-        mo.output.append(stats_df)
-
-
-@app.cell
-def _(mo, gpt_only_repos):
-    """List repo names where gpt-5.4 is a test winner but claude-opus is not."""
-    if gpt_only_repos.is_empty():
-        _out = mo.md("_No gpt-5.4-only winner repos._")
-    else:
-        names = sorted(gpt_only_repos["repo_id"].to_list())
-        bullet_list = "\n".join(f"- `{n}`" for n in names)
-        _out = mo.md(
-            f"""
-            ### Repos where gpt-5.4 wins but claude-opus does not ({len(names)})
-
-            {bullet_list}
-            """
-        )
-    _out
-
-
-@app.cell
-def _(mo, df, pl):
+def _(mo, df, pl, DISPLAY_NAMES, MODEL_COLORS, MODEL_ORDER):
     """Box plots for agent wall-clock time and inference cost."""
     import pathlib as _pathlib
 
     import plotly.express as px
+    import plotly.graph_objects as _go
 
     # Prepare pandas df with all runs for box plots
     box_df = df.to_pandas()
 
-    # Order: haiku first, then opus, gpt in center, codex models on right
-    configs = [
-        "claude-haiku",
-        "claude-opus",
-        "gpt-5.4",
-        "codex-gpt-5.3",
-        "codex-mini-gpt-5.1",
-    ]
-    configs = [c for c in configs if c in box_df["config_name"].unique()]
+    configs = [c for c in MODEL_ORDER if c in box_df["config_name"].unique()]
     import pandas as pd
 
+    box_df["agent_walltime_minutes"] = box_df["agent_walltime_seconds"] / 60.0
     box_df["config_name"] = pd.Categorical(box_df["config_name"], categories=configs, ordered=True)
 
     # Count non-null values per config for N= labels
@@ -443,9 +445,11 @@ def _(mo, df, pl):
         title: str,
         y_label: str,
         y_tickformat: str | None = None,
+        annotation_format: str = ".0f",
     ) -> "plotly.graph_objects.Figure":  # noqa: F821
         counts = data.dropna(subset=[y]).groupby("config_name", observed=True).size()
-        label_map = {c: f"{c}\n(N={int(counts.get(c, 0))})" for c in configs}
+        label_map = {c: f"{DISPLAY_NAMES.get(c, c)}\n(N={int(counts.get(c, 0))})" for c in configs}
+        color_map = {label_map[c]: MODEL_COLORS.get(c, "#888888") for c in configs}
         plot_df = data.copy()
         plot_df["config_label"] = plot_df["config_name"].map(label_map)
         ordered_labels = [label_map[c] for c in configs]
@@ -455,24 +459,53 @@ def _(mo, df, pl):
             x="config_label",
             y=y,
             color="config_label",
+            color_discrete_map=color_map,
             points="all",
             hover_data=["repo_id"],
             category_orders={"config_label": ordered_labels},
             title=title,
             labels={"config_label": "Config", y: y_label},
         )
+        # Semi-transparent points with thin black outlines
+        fig.update_traces(
+            marker={
+                "opacity": 0.4,
+                "size": 4,
+                "line": {"width": 0.5, "color": "black"},
+            },
+        )
         fig.update_layout(
             showlegend=False, template="plotly_white", height=450, xaxis_tickangle=-30
         )
         if y_tickformat:
             fig.update_layout(yaxis_tickformat=y_tickformat)
+
+        # Add median annotations above each box
+        medians = data.dropna(subset=[y]).groupby("config_name", observed=True)[y].median()
+        for cfg in configs:
+            if cfg not in medians:
+                continue
+            med = medians[cfg]
+            label = label_map[cfg]
+            fmt = y_tickformat or ""
+            text = f"${med:.2f}" if fmt.startswith("$") else f"{med:{annotation_format}}"
+            fig.add_annotation(
+                x=label,
+                y=med,
+                text=f"<b>{text}</b>",
+                showarrow=False,
+                yshift=12,
+                font=_go.layout.annotation.Font(size=11, color="#333"),
+            )
+
         return fig
 
     fig_time = make_box(
         box_df,
-        y="agent_walltime_seconds",
+        y="agent_walltime_minutes",
         title="Agent Wall-clock Time by Config (per repo)",
-        y_label="Wall-clock Time (s)",
+        y_label="Wall-clock Time (min)",
+        annotation_format=".1f",
     )
 
     fig_cost = make_box(

@@ -1,6 +1,6 @@
 [project]
 name = "imbue-keystone"
-version = "0.1.1"
+version = "1.0.0"
 description = "Automatically generates a working .devcontainer/ setup for any project using an AI agent"
 readme = "README.md"
 license = {text = "MIT"}

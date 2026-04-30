@@ -23,6 +23,7 @@ import pytest
 from conftest import SAMPLES_DIR, init_git_repo, parse_bootstrap_result
 from typer.testing import CliRunner
 
+from keystone.modal.image import FAKE_CLAUDE_AGENT_SCRIPT_PATH
 from keystone.junit_report_parser import parse_junit_xml
 from keystone.keystone_cli import app
 from keystone.schema import BootstrapResult
@@ -54,7 +55,7 @@ def test_e2e_fake_agent(
     del caplog
     use_modal = execution_mode == "modal"
     test_artifacts_dir = tmp_path / "test_artifacts"
-    fake_agent_src = Path(__file__).parent / "fake_claude_agent.py"
+    fake_agent_src = FAKE_CLAUDE_AGENT_SCRIPT_PATH
     cache_file = tmp_path / "cache.sqlite"
 
     # fake_claude_agent.py is baked into the Modal image at /usr/local/bin/fake_claude_agent.py
@@ -254,7 +255,7 @@ def test_e2e_broken_commit_verification(
     """
     use_modal = execution_mode == "modal"
     test_artifacts_dir = tmp_path / "test_artifacts"
-    fake_agent_src = Path(__file__).parent / "fake_claude_agent.py"
+    fake_agent_src = FAKE_CLAUDE_AGENT_SCRIPT_PATH
 
     agent_cmd_str = "fake_claude_agent.py" if use_modal else str(fake_agent_src)
 
@@ -346,7 +347,7 @@ def test_e2e_fake_agent_fails_on_rust_project(tmp_path: Path, project_root: Path
     Rust tests, so verification should fail.
     """
     test_artifacts_dir = tmp_path / "test_artifacts"
-    fake_agent = Path(__file__).parent / "fake_claude_agent.py"
+    fake_agent = FAKE_CLAUDE_AGENT_SCRIPT_PATH
 
     logger.info("=" * 60)
     logger.info("E2E Test: Fake Agent on Rust Project (Expected Failure)")

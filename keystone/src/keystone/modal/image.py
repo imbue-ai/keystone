@@ -8,12 +8,12 @@ from pathlib import Path
 import modal
 
 _MODAL_DIR = Path(__file__).parent
-_REPO_ROOT = _MODAL_DIR.parent.parent.parent.parent  # keystone/src/keystone/modal -> repo root
+_PACKAGE_ROOT = _MODAL_DIR.parent  # keystone/src/keystone/modal -> keystone/src/keystone
 START_DOCKERD_SCRIPT_PATH = _MODAL_DIR / "start_dockerd.sh"
 WAIT_FOR_DOCKER_SCRIPT_PATH = _MODAL_DIR / "wait_for_docker.sh"
 TIMESTAMP_SCRIPT_PATH = _MODAL_DIR / "timestamp_process_output.pl"
-FAKE_CLAUDE_AGENT_SCRIPT_PATH = _REPO_ROOT / "keystone" / "tests" / "fake_claude_agent.py"
-FAKE_CODEX_AGENT_SCRIPT_PATH = _REPO_ROOT / "keystone" / "tests" / "fake_codex_agent.py"
+FAKE_CLAUDE_AGENT_SCRIPT_PATH = _PACKAGE_ROOT / "_fake_agents" / "fake_claude_agent.py"
+FAKE_CODEX_AGENT_SCRIPT_PATH = _PACKAGE_ROOT / "_fake_agents" / "fake_codex_agent.py"
 
 
 IMAGE_CACHE_BUST = "2026-03-10T23:30:00-fix-junit-xpath"  # bump to force Modal image rebuild

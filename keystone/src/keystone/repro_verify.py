@@ -76,7 +76,6 @@ def _run_tests_in_container(
             container_name,
             "timeout",
             str(test_timeout_seconds),
-            "bash",
             "/run_all_tests.sh",
         ]
     else:
@@ -90,7 +89,6 @@ def _run_tests_in_container(
             "--name",
             container_name,
             image_name,
-            "bash",
             "/run_all_tests.sh",
         ]
     test_proc = subprocess.run(test_cmd, capture_output=True, text=True)

@@ -975,7 +975,6 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
                     container_name,
                     "timeout",
                     str(test_timeout_seconds),
-                    "bash",
                     "/run_all_tests.sh",
                     name=f"test-{ref_short}",
                 )
@@ -990,7 +989,6 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
                     "--name",
                     container_name,
                     image_name or "",
-                    "bash",
                     "/run_all_tests.sh",
                     name=f"test-{ref_short}",
                 )

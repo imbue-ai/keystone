@@ -80,6 +80,11 @@ Any changes you make outside the .devcontainer/ directory (e.g., fixing source f
 
 2. Create a .devcontainer/Dockerfile alongside it that is capable of building and running the project's test suite.
 
+  The image MUST have `bash` available on PATH — the test runner is invoked as
+  `bash /run_all_tests.sh`. For alpine-based images, install it explicitly
+  (e.g. `RUN apk add --no-cache bash`). For debian/ubuntu images, bash is
+  already present.
+
   The Dockerfile MUST contain these lines, ideally early in the file, to create a writable test artifacts directory:
 ```Dockerfile
 # Create test artifacts directory.
@@ -412,6 +417,10 @@ All files go inside `.devcontainer/` — nothing outside that directory is prese
    COPY .devcontainer/run_all_tests.sh /run_all_tests.sh
    RUN chmod +x /run_all_tests.sh
    ```
+   - The image MUST have `bash` on PATH — the runner invokes
+     `bash /run_all_tests.sh`. For alpine-based images, install it
+     explicitly (`RUN apk add --no-cache bash`). debian/ubuntu images
+     already include bash.
    - Copy source files explicitly — do NOT use `COPY . .`. You work inside `.devcontainer/`,
      so `COPY . .` would include your own files and invalidate the layer cache on every change.
      Instead: `COPY src/ ./src/`, `COPY pyproject.toml uv.lock ./`, etc.

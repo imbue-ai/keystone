@@ -402,9 +402,13 @@ def bootstrap(
         agent_log = AgentLog(effective_log_db)
         cli_run_id = agent_log.generate_run_id()
 
-        # Compute cache key
+        # Compute cache key. Hash both the CLI prompt and the AGENTS.md
+        # contents (when present) so edits to either bust the cache.
+        cache_key_prompt = prompt_result.cli_prompt
+        if prompt_result.agents_md is not None:
+            cache_key_prompt += "\n---AGENTS.md---\n" + prompt_result.agents_md
         cache_key = compute_cache_key(
-            prompt_result.cli_prompt, project_root, agent_config, cache_version
+            cache_key_prompt, project_root, agent_config, cache_version
         )
         print(
             f"Cache key - git tree: {cache_key.git_tree_hash}, "

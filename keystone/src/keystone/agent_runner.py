@@ -244,12 +244,15 @@ class LocalAgentRunner(AgentRunner):
         full_cmd = provider.build_command(prompt, max_budget_usd, agent_cmd)
         full_cmd = self._with_timeout(time_limit_seconds, full_cmd)
 
-        # Set budget/time env vars for budget.sh
-        ccusage_command = "ccusage-codex" if provider.name == "codex" else "ccusage"
+        # Set budget/time env vars for budget.sh.  Honor a caller-supplied
+        # CCUSAGE_COMMAND override (lets local fake-agent tests neutralize
+        # ccusage so prior real Claude Code usage on the host doesn't
+        # poison the budget check).
+        default_ccusage = "ccusage-codex" if provider.name == "codex" else "ccusage"
         budget_env = {
             "AGENT_TIME_DEADLINE": str(int(time.time()) + time_limit_seconds),
             "AGENT_BUDGET_CAP_USD": str(max_budget_usd),
-            "CCUSAGE_COMMAND": ccusage_command,
+            "CCUSAGE_COMMAND": os.environ.get("CCUSAGE_COMMAND") or default_ccusage,
         }
 
         result = run_process(

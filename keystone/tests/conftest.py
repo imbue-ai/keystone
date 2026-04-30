@@ -17,6 +17,19 @@ def _silence_noisy_loggers() -> None:
         logging.getLogger(name).setLevel(logging.INFO)
 
 
+@pytest.fixture(autouse=True)
+def _neutralize_ccusage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Disable real ccusage in tests.
+
+    The local agent runner reads CCUSAGE_COMMAND from env. If `ccusage` is
+    installed on the host, it reports prior accumulated Claude Code cost
+    across the user's sessions, which can immediately exceed the agent's
+    budget cap and break tests that exercise keystone_budget.sh. Pointing
+    the var at `true` makes the budget script treat ccusage as unavailable.
+    """
+    monkeypatch.setenv("CCUSAGE_COMMAND", "true")
+
+
 # Path to samples directory
 SAMPLES_DIR = Path(__file__).parent.parent.parent / "samples"
 

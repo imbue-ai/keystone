@@ -152,13 +152,20 @@ def extract_summary(result: KeystoneRepoResult) -> dict:
         "status_messages": status_messages,
         "agent_error_msgs": agent_error_msgs,
         "unexpected_broken_commit_passes": result.unexpected_broken_commit_passes,
-        # Match marimo_test_winners.py eligibility: treat missing post-restoration
-        # verification as a restoration failure — without evidence that tests still
-        # pass after broken commits, mutation counts are unreliable.
+        # Match marimo_test_winners.py eligibility: when a repo has broken
+        # branches to verify, missing post-restoration verification counts as
+        # a restoration failure — without evidence that tests still pass
+        # after broken commits, mutation counts are unreliable. Repos with
+        # no broken branches don't need that evidence.
         "restoration_check_failed": (
             result.restoration_check_failed
-            or result.bootstrap_result is None
-            or result.bootstrap_result.post_broken_commits_verification is None
+            or (
+                len(result.repo_entry.broken_branches) > 0
+                and (
+                    result.bootstrap_result is None
+                    or result.bootstrap_result.post_broken_commits_verification is None
+                )
+            )
         ),
         "num_broken_branches": len(result.repo_entry.broken_branches),
     }

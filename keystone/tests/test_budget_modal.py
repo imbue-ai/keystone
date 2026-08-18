@@ -56,8 +56,7 @@ def test_budget_script_reports_cost_after_claude() -> None:
         # Create /project and upload budget script
         logger.info("Uploading budget script...")
         run_modal_command(sb, "mkdir", "-p", "/project", name="setup").wait()
-        with sb.open("/project/keystone_budget.sh", "wb") as f:
-            f.write(BUDGET_SCRIPT_PATH.read_bytes())
+        sb.filesystem.write_bytes(BUDGET_SCRIPT_PATH.read_bytes(), "/project/keystone_budget.sh")
         run_modal_command(sb, "chmod", "+x", "/project/keystone_budget.sh", name="setup").wait()
         logger.info("Budget script uploaded.")
 
@@ -72,8 +71,7 @@ export AGENT_BUDGET_CAP_USD=10.00
 export CCUSAGE_COMMAND=ccusage
 export AGENT_TIME_DEADLINE={deadline}
 """
-        with sb.open("/env.sh", "w") as f:
-            f.write(env_content)
+        sb.filesystem.write_text(env_content, "/env.sh")
 
         # 1. Check budget BEFORE — ccusage has no session yet, so budget
         #    reports "unknown" while time should be positive.
@@ -146,8 +144,7 @@ export AGENT_BUDGET_CAP_USD=0.00
 export CCUSAGE_COMMAND=ccusage
 export AGENT_TIME_DEADLINE={deadline}
 """
-        with sb.open("/env.sh", "w") as f:
-            f.write(zero_env)
+        sb.filesystem.write_text(zero_env, "/env.sh")
 
         rc, over_output = _run_in_sandbox(
             sb, "bash /project/keystone_budget.sh", name="budget-over"

@@ -157,12 +157,9 @@ def _setup_sandbox(sb: modal.Sandbox, mirror_url: str | None = None) -> None:
     # Set up project directory
     print("Setting up project...", file=sys.stderr)
     _exec_script(sb, "mkdir -p /project/.devcontainer", label="setup")
-    with sb.open("/project/.devcontainer/Dockerfile", "w") as f:
-        f.write(DOCKERFILE)
-    with sb.open("/project/README.md", "w") as f:
-        f.write("# load test project\n")
-    with sb.open("/project/.devcontainer/devcontainer.json", "w") as f:
-        f.write(DEVCONTAINER_JSON)
+    sb.filesystem.write_text(DOCKERFILE, "/project/.devcontainer/Dockerfile")
+    sb.filesystem.write_text("# load test project\n", "/project/README.md")
+    sb.filesystem.write_text(DEVCONTAINER_JSON, "/project/.devcontainer/devcontainer.json")
 
 
 def run_load_test(
@@ -222,8 +219,7 @@ def run_load_test(
         print(f"{'=' * 60}\n", file=sys.stderr)
 
         loop_script = _build_loop_script(iterations)
-        with sb.open("/tmp/_load_test_loop.sh", "w") as f:
-            f.write(loop_script)
+        sb.filesystem.write_text(loop_script, "/tmp/_load_test_loop.sh")
 
         proc = sb.exec("bash", "/tmp/_load_test_loop.sh")
 

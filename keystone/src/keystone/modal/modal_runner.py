@@ -257,8 +257,7 @@ class ModalAgentRunner(AgentRunner):
         if self._docker_registry_mirror:
             logger.info("Configuring Docker Hub mirror: %s", self._docker_registry_mirror)
             mirror_config = f'{{"registry-mirrors": ["{self._docker_registry_mirror}"]}}'
-            with self._sandbox.open("/etc/docker/daemon.json", "w") as f:
-                f.write(mirror_config)
+            self._sandbox.filesystem.write_text(mirror_config, "/etc/docker/daemon.json")
 
         # Start Docker daemon
         run_modal_command(self._sandbox, "/start-dockerd.sh", name="dockerd")
@@ -276,8 +275,7 @@ class ModalAgentRunner(AgentRunner):
         run_modal_command(sb, "rm", "-rf", "/project", name="upload").wait()
         run_modal_command(sb, "mkdir", "-p", "/project", name="upload").wait()
 
-        with sb.open("/tmp/project.tar.gz", "wb") as f:
-            f.write(project_archive)
+        sb.filesystem.write_bytes(project_archive, "/tmp/project.tar.gz")
         run_modal_command(
             sb, "tar", "-xzf", "/tmp/project.tar.gz", "-C", "/project", name="upload"
         ).wait()
@@ -293,13 +291,13 @@ class ModalAgentRunner(AgentRunner):
         # doesn't have to copy it there manually.
         devcontainer_json = generate_devcontainer_json()
         run_modal_command(sb, "mkdir", "-p", "/project/.devcontainer", name="upload").wait()
-        with sb.open("/project/.devcontainer/devcontainer.json", "w") as f:
-            f.write(devcontainer_json)
+        sb.filesystem.write_text(devcontainer_json, "/project/.devcontainer/devcontainer.json")
         logger.info("Wrote /project/.devcontainer/devcontainer.json to sandbox")
         # Also write to /project_clean/.devcontainer/ for the clean copy.
         run_modal_command(sb, "mkdir", "-p", "/project_clean/.devcontainer", name="upload").wait()
-        with sb.open("/project_clean/.devcontainer/devcontainer.json", "w") as f:
-            f.write(devcontainer_json)
+        sb.filesystem.write_text(
+            devcontainer_json, "/project_clean/.devcontainer/devcontainer.json"
+        )
         logger.info("Wrote /project_clean/.devcontainer/devcontainer.json to sandbox")
         run_modal_command(
             sb,
@@ -311,19 +309,16 @@ class ModalAgentRunner(AgentRunner):
 
         # Upload guardrail.sh for agent self-checks (only when guardrail is enabled)
         if guardrail:
-            with sb.open("/project/guardrail.sh", "wb") as f:
-                f.write(GUARDRAIL_SCRIPT_PATH.read_bytes())
+            sb.filesystem.write_bytes(GUARDRAIL_SCRIPT_PATH.read_bytes(), "/project/guardrail.sh")
             run_modal_command(sb, "chmod", "+x", "/project/guardrail.sh", name="upload").wait()
 
         # Upload keystone_budget.sh so the agent can check remaining time/budget
-        with sb.open("/project/keystone_budget.sh", "wb") as f:
-            f.write(BUDGET_SCRIPT_PATH.read_bytes())
+        sb.filesystem.write_bytes(BUDGET_SCRIPT_PATH.read_bytes(), "/project/keystone_budget.sh")
         run_modal_command(sb, "chmod", "+x", "/project/keystone_budget.sh", name="upload").wait()
 
         # Write AGENTS.md if provided (used by codex to read instructions as system context)
         if agents_md:
-            with sb.open("/project/AGENTS.md", "w") as f:
-                f.write(agents_md)
+            sb.filesystem.write_text(agents_md, "/project/AGENTS.md")
             logger.info("Wrote /project/AGENTS.md (%d chars)", len(agents_md))
 
         run_modal_command(sb, "chown", "-R", "agent:agent", "/project", name="upload").wait()
@@ -443,8 +438,7 @@ export AGENT_TIME_DEADLINE=$(( $(date +%s) + {time_limit_seconds} ))
 exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
 """
         # Upload script using Modal's native filesystem API
-        with sb.open("/run_agent.sh", "w") as f:
-            f.write(agent_script_content)
+        sb.filesystem.write_text(agent_script_content, "/run_agent.sh")
         run_modal_command(sb, "chmod", "+x", "/run_agent.sh", name="setup").wait()
         run_modal_command(sb, "chown", "agent:agent", "/run_agent.sh", name="setup").wait()
 
@@ -516,8 +510,7 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
                 tar_exit,
             )
             return
-        with sb.open("/tmp/devcontainer.tar.gz", "rb") as f:
-            self._devcontainer_tarball = f.read()
+        self._devcontainer_tarball = sb.filesystem.read_bytes("/tmp/devcontainer.tar.gz")
         if len(self._devcontainer_tarball) == 0:
             raise SandboxCrashedError(
                 "Devcontainer tarball is 0 bytes - sandbox likely crashed (OOM during Docker build)"
@@ -561,8 +554,7 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
         try:
             run_modal_command(sb, "rm", "-rf", "/project", name="verify-setup").wait()
             run_modal_command(sb, "mkdir", "-p", "/project", name="verify-setup").wait()
-            with sb.open("/tmp/project.tar.gz", "wb") as f:
-                f.write(project_archive)
+            sb.filesystem.write_bytes(project_archive, "/tmp/project.tar.gz")
             run_modal_command(
                 sb, "tar", "-xzf", "/tmp/project.tar.gz", "-C", "/project", name="verify-setup"
             ).wait()
@@ -572,8 +564,7 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
                 "Uploading .devcontainer for verification (%d bytes)...",
                 len(devcontainer_tarball),
             )
-            with sb.open("/tmp/devcontainer.tar.gz", "wb") as f:
-                f.write(devcontainer_tarball)
+            sb.filesystem.write_bytes(devcontainer_tarball, "/tmp/devcontainer.tar.gz")
             run_modal_command(
                 sb, "tar", "-xzf", "/tmp/devcontainer.tar.gz", "-C", "/project", name="verify-setup"
             ).wait()
@@ -798,8 +789,7 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
         run_modal_command(sb, "mkdir", "-p", archive_dir, name=f"mkdir-{label}").wait()
 
         sandbox_tar = f"/tmp/broken_{label}.tar"
-        with sb.open(sandbox_tar, "wb") as f:
-            f.write(archive_proc.stdout)
+        sb.filesystem.write_bytes(archive_proc.stdout, sandbox_tar)
         extract_proc = run_modal_command(
             sb,
             "tar",
@@ -869,7 +859,9 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
                     error_message=f"git diff failed for {ref}: {diff_proc.stderr}",
                 )
             changed_files = [f for f in diff_proc.stdout.strip().split("\n") if f]
-            logger.info("[%s] %d file(s) changed: %s", ref, len(changed_files), ", ".join(changed_files))
+            logger.info(
+                "[%s] %d file(s) changed: %s", ref, len(changed_files), ", ".join(changed_files)
+            )
 
             # Apply: copy ref's versions of changed files into container
             if changed_files:
@@ -901,7 +893,10 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
                 )
             logger.info(
                 "[%s] Result: success=%s tests_passed=%s tests_failed=%s (%.1fs)",
-                ref, result.success, result.tests_passed, result.tests_failed,
+                ref,
+                result.success,
+                result.tests_passed,
+                result.tests_failed,
                 result.test_execution_seconds or 0,
             )
 
@@ -1030,8 +1025,7 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
                 name=f"tar-artifacts-{ref_short}",
             ).wait()
 
-            with sb.open("/tmp/test_artifacts.tar.gz", "rb") as f:
-                tarball_bytes = f.read()
+            tarball_bytes = sb.filesystem.read_bytes("/tmp/test_artifacts.tar.gz")
             test_artifacts_dir.mkdir(parents=True, exist_ok=True)
             with tarfile.open(fileobj=io.BytesIO(tarball_bytes), mode="r:gz") as tar:
                 tar.extractall(test_artifacts_dir, filter="data")
@@ -1119,8 +1113,7 @@ exec timeout {time_limit_seconds} {shlex.join(cmd_parts)}
             ).wait()
 
             # Read tarball
-            with sb.open("/tmp/agent_dir.tar.gz", "rb") as f:
-                return f.read()
+            return sb.filesystem.read_bytes("/tmp/agent_dir.tar.gz")
         except Exception as e:
             logger.error(f"Error extracting agent dir tarball: {e}")
             return None

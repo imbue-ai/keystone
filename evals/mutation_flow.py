@@ -488,8 +488,7 @@ def _run_mutation_in_modal(
         ).wait()
 
         # Write prompt to file in sandbox (avoids shell quoting issues)
-        with sb.open("/tmp/mutation_prompt.txt", "w") as f:
-            f.write(prompt)
+        sb.filesystem.write_text(prompt, "/tmp/mutation_prompt.txt")
 
         # Write a runner script
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -507,8 +506,7 @@ def _run_mutation_in_modal(
             '-p "$(cat /tmp/mutation_prompt.txt)" '
             "--allowedTools Bash,Read,Write,Edit\n"
         )
-        with sb.open("/tmp/run_mutation.sh", "w") as f:
-            f.write(runner_script)
+        sb.filesystem.write_text(runner_script, "/tmp/run_mutation.sh")
         run_modal_command(sb, "chmod", "+x", "/tmp/run_mutation.sh", name="mutation-chmod").wait()
 
         # Make project writable by the agent user
@@ -625,8 +623,7 @@ def _run_mutation_in_modal(
             f"export AWS_DEFAULT_REGION={shlex.quote(aws_region)}\n"
             f"aws s3 cp /tmp/repo.tar.gz {shlex.quote(s3_tarball_path)}\n"
         )
-        with sb.open("/tmp/upload_s3.sh", "w") as f:
-            f.write(upload_script)
+        sb.filesystem.write_text(upload_script, "/tmp/upload_s3.sh")
         run_modal_command(sb, "chmod", "+x", "/tmp/upload_s3.sh", name="upload-chmod").wait()
         run_modal_command(sb, "bash", "/tmp/upload_s3.sh", name="s3-upload").wait()
 

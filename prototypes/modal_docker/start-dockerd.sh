@@ -1,5 +1,5 @@
 #!/bin/bash
-set -xe -o pipefail
+set -euo pipefail -x
 
 # Clean up stale state from previous runs
 rm -f /var/run/docker.pid /run/docker/containerd/containerd.pid \

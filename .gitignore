@@ -210,3 +210,7 @@ evals/eda/repo_filter_out.html
 *.parquet
 .DS_Store
 evals/eda/output/
+
+# Claude
+.agents/settings.local.json
+

@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 TIMEOUT=${1:-30}
 echo "Waiting for Docker daemon to be ready (timeout: ${TIMEOUT}s)..."
